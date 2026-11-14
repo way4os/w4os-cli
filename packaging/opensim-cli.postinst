@@ -1,0 +1,20 @@
+#!/bin/sh
+# postinst of opensim-cli: the service that starts the enabled instances at boot, enabled on first install, the administrator's
+# choice kept after. It is never restarted here: that would stop the running grids.
+set -e
+
+if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ]; then
+    if command -v deb-systemd-helper >/dev/null; then
+        deb-systemd-helper unmask opensim.service >/dev/null || true
+        if deb-systemd-helper --quiet was-enabled opensim.service; then
+            deb-systemd-helper enable opensim.service >/dev/null || true
+        else
+            deb-systemd-helper update-state opensim.service >/dev/null || true
+        fi
+    fi
+    if [ -d /run/systemd/system ]; then
+        systemctl --system daemon-reload >/dev/null || true
+    fi
+fi
+
+exit 0

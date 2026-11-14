@@ -64,3 +64,10 @@ contents:
       type: symlink
     - src: share/bash-completion/opensim
       dst: /usr/share/bash-completion/completions/opensim
+    - src: packaging/opensim.service
+      dst: /usr/lib/systemd/system/opensim.service
+
+scripts:
+    postinstall: packaging/opensim-cli.postinst
+    preremove: packaging/opensim-cli.prerm
+    postremove: packaging/opensim-cli.postrm

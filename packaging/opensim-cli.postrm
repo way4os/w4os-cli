@@ -1,0 +1,21 @@
+#!/bin/sh
+# postrm of opensim-cli: forgets the service on removal and on purge.
+set -e
+
+if [ -d /run/systemd/system ]; then
+    systemctl --system daemon-reload >/dev/null || true
+fi
+
+if command -v deb-systemd-helper >/dev/null; then
+    case "$1" in
+        remove)
+            deb-systemd-helper mask opensim.service >/dev/null || true
+            ;;
+        purge)
+            deb-systemd-helper purge opensim.service >/dev/null || true
+            deb-systemd-helper unmask opensim.service >/dev/null || true
+            ;;
+    esac
+fi
+
+exit 0
