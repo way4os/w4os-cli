@@ -16,3 +16,16 @@ tests/.env
 .node-version
 *.log
 .DS_Store
+
+# AI assistants: personal instructions and settings
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.claude/
+.cursor/
+.gemini/
+.junie/
+.github/copilot-instructions.md
+opencode.json
+boost.json
+.mcp.json
