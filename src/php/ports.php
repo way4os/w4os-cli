@@ -11,6 +11,7 @@ function showPorts(Environment $environment, array $arguments): int
     $mode = 'table';
     $address = '127.0.0.1';
     $targets = [];
+    $from = ['private' => [], 'console' => []];
     $options = true;
     for ($index = 0; $index < count($arguments); $index++) {
         $argument = $arguments[$index];
@@ -27,6 +28,17 @@ function showPorts(Environment $environment, array $arguments): int
             $address = $arguments[++$index] ?? '';
         } elseif ($options && str_starts_with($argument, '--private-address=')) {
             $address = substr($argument, strlen('--private-address='));
+        } elseif ($options && in_array($argument, ['--from', '--manage-from'], true)) {
+            $from[$argument === '--from' ? 'private' : 'console'] = array_merge(
+                $from[$argument === '--from' ? 'private' : 'console'],
+                explode(',', $arguments[++$index] ?? ''),
+            );
+        } elseif ($options && (str_starts_with($argument, '--from=') || str_starts_with($argument, '--manage-from='))) {
+            [$option, $list] = explode('=', $argument, 2);
+            $from[$option === '--from' ? 'private' : 'console'] = array_merge(
+                $from[$option === '--from' ? 'private' : 'console'],
+                explode(',', $list),
+            );
         } elseif ($options && str_starts_with($argument, '-')) {
             $environment->reporter->error(sprintf(_('unknown ports option: %s'), $argument));
             return 2;
@@ -38,6 +50,19 @@ function showPorts(Environment $environment, array $arguments): int
     if (filter_var($address, FILTER_VALIDATE_IP) === false) {
         $environment->reporter->error(_('private address must be an IPv4 or IPv6 address'));
         return 2;
+    }
+    foreach ($from as $kind => $list) {
+        $from[$kind] = array_values(array_filter(
+            array_map(static fn(string $item): string => str_replace(['[', ']'], '', trim($item)), $list),
+            static fn(string $item): bool => $item !== '',
+        ));
+        foreach ($from[$kind] as $item) {
+            [$ip, $mask] = array_pad(explode('/', $item, 2), 2, null);
+            if (filter_var($ip, FILTER_VALIDATE_IP) === false || ($mask !== null && !ctype_digit($mask))) {
+                $environment->reporter->error(sprintf(_('not an IPv4 or IPv6 address: %s'), $item));
+                return 2;
+            }
+        }
     }
     $bindAddress = str_contains($address, ':') ? "[$address]" : $address;
     $instances = [];
@@ -78,11 +103,17 @@ function showPorts(Environment $environment, array $arguments): int
             if ($row['use'] === 'off') {
                 continue;
             }
-            echo $row['use'] === 'public'
-                ? "ufw allow {$row['port']}/{$row['proto']}    # {$row['instance']}: {$row['role']}\n"
-                : "# {$row['port']}/{$row['proto']} ({$row['instance']}: {$row['role']}): " .
+            if ($row['use'] === 'public') {
+                echo "ufw allow {$row['port']}/{$row['proto']}    # {$row['instance']}: {$row['role']}\n";
+            } elseif (($from[$row['use']] ?? []) !== []) {
+                foreach ($from[$row['use']] as $source) {
+                    echo "ufw allow from $source to any port {$row['port']} proto {$row['proto']}    # {$row['instance']}: {$row['role']}\n";
+                }
+            } else {
+                echo "# {$row['port']}/{$row['proto']} ({$row['instance']}: {$row['role']}): " .
                     _('only from the machines that need it, e.g.') .
                     " ufw allow from <address> to any port {$row['port']} proto {$row['proto']}\n";
+            }
         }
     } else {
         $table = [[_('INSTANCE'), _('TYPE'), _('PORT'), _('PROTO'), _('USE'), _('FOR')]];

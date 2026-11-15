@@ -124,3 +124,18 @@ function test_ports_help_and_completion_are_available() {
 	_opensim
 	assert_contains --publish "${COMPREPLY[*]}"
 }
+
+function test_ports_ufw_opens_the_private_and_console_ports_to_the_given_addresses_only() {
+	local output
+	output=$("$OPENSIM" ports --ufw --from 203.0.113.5,2001:db8::/64 --manage-from 198.51.100.7)
+	assert_contains 'ufw allow 8002/tcp' "$output"
+	assert_contains 'ufw allow from 203.0.113.5 to any port 8003 proto tcp' "$output"
+	assert_contains 'ufw allow from 2001:db8::/64 to any port 8003 proto tcp' "$output"
+	assert_contains 'ufw allow from 198.51.100.7 to any port 9004 proto tcp' "$output"
+	assert_not_contains 'ufw allow 8003' "$output"
+	assert_not_contains '# 8003/tcp' "$output"
+}
+
+function test_ports_ufw_refuses_an_address_that_is_not_one() {
+	assert_exec "'$OPENSIM' ports --ufw --from not-an-ip" --exit 2
+}
