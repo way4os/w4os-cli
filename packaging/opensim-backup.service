@@ -1,0 +1,12 @@
+[Unit]
+Description=Backup of the OpenSim grids of this machine
+After=opensim.service
+
+[Service]
+Type=oneshot
+User=opensim
+Group=opensim
+WorkingDirectory=~
+ExecStart=/usr/bin/opensim backup --keep 14
+Nice=10
+IOSchedulingClass=idle

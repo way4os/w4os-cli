@@ -66,6 +66,10 @@ contents:
       dst: /usr/share/bash-completion/completions/opensim
     - src: packaging/opensim.service
       dst: /usr/lib/systemd/system/opensim.service
+    - src: packaging/opensim-backup.service
+      dst: /usr/lib/systemd/system/opensim-backup.service
+    - src: packaging/opensim-backup.timer
+      dst: /usr/lib/systemd/system/opensim-backup.timer
 
 scripts:
     postinstall: packaging/opensim-cli.postinst
