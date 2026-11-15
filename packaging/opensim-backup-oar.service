@@ -1,0 +1,12 @@
+[Unit]
+Description=OAR backup of the regions of this machine
+After=opensim.service
+
+[Service]
+Type=oneshot
+User=opensim
+Group=opensim
+WorkingDirectory=~
+ExecStart=/usr/bin/opensim backup --oars --keep 4
+Nice=10
+IOSchedulingClass=idle

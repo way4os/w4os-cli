@@ -70,6 +70,10 @@ contents:
       dst: /usr/lib/systemd/system/opensim-backup.service
     - src: packaging/opensim-backup.timer
       dst: /usr/lib/systemd/system/opensim-backup.timer
+    - src: packaging/opensim-backup-oar.service
+      dst: /usr/lib/systemd/system/opensim-backup-oar.service
+    - src: packaging/opensim-backup-oar.timer
+      dst: /usr/lib/systemd/system/opensim-backup-oar.timer
 
 scripts:
     postinstall: packaging/opensim-cli.postinst

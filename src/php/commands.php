@@ -7,8 +7,10 @@ namespace OpenSimCli;
 use OpenSim\Archives\ArchiveRunner;
 use OpenSim\Archives\BackupService;
 use OpenSim\Archives\DatabaseDump;
+use OpenSim\Archives\OarBackup;
 use OpenSim\Archives\Rotation;
 use OpenSim\Config\GridConfig;
+use OpenSim\Console\InstanceConsoleService;
 use OpenSim\Data\Connections;
 use OpenSim\Models\Avatar;
 use OpenSim\Models\Estate;
@@ -336,7 +338,7 @@ final class Commands
         $options = [];
         while ($args !== []) {
             $arg = array_shift($args);
-            if ($arg === '--logs' || $arg === '--archives') {
+            if ($arg === '--logs' || $arg === '--archives' || $arg === '--oars') {
                 $options[substr($arg, 2)] = true;
             } elseif (preg_match('/^--(output|keep)(?:=(.*))?$/', $arg, $m)) {
                 $value = $m[2] ?? (array_shift($args) ?? '');
@@ -352,6 +354,9 @@ final class Commands
                 $refs[] = $arg;
             }
         }
+        if (isset($options['oars'])) {
+            return self::backupOars($environment, $refs, $options);
+        }
         try {
             $files = (new BackupService($environment, DatabaseDump::write(...), static fn(string $message) => fwrite(STDERR, "$message\n")))->run($refs, $options);
             fwrite(STDOUT, implode("\n", $files) . "\n");
@@ -359,6 +364,32 @@ final class Commands
         } catch (\InvalidArgumentException|\RuntimeException $e) {
             return self::error('backup', $e->getMessage());
         }
+    }
+
+    /**
+     * The OAR of every region of the simulators that run, in the backup root.
+     *
+     * @param list<string> $refs
+     * @param array<string,mixed> $options
+     */
+    private static function backupOars(Environment $environment, array $refs, array $options): int
+    {
+        $say = static fn(string $message) => fwrite(STDERR, "$message\n");
+        $runner = ArchiveRunner::system($environment, 900);
+        try {
+            $result = (new OarBackup(
+                $environment,
+                static fn(array $arguments): array => $runner->run('save', $arguments),
+                static fn(string $ini): bool => InstanceConsoleService::running($ini),
+                $say,
+            ))->run($refs, array_intersect_key($options, ['output' => 1, 'keep' => 1]));
+        } catch (\InvalidArgumentException|\RuntimeException $e) {
+            return self::error('backup', $e->getMessage());
+        }
+        fwrite(STDOUT, implode("\n", $result['saved']) . ($result['saved'] === [] ? '' : "\n"));
+        $say(sprintf('%d saved, %d simulator(s) skipped, %d failed', count($result['saved']), $result['skipped'], $result['failed']));
+
+        return $result['failed'] > 0 ? 1 : 0;
     }
 
     /** @param list<string> $args */

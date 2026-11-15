@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly OAR backup of the regions of this machine
+
+[Timer]
+OnCalendar=Sun *-*-* 05:00:00
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
