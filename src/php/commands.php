@@ -25,6 +25,7 @@ use OpenSim\Provisioning\Places;
 use OpenSim\Provisioning\Slug;
 use OpenSim\Provisioning\Web\HelpersConfig;
 use OpenSim\Provisioning\Web\Services;
+use OpenSim\Provisioning\Web\SitePages;
 use OpenSim\Provisioning\Web\Snippets;
 use OpenSim\Runtime\Environment;
 
@@ -132,7 +133,7 @@ final class Commands
                 $words[] = $args[$i];
             }
         }
-        $actions = ['show', 'snippet', 'check'];
+        $actions = ['show', 'snippet', 'check', 'set'];
         $action = 'show';
         if ($words !== [] && !in_array($words[0], $actions, true)) {
             $options['grid'] = $options['grid'] ?: array_shift($words);
@@ -156,6 +157,21 @@ final class Commands
         if ($grid === null) {
             return self::error('web', $grids === [] ? 'no local grid' : 'select a grid: ' . implode(', ', array_keys($grids)), 2);
         }
+        if ($action === 'set') {
+            if (count($words) !== 2) {
+                return self::error('web', 'usage: opensim web [GRID] set ' . implode('|', [SitePages::HELPERS, ...array_keys(SitePages::PAGES)]) . ' URL', 2);
+            }
+            try {
+                $set = SitePages::set($grid, $words[0], $words[1]);
+            } catch (\InvalidArgumentException $e) {
+                return self::error('web', $e->getMessage(), 2);
+            }
+            printf("%s: %s\n  %s in %s\n", $set['page'], $set['url'], implode(', ', $set['keys']), $set['file']);
+            if ($set['restart'] !== null) {
+                fwrite(STDOUT, "The viewers are told once it restarts: restart {$set['restart']} (opensim restart {$grid->nick()})\n");
+            }
+            return 0;
+        }
         $directory = $grid->directory();
         $services = HelpersConfig::services($directory);
         $webUrl = HelpersConfig::webUrl($directory);
@@ -178,8 +194,10 @@ final class Commands
         foreach (array_keys(Services::SCRIPTS) as $service) {
             $rows[$service] = [$services->url($webUrl, $service), Services::SCRIPTS[$service]];
         }
-        foreach (array_keys(Services::PAGES) as $page) {
-            $rows[$page] = [$services->url($webUrl, $page), "@$page"];
+        // The pages for people: the address of each, who serves it (the helpers under their base, the site elsewhere)
+        $pages = SitePages::rows($grid);
+        foreach ($pages as $page) {
+            $page['url'] === null || ($rows[$page['page']] = [(string) preg_replace('#/?\[AGENT_NAME\].*$#', '', $page['url']), "@{$page['page']}"]);
         }
         if ($action === 'check') {
             $failed = false;
@@ -192,9 +210,13 @@ final class Commands
             }
             return $failed ? 1 : 0;
         }
-        printf("Grid:      %s\nWeb URL:   %s\nHelpers:   %s\n", $grid->nick(), $webUrl !== '' ? $webUrl : '(none)', $services->base());
-        foreach ($rows as $service => [$url]) {
-            printf("  %-15s %s\n", $service, $url);
+        printf("Grid:      %s\nWeb URL:   %s\nHelpers:   %s\n", $grid->nick(), $webUrl !== '' ? $webUrl : '(none)', $grid->helpersUrl() ?? $services->base());
+        foreach (array_keys(Services::SCRIPTS) as $service) {
+            printf("  %-15s %s\n", $service, $rows[$service][0]);
+        }
+        fwrite(STDOUT, "\nPages (the helpers serve what is under their base, the site the rest: opensim web {$grid->nick()} set PAGE URL):\n");
+        foreach ($pages as $page) {
+            printf("  %-15s %-55s %s (%s)\n", $page['page'], $page['url'] ?? '(none)', $page['servedBy'] ?? '-', $page['source'] ?? '-');
         }
         fwrite(STDOUT, "\nThe web server needs: opensim web {$grid->nick()} snippet <caddy|nginx|apache>\n");
         return 0;

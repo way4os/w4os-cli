@@ -139,6 +139,32 @@ function test_web_prints_caddy_snippet() {
 	assert_exec "'$OPENSIM' web tender_tern snippet caddy" --stdout-contains 'php_fastcgi'
 }
 
+function test_web_set_writes_the_one_key_of_a_page_and_says_robust_must_restart() {
+	make_test_grid
+	assert_exec "'$OPENSIM' web tender_tern set search https://site.example.org/search" --stdout-contains 'restart Robust'
+	assert_file_contains "$WORK/etc/opensim/grids/tender_tern/Robust.ini" 'search = "https://site.example.org/search"'
+}
+
+function test_web_set_writes_the_base_of_the_helpers_in_helpers_ini() {
+	make_test_grid
+	assert_exec "'$OPENSIM' web tender_tern set helpers https://site.example.org/helperz" --stdout-contains 'HelpersURL'
+	assert_file_contains "$WORK/etc/opensim/grids/tender_tern/Helpers.ini" 'HelpersURL = "https://site.example.org/helperz"'
+}
+
+function test_web_set_refuses_what_is_not_a_page() {
+	make_test_grid
+	assert_exec "'$OPENSIM' web tender_tern set menu https://site.example.org/menu" --exit 2 --stderr-contains 'not a page'
+	assert_exec "'$OPENSIM' web tender_tern set search" --exit 2 --stderr-contains 'usage'
+}
+
+function test_web_show_says_who_serves_each_page() {
+	make_test_grid
+	"$OPENSIM" web tender_tern set helpers https://site.example.org/helpers >/dev/null
+	"$OPENSIM" web tender_tern set search https://site.example.org/search >/dev/null
+	assert_exec "'$OPENSIM' web tender_tern show" --stdout-contains 'site (config)'
+	assert_exec "'$OPENSIM' web tender_tern show" --stdout-contains 'https://site.example.org/helpers/guide'
+}
+
 function test_ban_reports_missing_grid() {
 	assert_exec "'$OPENSIM' ban Resident" --exit 2 --stderr-contains 'no local grid'
 }

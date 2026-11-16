@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- feature (web): `opensim web <grid> set helpers|search|profile|guide|welcome|status|directory URL` sets the one setting of a page (and says when Robust must restart); `web show` lists each page with who serves it, the helpers under their base or the site (engine SitePages)
 - fix: duplicate build-tools package in require and require-dev
 
 ### 3.0.0-beta.4
