@@ -78,5 +78,39 @@ function test_needs_a_file_and_a_grid() {
 	out=$("$OPENSIM" import --simulator "$WORK/redoutable.ini" 2>&1) || status=$?
 
 	assert_not_same "0" "$status"
-	assert_contains "usage: opensim import --simulator FILE GRID" "$out"
+	assert_contains "opensim import --simulator FILE GRID" "$out"
+}
+
+FILES='{"data":{"type":"files","id":"demo","attributes":{"mode":"plan","applied":false,"grid":"demo","steps":[{"kind":"simulator","simulator":"North","slug":"demo.north","config":"/etc/opensim/grids/demo/sims/demo.north.ini","ports":{"http":9010,"console":null},"database":{"host":"localhost","name":"demo_north","user":"opensim"},"region":{"name":"Big Garden","location":"1000,1000","size":512,"roles":["FallbackRegion"],"port":9011,"file":"/etc/opensim/grids/demo/sims/demo.north/regions/BigGarden.ini"}}],"writes":["/etc/opensim/grids/demo/sims/demo.north.ini","/etc/opensim/grids/demo/sims/demo.north/regions/BigGarden.ini"],"problems":{},"reminders":["opensim start demo.north"]}}}'
+
+function test_applies_a_setup_file_given_alone() {
+	engine_says "$FILES"
+	printf 'grid:\n  nick: demo\n' >"$WORK/setup.yaml"
+
+	local out
+	out=$("$OPENSIM" import "$WORK/setup.yaml" 2>&1)
+
+	assert_same '{"text":"grid:\n  nick: demo\n","mode":"plan"}' "$(jq -c '.data.attributes' "$ENGINE_LOG")"
+	assert_contains "Simulator North (demo.north): /etc/opensim/grids/demo/sims/demo.north.ini, http 9010, database demo_north @ localhost" "$out"
+	assert_contains "  Big Garden at 1000,1000, 512 m, port 9011, FallbackRegion: /etc/opensim/grids/demo/sims/demo.north/regions/BigGarden.ini" "$out"
+	assert_contains "Nothing was written: add --apply to write it, then:" "$out"
+	assert_contains "  opensim start demo.north" "$out"
+}
+
+function test_gives_a_region_to_a_simulator() {
+	engine_says "$FILES"
+
+	"$OPENSIM" region add demo alpha --name "Alpha Two" --location 1200,1200 --size 512 --roles FallbackRegion,DefaultHGRegion --apply >/dev/null 2>&1
+
+	assert_same '{"grid":{"nick":"demo"},"simulators":[{"name":"alpha","regions":[{"name":"Alpha Two","location":"1200,1200","size":512,"roles":["FallbackRegion","DefaultHGRegion"]}]}]}' "$(jq -c '.data.attributes.setup' "$ENGINE_LOG")"
+	assert_same "apply" "$(jq -r '.data.attributes.mode' "$ENGINE_LOG")"
+}
+
+function test_makes_a_simulator_with_its_first_region_and_the_database_of_the_environment() {
+	engine_says "$FILES"
+
+	OPENSIM_DB_USER=opensim OPENSIM_DB_PASS=secret "$OPENSIM" simulator add demo North --region "Big Garden" --size 512 --owner "Ada Love" >/dev/null 2>&1
+
+	assert_same '{"name":"North","estate":{"owner":"Ada Love"},"database":{"user":"opensim","password":"secret"},"regions":[{"name":"Big Garden","size":512}]}' "$(jq -c '.data.attributes.setup.simulators[0]' "$ENGINE_LOG")"
+	assert_same "plan" "$(jq -r '.data.attributes.mode' "$ENGINE_LOG")"
 }

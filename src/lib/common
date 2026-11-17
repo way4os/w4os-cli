@@ -137,3 +137,26 @@ run_setup() {
 	[[ -z "$input_dir" ]] || as_system_user rm -rf -- "$input_dir" || true
 	return "$status"
 }
+
+# Apply a setup file through the engine (POST /setups/files): its text, plan or apply; shows the plan or what was written
+setup_file() { # file mode
+	local reply
+	reply=$(jq -Rsc --arg mode "$2" '{data: {type: "files", attributes: {text: ., mode: $mode}}}' <"$1" | engine POST /setups/files --data=-) || true
+	setup_file_report "$reply"
+}
+
+# The answer of POST /setups/files as lines: each simulator and region, what is written, what is left to do
+setup_file_report() { # reply
+	jq -e '.data.attributes' <<<"$1" >/dev/null 2>&1 ||
+		die "$(jq -r 'if .detail then .detail else (.title // "the engine did not answer") end' <<<"$1" 2>/dev/null || printf '%s' "$1")"
+	jq -r '.data.attributes |
+		"Grid \(.grid)",
+		(.steps[] |
+			(if .kind == "simulator" then "Simulator \(.simulator) (\(.slug)): \(.config), http \(.ports.http), database \(.database.name) @ \(.database.host)" else "Region of \(.slug):" end),
+			(if .region then "  \(.region.name) at \(.region.location), \(.region.size) m, port \(.region.port)" + (if (.region.roles | length) > 0 then ", " + (.region.roles | join(", ")) else "" end) + ": \(.region.file)" else empty end)),
+		(if .applied then "Written:" else "Would write:" end),
+		(.writes[] | "  \(.)"),
+		"",
+		(if .applied then "Then:" else "Nothing was written: add --apply to write it, then:" end),
+		(.reminders[] | "  \(.)")' <<<"$1"
+}

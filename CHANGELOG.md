@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- feature (setup): `opensim import FILE [--apply]` applies a setup file to a grid of this machine, `opensim region add GRID SIMULATOR --name NAME [...]` gives a region to a simulator (`--size`, `--roles`, `--location`, `--port`), `opensim simulator add GRID NAME --region NAME [...]` makes a simulator with its first region, all through the engine (`POST /setups/files`): planned, written with --apply, nothing started
 - update (setup): the bottom of a form in dialog says that Enter goes to the next field and Tab reaches the buttons
 - fix (setup): a screen of the engine without a text (the form of a simulator joining a grid) can be answered in dialog: dialog refuses an empty text above a form, a checklist or a menu at once (status 255, taken as Quit), a space is given instead
 - feature (import): `opensim import --simulator FILE GRID [--name NAME] [--core DIR] [--apply]`, a simulator of another install joins a grid of this machine through the engine (`POST /setups/imports`): planned, written with --apply only

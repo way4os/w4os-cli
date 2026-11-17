@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# opensim region add: a region given to a simulator of a grid of this machine, through the engine (a setup file of one region).
+
+USAGE="opensim region add GRID SIMULATOR --name NAME [--location X,Y] [--size METERS] [--roles ROLE,...] [--port PORT] [--apply]"
+HELP="Gives a region to the simulator SIMULATOR of the grid GRID (made when the grid has no simulator of that name). What is not given is proposed by the engine: the nearest free place, the next port. --size is a multiple of 256 meters; --roles are DefaultRegion, DefaultHGRegion, FallbackRegion... Without --apply, says what would be written and where, and writes nothing."
+
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+[[ "${1:-}" == add ]] || die "usage: $USAGE"
+shift
+words=() name= location= size= roles= port= mode=plan
+while (($#)); do
+	case "$1" in
+	--name | --location | --size | --roles | --port)
+		(($# > 1)) || die "$1 requires a value"
+		printf -v "${1#--}" '%s' "$2"
+		shift 2
+		;;
+	--name=* | --location=* | --size=* | --roles=* | --port=*)
+		key=${1%%=*}
+		printf -v "${key#--}" '%s' "${1#*=}"
+		shift
+		;;
+	--apply) mode=apply; shift ;;
+	-*) die "unknown option $1 (usage: $USAGE)" ;;
+	*) words+=("$1"); shift ;;
+	esac
+done
+((${#words[@]} == 2)) && [[ -n "$name" ]] || die "usage: $USAGE"
+
+setup=$(jq -cn --arg grid "${words[0]}" --arg simulator "${words[1]}" --arg name "$name" --arg location "$location" --arg size "$size" --arg roles "$roles" --arg port "$port" \
+	'{grid: {nick: $grid}, simulators: [{name: $simulator, regions: [{name: $name}
+		+ (if $location != "" then {location: $location} else {} end)
+		+ (if $size != "" then {size: ($size | tonumber)} else {} end)
+		+ (if $roles != "" then {roles: ($roles | split(","))} else {} end)
+		+ (if $port != "" then {port: ($port | tonumber)} else {} end)]}]}') || die "--size and --port are numbers"
+reply=$(jq -cn --argjson setup "$setup" --arg mode "$mode" '{data: {type: "files", attributes: {setup: $setup, mode: $mode}}}' | engine POST /setups/files --data=-) || true
+setup_file_report "$reply"

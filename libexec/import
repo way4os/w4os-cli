@@ -2,9 +2,11 @@
 # opensim import: brings what another install has into this one, through the engine (POST /setups/imports). A simulator of an older
 # install joins a grid of this machine: planned, written with --apply only.
 
-USAGE="opensim import --simulator FILE GRID [--name NAME] [--core DIR] [--apply]"
-HELP="Brings a simulator of another install (its OpenSim.ini, or its file of opensim.d, and the regions it names) into the grid GRID of this machine. Its database is kept as it is (the same one, nothing is copied), its regions are copied with their UUID and their place, its ports and its own settings are kept. Without --apply, says what would be written and where, and writes nothing.
-  --simulator FILE  the config of the simulator
+USAGE="opensim import FILE [--apply]
+       opensim import --simulator FILE GRID [--name NAME] [--core DIR] [--apply]"
+HELP="Applies a setup file (JSON or YAML: the simulators of a grid of this machine, their regions with name, location, size, roles) to the grid it names, or brings a simulator of another install (its OpenSim.ini, or its file of opensim.d, and the regions it names) into the grid GRID of this machine. Its database is kept as it is (the same one, nothing is copied), its regions are copied with their UUID and their place, its ports and its own settings are kept. Without --apply, says what would be written and where, and writes nothing.
+  FILE              a setup file: its simulators are made, or given its regions when the grid has them
+  --simulator FILE  the config of a simulator of another install
   --name NAME       its name in the grid, when it is not the one of its config
   --core DIR        the core it runs with, when it is not the one of the grid
   --apply           write it (disabled: stop the old one, then opensim enable and opensim start the new one)"
@@ -41,6 +43,12 @@ while (($#)); do
 		;;
 	esac
 done
+# A setup file: the one word given, without --simulator
+if [[ -z "$file" ]]; then
+	[[ -n "$grid" && -r "$grid" ]] || die "usage: $USAGE"
+	setup_file "$grid" "$mode"
+	exit
+fi
 [[ -n "$file" && -n "$grid" ]] || die "usage: $USAGE"
 [[ -r "$file" ]] || die "cannot read $file"
 file=$(realpath "$file")
