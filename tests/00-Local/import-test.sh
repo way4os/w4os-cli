@@ -12,7 +12,7 @@ REFUSED='{"type":"about:blank","title":"Bad request","status":400,"detail":"the 
 function set_up() {
 	WORK="$(mktemp -d)"
 	export HOME="$WORK" OPENSIM_SYSTEM_USER=
-	unset OPENSIM_CONF OPENSIM_RC
+	unset OPENSIM_CONF OPENSIM_RC OPENSIM_DB_ADMIN_USER OPENSIM_DB_ADMIN_PASS
 	mkdir -p "$WORK/etc"
 	cat >"$WORK/.opensim.conf" <<-INI
 		[Defaults]
@@ -81,7 +81,7 @@ function test_needs_a_file_and_a_grid() {
 	assert_contains "opensim import --simulator FILE GRID" "$out"
 }
 
-FILES='{"data":{"type":"files","id":"demo","attributes":{"mode":"plan","applied":false,"grid":"demo","steps":[{"kind":"simulator","simulator":"North","slug":"demo.north","config":"/etc/opensim/grids/demo/sims/demo.north.ini","ports":{"http":9010,"console":null},"database":{"host":"localhost","name":"demo_north","user":"opensim"},"region":{"name":"Big Garden","location":"1000,1000","size":512,"roles":["FallbackRegion"],"port":9011,"file":"/etc/opensim/grids/demo/sims/demo.north/regions/BigGarden.ini"}}],"writes":["/etc/opensim/grids/demo/sims/demo.north.ini","/etc/opensim/grids/demo/sims/demo.north/regions/BigGarden.ini"],"problems":{},"reminders":["opensim start demo.north"]}}}'
+FILES='{"data":{"type":"files","id":"demo","attributes":{"mode":"plan","applied":false,"grid":"demo","steps":[{"kind":"simulator","simulator":"North","slug":"demo.north","config":"/etc/opensim/grids/demo/sims/demo.north.ini","ports":{"http":9010,"console":null},"database":{"host":"localhost","name":"demo_north","user":"opensim"},"region":{"name":"Big Garden","location":"1000,1000","size":512,"roles":["FallbackRegion"],"port":9011,"file":"/etc/opensim/grids/demo/sims/demo.north/regions/BigGarden.ini"}}],"writes":["/etc/opensim/grids/demo/sims/demo.north.ini","/etc/opensim/grids/demo/sims/demo.north/regions/BigGarden.ini"],"problems":{},"reminders":["opensim start demo.north"],"notes":["A plan reserves nothing."]}}}'
 
 function test_applies_a_setup_file_given_alone() {
 	engine_says "$FILES"
@@ -95,6 +95,7 @@ function test_applies_a_setup_file_given_alone() {
 	assert_contains "  Big Garden at 1000,1000, 512 m, port 9011, FallbackRegion: /etc/opensim/grids/demo/sims/demo.north/regions/BigGarden.ini" "$out"
 	assert_contains "Nothing was written: add --apply to write it, then:" "$out"
 	assert_contains "  opensim start demo.north" "$out"
+	assert_contains "Note: A plan reserves nothing." "$out"
 }
 
 function test_gives_a_region_to_a_simulator() {
@@ -104,6 +105,14 @@ function test_gives_a_region_to_a_simulator() {
 
 	assert_same '{"grid":{"nick":"demo"},"simulators":[{"name":"alpha","regions":[{"name":"Alpha Two","location":"1200,1200","size":512,"roles":["FallbackRegion","DefaultHGRegion"]}]}]}' "$(jq -c '.data.attributes.setup' "$ENGINE_LOG")"
 	assert_same "apply" "$(jq -r '.data.attributes.mode' "$ENGINE_LOG")"
+}
+
+function test_gives_the_administrator_of_the_database_server_never_on_the_command_line() {
+	engine_says "$FILES"
+
+	OPENSIM_DB_ADMIN_PASS=admin-secret "$OPENSIM" simulator add demo North --region "Big Garden" --db-admin root >/dev/null 2>&1
+
+	assert_same '{"admin_user":"root","admin_password":"admin-secret"}' "$(jq -c '.data.attributes.setup.simulators[0].database | {admin_user, admin_password}' "$ENGINE_LOG")"
 }
 
 function test_makes_a_simulator_with_its_first_region_and_the_database_of_the_environment() {

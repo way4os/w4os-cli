@@ -2,17 +2,17 @@
 # opensim simulator add: a simulator made in a grid of this machine with its first region, through the engine (a setup file of one
 # simulator).
 
-USAGE="opensim simulator add GRID NAME --region NAME [--location X,Y] [--size METERS] [--roles ROLE,...] [--http-port PORT] [--owner 'First Last'] [--apply]"
-HELP="Makes the simulator NAME in the grid GRID, with its first region. Its database is the one of the environment (OPENSIM_DB_HOST, OPENSIM_DB_USER, OPENSIM_DB_PASS), made when it is missing; its estate is owned by --owner (an account of the grid). What is not given is proposed by the engine: its ports, the nearest free place. Without --apply, says what would be written and where, and writes nothing. Nothing is started: opensim start, once it is written."
+USAGE="opensim simulator add GRID NAME --region NAME [--location X,Y] [--size METERS] [--roles ROLE,...] [--http-port PORT] [--owner 'First Last'] [--db-admin USER] [--apply]"
+HELP="Makes the simulator NAME in the grid GRID, with its first region. Its database is the one of the environment (OPENSIM_DB_HOST, OPENSIM_DB_USER, OPENSIM_DB_PASS), made when it is missing, by an administrator of the database server (--db-admin USER or OPENSIM_DB_ADMIN_USER, its password from OPENSIM_DB_ADMIN_PASS or asked, never on the command line); its estate is owned by --owner (an account of the grid). What is not given is proposed by the engine: its ports, the nearest free place. Without --apply, says what would be written and where, and writes nothing. Nothing is started: opensim start, once it is written."
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 
 [[ "${1:-}" == add ]] || die "usage: $USAGE"
 shift
-words=() region= location= size= roles= http_port= owner= mode=plan
+words=() region= location= size= roles= http_port= owner= db_admin=${OPENSIM_DB_ADMIN_USER:-} mode=plan
 while (($#)); do
 	case "$1" in
-	--region | --location | --size | --roles | --http-port | --owner)
+	--region | --location | --size | --roles | --http-port | --owner | --db-admin)
 		(($# > 1)) || die "$1 requires a value"
 		key=${1#--}
 		printf -v "${key//-/_}" '%s' "$2"
@@ -24,13 +24,20 @@ while (($#)); do
 	esac
 done
 ((${#words[@]} == 2)) && [[ -n "$region" ]] || die "usage: $USAGE"
+# The password of the administrator: from the environment, else asked at the terminal, never on the command line
+db_admin_password=${OPENSIM_DB_ADMIN_PASS:-}
+if [[ -n "$db_admin" && -z "$db_admin_password" && -r /dev/tty ]]; then
+	read -rsp "Password of $db_admin on the database server: " db_admin_password </dev/tty
+	echo >/dev/tty
+fi
 
 setup=$(jq -cn --arg grid "${words[0]}" --arg simulator "${words[1]}" --arg region "$region" --arg location "$location" --arg size "$size" --arg roles "$roles" --arg http_port "$http_port" --arg owner "$owner" \
 	--arg host "${OPENSIM_DB_HOST:-}" --arg user "${OPENSIM_DB_USER:-}" --arg password "${OPENSIM_DB_PASS:-}" \
+	--arg admin_user "$db_admin" --arg admin_password "$db_admin_password" \
 	'{grid: {nick: $grid}, simulators: [{name: $simulator}
 		+ (if $http_port != "" then {http_port: ($http_port | tonumber)} else {} end)
 		+ (if $owner != "" then {estate: {owner: $owner}} else {} end)
-		+ {database: ({host: $host, user: $user, password: $password} | with_entries(select(.value != "")))}
+		+ {database: ({host: $host, user: $user, password: $password, admin_user: $admin_user, admin_password: $admin_password} | with_entries(select(.value != "")))}
 		+ {regions: [{name: $region}
 			+ (if $location != "" then {location: $location} else {} end)
 			+ (if $size != "" then {size: ($size | tonumber)} else {} end)

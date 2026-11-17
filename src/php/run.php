@@ -244,7 +244,7 @@ switch ($command) {
     case 'ban':
         exit(Commands::ban($engine, $args));
     case 'rest':
-        exit(Commands::rest($args));
+        exit(Commands::rest($args, $engine));
     case 'console':
         $name = $words[0] ?? '';
         $instance = $name === '' ? null : OpenSim::instance($engine, $name);

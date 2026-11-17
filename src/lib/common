@@ -158,5 +158,6 @@ setup_file_report() { # reply
 		(.writes[] | "  \(.)"),
 		"",
 		(if .applied then "Then:" else "Nothing was written: add --apply to write it, then:" end),
-		(.reminders[] | "  \(.)")' <<<"$1"
+		(.reminders[] | "  \(.)"),
+		((.notes // [])[] | "Note: \(.)")' <<<"$1"
 }

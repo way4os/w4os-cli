@@ -415,8 +415,30 @@ final class Commands
     }
 
     /** @param list<string> $args */
-    public static function rest(array $args): int
+    public static function rest(array $args, ?Environment $engine = null): int
     {
+        // opensim rest INSTANCE -- COMMAND: the remote console of an instance, at the address and with the account of its config
+        if ($engine !== null && isset($args[0]) && !str_starts_with($args[0], '-')) {
+            $name = (string) array_shift($args);
+            $line = implode(' ', ($args[0] ?? '') === '--' ? array_slice($args, 1) : $args);
+            $instance = \OpenSim\OpenSim::instance($engine, $name);
+            if ($instance === null || $line === '') {
+                return self::error('rest', $instance === null ? "no instance called $name" : 'usage: opensim rest INSTANCE -- COMMAND');
+            }
+            $console = $instance->console();
+            if (!$console instanceof \OpenSim\Console\RestConsole) {
+                return self::error('rest', "$name has no remote console: opensim console $name");
+            }
+            $lines = $console->lines([$line]);
+            if ($lines === null) {
+                return self::error('rest', "$name does not answer on its remote console: is it running?");
+            }
+            foreach ($lines as $text) {
+                echo \OpenSim\Text\Secrets::mask((string) $text), "\n";
+            }
+
+            return 0;
+        }
         $script = dirname(__DIR__, 2) . '/vendor/magicoli/opensim-rest-php/opensim-rest-cli.php';
         if (!is_file($script)) return self::error('rest', 'opensim-rest-php is not installed');
         $process = proc_open([PHP_BINARY, $script, ...$args], [0 => STDIN, 1 => STDOUT, 2 => STDERR], $pipes);
