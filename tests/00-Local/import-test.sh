@@ -6,7 +6,7 @@
 
 OPENSIM="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/bin/opensim"
 
-PLAN='{"data":{"type":"imports","id":"demo.redoutable","attributes":{"kind":"simulator","mode":"plan","applied":false,"source":"/opt/opensim/etc/opensim.d/redoutable.ini","grid":"demo","simulator":"redoutable","slug":"demo.redoutable","core":"/core","config":"/etc/opensim/grids/demo/sims/demo.redoutable.ini","database":{"host":"localhost","name":"osredoutable","user":"opensim","kept":true},"ports":{"http":9250,"console":null},"regions":[{"file":"/opt/r/Redoutable.ini","to":"/etc/opensim/grids/demo/sims/demo.redoutable/regions/Redoutable.ini","name":"Redoutable","uuid":"1111","location":"1000,1000"}],"settings":[{"section":"XEngine","key":"MinThreads","value":"10","unknown":false}],"dropped":[{"section":"Launch","key":"SimName","value":"redoutable","reason":"layout"},{"section":"Network","key":"http_listener_port","value":"9250","reason":"same"},{"section":"Network","key":"ExternalHostName","value":"old.example.org","reason":"replaced"}],"report":"/etc/opensim/grids/demo/sims/demo.redoutable.import-report.txt","writes":["/etc/opensim/grids/demo/sims/demo.redoutable.ini"],"reminders":["Stop the old one.","Then: opensim enable demo.redoutable, opensim start demo.redoutable."]}}}'
+PLAN='{"data":{"type":"imports","id":"demo.redoutable","attributes":{"kind":"simulator","mode":"plan","applied":false,"source":"/opt/opensim/etc/opensim.d/redoutable.ini","grid":"demo","simulator":"redoutable","slug":"demo.redoutable","core":"/core","config":"/etc/opensim/grids/demo/sims/demo.redoutable.ini","database":{"host":"localhost","name":"osredoutable","user":"opensim","kept":true},"ports":{"http":9250,"console":null},"regions":[{"file":"/opt/r/Redoutable.ini","to":"/etc/opensim/grids/demo/sims/demo.redoutable/regions/Redoutable.ini","name":"Redoutable","uuid":"1111","location":"1000,1000"}],"settings":[{"section":"XEngine","key":"MinThreads","value":"10","unknown":false}],"dropped":[{"section":"Launch","key":"SimName","value":"redoutable","reason":"layout"},{"section":"Network","key":"http_listener_port","value":"9250","reason":"same"},{"section":"Network","key":"ExternalHostName","value":"old.example.org","reason":"replaced"},{"section":"GridService","key":"MapTileDirectory","value":"/opt/opensim/var/redoutable/maptiles","reason":"replaced","replacement":"/var/cache/opensim/demo/demo.redoutable/maptiles"}],"report":"/etc/opensim/grids/demo/sims/demo.redoutable.import-report.txt","writes":["/etc/opensim/grids/demo/sims/demo.redoutable.ini"],"reminders":["Stop the old one.","Then: opensim enable demo.redoutable, opensim start demo.redoutable."]}}}'
 REFUSED='{"type":"about:blank","title":"Bad request","status":400,"detail":"the grid already has the simulator demo.redoutable","code":"invalid-request"}'
 
 function set_up() {
@@ -50,7 +50,8 @@ function test_plans_the_import_and_says_nothing_was_written() {
 	assert_contains "Would write:" "$out"
 	assert_contains "Nothing was written: add --apply to write it." "$out"
 	assert_contains "- Then: opensim enable demo.redoutable, opensim start demo.redoutable." "$out"
-	assert_contains "Settings left: 3 (layout 1, replaced 1, same 1)" "$out"
+	assert_contains "Settings left: 4 (layout 1, replaced 2, same 1)" "$out"
+	assert_contains "  [GridService] MapTileDirectory = /opt/opensim/var/redoutable/maptiles -> /var/cache/opensim/demo/demo.redoutable/maptiles" "$out"
 	assert_contains "  [Network] ExternalHostName = old.example.org: written by the new config its own way" "$out"
 }
 

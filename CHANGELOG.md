@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- update (import): a folder of the old install the new simulator replaces is shown with the folder it has instead
 - feature (import): `opensim import --simulator FILE --simulator FILE... GRID` plans several simulators into one grid together, checked between them (ports, region names and UUIDs, places), written in their order, refused when something is wrong between them; the plan says the settings of the original that are not kept, counted by why, and lists the ones the new config writes its own way; the CLI needs the engine of 3.0.0~beta.13.482 and later
 - feature (backup): `opensim restore FILE|ARCHIVE [--apply]` puts a backup back on this machine through the engine (`POST /setups/restores`): planned by default, written with --apply, the databases first, nothing this machine has replaced
 - update (setup, regions, import): the reminders and the notes the engine gives as notices (code, params, detail) are shown by their detail, the older strings as they are

@@ -80,7 +80,7 @@ jq -r '
 		(.regions[] | "  \(.name) (\(.uuid), \(.location)): \(.file) -> \(.to)"),
 		"Settings kept: \(.settings | length)",
 		(if .dropped then "Settings left: \(.dropped | length)" + (if (.dropped | length) > 0 then " (" + (.dropped | group_by(.reason) | map("\(.[0].reason) \(length)") | join(", ")) + ")" else "" end) else empty end),
-		((.dropped // [])[] | select(.reason == "replaced") | "  [\(.section)] \(.key) = \(.value): written by the new config its own way");
+		((.dropped // [])[] | select(.reason == "replaced") | "  [\(.section)] \(.key) = \(.value)" + (if .replacement then " -> \(.replacement)" else ": written by the new config its own way" end));
 	.data.attributes |
 	if .steps then
 		(.steps[] | step, ""),
