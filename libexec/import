@@ -10,11 +10,12 @@ HELP="Applies a setup file (JSON or YAML: the simulators of a grid of this machi
                     region names and UUIDs, places of the map), written in their order
   --name NAME       its name in the grid, when it is not the one of its config (one simulator only)
   --core DIR        the core it runs with, when it is not the one of the grid (one simulator only)
+  --no-scripts      do not copy the state of its scripts (every script starts again from the beginning)
   --apply           write it (disabled: stop the old one, then opensim enable and opensim start the new one)"
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 
-files=() grid= name= core= mode=plan
+files=() grid= name= core= mode=plan scripts=true
 while (($#)); do
 	case "$1" in
 	--simulator)
@@ -36,6 +37,7 @@ while (($#)); do
 		;;
 	--core=*) core=${1#*=}; shift ;;
 	--apply) mode=apply; shift ;;
+	--no-scripts) scripts=false; shift ;;
 	-*) die "unknown option $1 (usage: $USAGE)" ;;
 	*)
 		[[ -z "$grid" ]] || die "one grid only (usage: $USAGE)"
@@ -59,10 +61,10 @@ for file in "${files[@]}"; do
 done
 
 if ((${#paths[@]} == 1)); then
-	request=$(jq -cn --arg file "${paths[0]}" --arg grid "$grid" --arg name "$name" --arg core "$core" --arg mode "$mode" \
-		'{data: {type: "imports", attributes: ({kind: "simulator", file: $file, grid: $grid, mode: $mode} + ({name: $name, core: $core} | with_entries(select(.value != ""))))}}')
+	request=$(jq -cn --arg file "${paths[0]}" --arg grid "$grid" --arg name "$name" --arg core "$core" --arg mode "$mode" --argjson scripts "$scripts" \
+		'{data: {type: "imports", attributes: ({kind: "simulator", file: $file, grid: $grid, mode: $mode} + ({name: $name, core: $core} | with_entries(select(.value != ""))) + (if $scripts then {} else {scripts: false} end))}}')
 else
-	request=$(jq -cn --arg grid "$grid" --arg mode "$mode" '{data: {type: "imports", attributes: {kind: "simulator", grid: $grid, mode: $mode, simulators: ($ARGS.positional | map({file: .}))}}}' --args "${paths[@]}")
+	request=$(jq -cn --arg grid "$grid" --arg mode "$mode" --argjson scripts "$scripts" '{data: {type: "imports", attributes: {kind: "simulator", grid: $grid, mode: $mode, simulators: ($ARGS.positional | map({file: .} + (if $scripts then {} else {scripts: false} end)))}}}' --args "${paths[@]}")
 fi
 reply=$(engine POST /setups/imports --data=- <<<"$request") || true
 jq -e '.data.attributes' <<<"$reply" >/dev/null 2>&1 ||
@@ -78,6 +80,8 @@ jq -r '
 		"Ports:    http \(.ports.http)" + (if .ports.console then ", console \(.ports.console)" else "" end),
 		"Regions:  \(.regions | length)",
 		(.regions[] | "  \(.name) (\(.uuid), \(.location)): \(.file) -> \(.to)"),
+		(if .backup then "Backup of the source first: \(.backup.file) (databases \(.backup.databases | join(", ")), \(.backup.files | length) files)" else empty end),
+		(if .scripts then (if .scripts.copied then "State of the scripts: \(.scripts.from | join(", ")) -> \(.scripts.to) (\(.scripts.size) bytes)" elif (.scripts.from | length) > 0 then "State of the scripts: not copied, every script starts again" else empty end) else empty end),
 		"Settings kept: \(.settings | length)",
 		(if .dropped then "Settings left: \(.dropped | length)" + (if (.dropped | length) > 0 then " (" + (.dropped | group_by(.reason) | map("\(.[0].reason) \(length)") | join(", ")) + ")" else "" end) else empty end),
 		((.dropped // [])[] | select(.reason == "replaced") | "  [\(.section)] \(.key) = \(.value)" + (if .replacement then " -> \(.replacement)" else ": written by the new config its own way" end));

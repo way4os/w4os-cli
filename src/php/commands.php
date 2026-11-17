@@ -378,6 +378,10 @@ final class Commands
             $arg = array_shift($args);
             if ($arg === '--logs' || $arg === '--archives' || $arg === '--oars') {
                 $options[substr($arg, 2)] = true;
+            } elseif (preg_match('/^--simulator(?:=(.*))?$/', $arg, $m)) {
+                $value = $m[1] ?? (array_shift($args) ?? '');
+                if ($value === '') return self::error('backup', '--simulator needs the config of a simulator of another install', 2);
+                $options['simulator'] = $value;
             } elseif (preg_match('/^--(output|keep)(?:=(.*))?$/', $arg, $m)) {
                 $value = $m[2] ?? (array_shift($args) ?? '');
                 if ($value === '') return self::error('backup', "--{$m[1]} needs a value", 2);
@@ -394,6 +398,25 @@ final class Commands
         }
         if (isset($options['oars'])) {
             return self::backupOars($environment, $refs, $options);
+        }
+        // A simulator of another install, as it is (its databases, its files): the backup an import makes first
+        if (isset($options['simulator'])) {
+            $file = (string) (realpath($options['simulator']) ?: $options['simulator']);
+            if (!is_readable($file)) return self::error('backup', "cannot read $file", 2);
+            try {
+                $raw = \OpenSim\Config\ConfigReader::load($file, [], false, true);
+                $backup = \OpenSim\Archives\SourceBackup::prepare(
+                    $environment,
+                    $file,
+                    $refs[0] ?? 'source',
+                    \OpenSim\Provisioning\Import\SimulatorImporter::name($raw, $file),
+                    \OpenSim\Provisioning\Import\SimulatorImporter::regionFiles($raw, $file),
+                );
+                fwrite(STDOUT, $backup->write() . "\n");
+                return 0;
+            } catch (\InvalidArgumentException|\RuntimeException $e) {
+                return self::error('backup', $e->getMessage());
+            }
         }
         try {
             $files = (new BackupService($environment, DatabaseDump::write(...), static fn(string $message) => fwrite(STDERR, "$message\n")))->run($refs, $options);

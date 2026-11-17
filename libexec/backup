@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # opensim backup: save grid configuration, data, and databases.
 
-USAGE="opensim backup [GRID [SIM]] [--logs] [--archives] [--oars] [--output DIR] [--keep N]"
-HELP="Back up grid or simulator configuration, data and databases. --logs includes logs; --archives includes user archives; --oars saves the OAR of every enabled region of the running simulators instead."
+USAGE="opensim backup [GRID [SIM]] [--logs] [--archives] [--oars] [--output DIR] [--keep N]
+       opensim backup --simulator FILE [GRID]"
+HELP="Back up grid or simulator configuration, data and databases. --logs includes logs; --archives includes user archives; --oars saves the OAR of every enabled region of the running simulators instead. --simulator FILE backs up a simulator of another install as it is (the databases its config names, its config, its includes and its regions), in the backup root under GRID (source when none): what opensim import makes first."
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 
