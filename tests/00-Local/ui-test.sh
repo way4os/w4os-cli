@@ -20,6 +20,7 @@ function set_up() {
 			esac
 		done
 		printf '%s\n' "$kind" >>"$DIALOG_LOG"
+		printf '%s ' "$@" >"${DIALOG_LOG%/*}/args"
 		[[ -n $text ]] || exit 255
 		if [[ $kind == --mixedform ]]; then
 			for ((k = 0; k < ${args[start + 2]}; k++)); do
@@ -49,6 +50,7 @@ function test_a_form_without_a_text_is_answered() {
 	assert_same "0" "$status"
 	assert_same "Welcome 9000" "$f_name $f_port"
 	assert_same "--mixedform" "$(cat "$DIALOG_LOG")"
+	assert_contains "--hline Enter: next field, Tab: buttons" "$(cat "$WORK/args")"
 }
 
 function test_check_boxes_without_a_text_are_answered() {

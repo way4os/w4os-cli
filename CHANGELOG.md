@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- update (setup): the bottom of a form in dialog says that Enter goes to the next field and Tab reaches the buttons
 - fix (setup): a screen of the engine without a text (the form of a simulator joining a grid) can be answered in dialog: dialog refuses an empty text above a form, a checklist or a menu at once (status 255, taken as Quit), a space is given instead
 - feature (web): `opensim web <grid> set helpers|search|profile|guide|welcome|status|directory URL` sets the one setting of a page (and says when Robust must restart); `web show` lists each page with who serves it, the helpers under their base or the site (engine SitePages)
 - fix: duplicate build-tools package in require and require-dev

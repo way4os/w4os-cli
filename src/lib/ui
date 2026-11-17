@@ -152,7 +152,8 @@ ui_form() {
 			_u_n=${_u_names[$_u_i]}
 			_u_items+=("${LABEL[$_u_n]}" "$((_u_i + 1))" 1 "${!_u_n}" "$((_u_i + 1))" "$((_u_w + 2))" 40 200 "$([[ -n "${READONLY[$_u_n]:-}" ]] && echo 2 || echo "${SECRET[$_u_n]:-0}")")
 		done
-		fe_dialog "$_u_title" --insecure --mixedform "${_u_text:- }" "$((${#_u_names[@]} + 8 + $(grep -c '' <<<"$_u_text")))" 72 "${#_u_names[@]}" "${_u_items[@]}" || return $?
+		# Enter goes to the next field (fe_dialogrc): the buttons are reached with Tab, said at the bottom of the box
+		fe_dialog "$_u_title" --hline "Enter: next field, Tab: buttons" --insecure --mixedform "${_u_text:- }" "$((${#_u_names[@]} + 8 + $(grep -c '' <<<"$_u_text")))" 72 "${#_u_names[@]}" "${_u_items[@]}" || return $?
 		mapfile -t _u_values <<<"$FE_ANSWER"
 		for _u_i in "${!_u_names[@]}"; do
 			printf -v "${_u_names[$_u_i]}" '%s' "${_u_values[$_u_i]:-}"
