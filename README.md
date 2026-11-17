@@ -81,7 +81,15 @@ opensim setup --apply setup.json
 
 This preserves the region's UUID and original settings and leaves the simulator disabled. Database/file restoration and source shutdown come before enabling it.
 
-- [ ] import [grid] FILE [--grid] [--simulator] [--users] [--apply]
+`opensim import --simulator FILE GRID [--apply]` brings a simulator of another install (its OpenSim.ini, or its file of `opensim.d` in the layout of opensim-debian, with the regions it names) into the grid GRID of this machine. Its database is kept as it is (the new config uses the same one, nothing is copied), its regions are copied with their UUID and their place, its ports and its own settings are kept. Without `--apply` it says what would be written and where, and writes nothing; with it, the simulator is written disabled: stop the old one, then `opensim enable` and `opensim start` the new one. `--name` and `--core` give its name in the grid and the core it runs with, when they are not the ones of its config and of the grid.
+
+```bash
+opensim import --simulator /opt/opensim/etc/opensim.d/redoutable.ini speculoos
+opensim import --simulator /opt/opensim/etc/opensim.d/redoutable.ini speculoos --apply
+```
+
+- [x] import --simulator FILE GRID [--apply]
+- [ ] import FILE [--apply] (a setup file), region add, simulator add
 - [x] web [grid] [show|check]
 - [x] web [grid] snippet <caddy|nginx|apache>
 - [x] next <grid> location [X,Y] [COUNT] [-e X,Y]

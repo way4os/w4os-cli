@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# opensim import: brings what another install has into this one, through the engine (POST /setups/imports). A simulator of an older
+# install joins a grid of this machine: planned, written with --apply only.
+
+USAGE="opensim import --simulator FILE GRID [--name NAME] [--core DIR] [--apply]"
+HELP="Brings a simulator of another install (its OpenSim.ini, or its file of opensim.d, and the regions it names) into the grid GRID of this machine. Its database is kept as it is (the same one, nothing is copied), its regions are copied with their UUID and their place, its ports and its own settings are kept. Without --apply, says what would be written and where, and writes nothing.
+  --simulator FILE  the config of the simulator
+  --name NAME       its name in the grid, when it is not the one of its config
+  --core DIR        the core it runs with, when it is not the one of the grid
+  --apply           write it (disabled: stop the old one, then opensim enable and opensim start the new one)"
+
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+file= grid= name= core= mode=plan
+while (($#)); do
+	case "$1" in
+	--simulator)
+		(($# > 1)) || die "--simulator requires the config of the simulator"
+		file=$2
+		shift 2
+		;;
+	--simulator=*) file=${1#*=}; shift ;;
+	--name)
+		(($# > 1)) || die "--name requires a name"
+		name=$2
+		shift 2
+		;;
+	--name=*) name=${1#*=}; shift ;;
+	--core)
+		(($# > 1)) || die "--core requires a folder"
+		core=$2
+		shift 2
+		;;
+	--core=*) core=${1#*=}; shift ;;
+	--apply) mode=apply; shift ;;
+	-*) die "unknown option $1 (usage: $USAGE)" ;;
+	*)
+		[[ -z "$grid" ]] || die "one grid only (usage: $USAGE)"
+		grid=$1
+		shift
+		;;
+	esac
+done
+[[ -n "$file" && -n "$grid" ]] || die "usage: $USAGE"
+[[ -r "$file" ]] || die "cannot read $file"
+file=$(realpath "$file")
+
+request=$(jq -cn --arg file "$file" --arg grid "$grid" --arg name "$name" --arg core "$core" --arg mode "$mode" \
+	'{data: {type: "imports", attributes: ({kind: "simulator", file: $file, grid: $grid, mode: $mode} + ({name: $name, core: $core} | with_entries(select(.value != ""))))}}')
+reply=$(engine POST /setups/imports --data=- <<<"$request") || true
+jq -e '.data.attributes' <<<"$reply" >/dev/null 2>&1 ||
+	die "$(jq -r 'if .detail then .detail else (.title // "the engine did not answer") end' <<<"$reply" 2>/dev/null || printf '%s' "$reply")"
+
+# The plan, or what was written: what the engine says, as lines
+jq -r '.data.attributes |
+	"Simulator \(.simulator) (\(.slug)) of the grid \(.grid), from \(.source)",
+	"Config:   \(.config)",
+	"Database: \(.database.name) @ \(.database.host) (user \(.database.user)), kept as it is",
+	"Ports:    http \(.ports.http)" + (if .ports.console then ", console \(.ports.console)" else "" end),
+	"Regions:  \(.regions | length)",
+	(.regions[] | "  \(.name) (\(.uuid), \(.location)): \(.file) -> \(.to)"),
+	"Settings kept: \(.settings | length)",
+	(if .applied then "Written:" else "Would write:" end),
+	(.writes[] | "  \(.)"),
+	"",
+	(if .applied then "Report:   \(.report)" else "Nothing was written: add --apply to write it." end),
+	(.reminders[] | "- \(.)")' <<<"$reply"
