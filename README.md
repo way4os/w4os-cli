@@ -109,6 +109,7 @@ opensim simulator add speculoos north --region "North Shore" --owner "Gudule Lap
 - [x] save oar [GRID [REGION|SIM]] [options] [--keep N] [FILE]
 - [x] load oar [GRID [SIM|REGION]] [--merge] [options] [FILE]
 - [x] backup [GRID [SIM]] [--logs] [--archives] [--output DIR] [--keep N]
+- [x] restore FILE|ARCHIVE [--apply]: a backup put back on this machine (planned; --apply writes, nothing here replaced)
 
 #### This machine
 

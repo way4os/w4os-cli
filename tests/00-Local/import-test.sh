@@ -161,3 +161,30 @@ function test_set_needs_something_to_set() {
 	assert_contains "usage" "$out"
 }
 
+RESTORE='{"data":{"type":"restores","id":"alpha-20261116-120000.tar.gz","attributes":{"mode":"plan","applied":false,"file":"/srv/backups/alpha/alpha-20261116-120000.tar.gz","grid":"alpha","simulator":null,"made":"2026-11-16T12:00:00+00:00","host":"old.example.org","databases":[{"host":"localhost","name":"alpha_robust","user":"opensim"}],"writes":["/etc/opensim/grids/alpha/Robust.HG.ini","/etc/opensim/robust.d/alpha.ini"],"kept":[],"reminders":[{"code":"restore-start","params":{"instance":"alpha","command":"opensim start alpha"},"detail":"Start alpha once it is restored: opensim start alpha"}]}}}'
+CONFLICT='{"type":"about:blank","title":"Invalid request","status":400,"detail":"this machine has already what the backup holds: /etc/opensim/grids/alpha","code":"restore-conflict"}'
+
+function test_plans_a_restore_and_says_nothing_was_written() {
+	engine_says "$RESTORE"
+	printf 'archive' >"$WORK/alpha.tar.gz"
+
+	out=$("$OPENSIM" restore "$WORK/alpha.tar.gz" 2>&1)
+
+	assert_same "{\"file\":\"$(realpath "$WORK/alpha.tar.gz")\",\"mode\":\"plan\"}" "$(jq -c '.data.attributes' "$ENGINE_LOG")"
+	assert_contains "Backup of the grid alpha, made 2026-11-16T12:00:00+00:00 on old.example.org" "$out"
+	assert_contains "  alpha_robust @ localhost (user opensim)" "$out"
+	assert_contains "Would write:" "$out"
+	assert_contains "  /etc/opensim/robust.d/alpha.ini" "$out"
+	assert_contains "Nothing was written: add --apply to write it, then:" "$out"
+	assert_contains "  Start alpha once it is restored: opensim start alpha" "$out"
+}
+
+function test_restores_an_archive_by_its_id_with_apply_and_says_why_the_engine_refuses() {
+	engine_says "$CONFLICT"
+
+	out=$("$OPENSIM" restore alpha_backup_alpha-20261116-120000 --apply 2>&1) && fail "a refusal ends in an error"
+
+	assert_same '{"archive":"alpha_backup_alpha-20261116-120000","mode":"apply"}' "$(jq -c '.data.attributes' "$ENGINE_LOG")"
+	assert_contains "this machine has already what the backup holds" "$out"
+}
+

@@ -23,7 +23,7 @@ _opensim()
   COMPREPLY=()
   cur=${COMP_WORDS[COMP_CWORD]}
   if [ "$COMP_CWORD" = 1 ]; then
-    COMPREPLY=( $(compgen -W "setup status ports start stop restart console screen enable disable web next ban save load backup rest install-dotnet" -- "$cur") )
+    COMPREPLY=( $(compgen -W "setup status ports start stop restart console screen enable disable web next ban save load backup restore rest install-dotnet" -- "$cur") )
     return
   fi
   case ${COMP_WORDS[1]} in
@@ -59,6 +59,9 @@ _opensim()
       ;;
     backup|rest)
       COMPREPLY=()
+      ;;
+    restore)
+      COMPREPLY=( $(compgen -f -X '!*.tar.gz' -- "$cur") $(compgen -W "--apply" -- "$cur") )
       ;;
   esac
 }

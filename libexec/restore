@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# opensim restore: a backup (opensim backup) put back on this machine, through the engine (POST /setups/restores): planned, written
+# with --apply only.
+
+USAGE="opensim restore FILE|ARCHIVE [--apply]"
+HELP="Puts a backup (opensim backup: a grid, or one of its simulators) back on this machine: its configuration, the links that enable its instances, its data, and each database made again from its dump (made when it is missing, refused when it has tables), before any file is written. What this machine has already is never replaced. Without --apply, says what would be written and where, and writes nothing.
+  FILE     the backup, a .tar.gz
+  ARCHIVE  or its id in the list of the archives (opensim api GET /archives)
+  --apply  write it, then start what it restored"
+
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+source= mode=plan
+while (($#)); do
+	case "$1" in
+	--apply) mode=apply; shift ;;
+	-*) die "unknown option $1 (usage: $USAGE)" ;;
+	*)
+		[[ -z "$source" ]] || die "one backup only (usage: $USAGE)"
+		source=$1
+		shift
+		;;
+	esac
+done
+[[ -n "$source" ]] || die "usage: $USAGE"
+
+# A file here, else the id of an archive the engine lists
+if [[ -e "$source" ]]; then
+	[[ -r "$source" ]] || die "cannot read $source"
+	attributes=$(jq -cn --arg file "$(realpath "$source")" --arg mode "$mode" '{file: $file, mode: $mode}')
+else
+	attributes=$(jq -cn --arg archive "$source" --arg mode "$mode" '{archive: $archive, mode: $mode}')
+fi
+reply=$(jq -cn --argjson attributes "$attributes" '{data: {type: "restores", attributes: $attributes}}' | engine POST /setups/restores --data=-) || true
+jq -e '.data.attributes' <<<"$reply" >/dev/null 2>&1 ||
+	die "$(jq -r 'if .detail then .detail else (.title // "the engine did not answer") end' <<<"$reply" 2>/dev/null || printf '%s' "$reply")"
+
+# The plan, or what was written: what the engine says, as lines
+jq -r '.data.attributes |
+	"Backup of " + (if .simulator then "the simulator \(.simulator) of " else "" end) + "the grid \(.grid), made \(.made // "?") on \(.host // "?")",
+	"Databases, made again from their dumps:",
+	(.databases[] | "  \(.name) @ \(.host) (user \(.user))"),
+	(if .applied then "Written:" else "Would write:" end),
+	(.writes[] | "  \(.)"),
+	(if (.kept | length) > 0 then "Kept as they are here:", (.kept[] | "  \(.)") else empty end),
+	"",
+	(if .applied then "Then:" else "Nothing was written: add --apply to write it, then:" end),
+	(.reminders[] | "  \(if type == "object" then .detail else . end)")' <<<"$reply"
