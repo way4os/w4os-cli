@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- feature (web): `opensim web GRID api caddy|nginx|apache [--socket PATH] [--port N] [--web-group GROUP]` prints what serves the engine API to the sites of this machine as the user of the instances: a PHP-FPM pool of its own and a listener on 127.0.0.1 for the paths of the API only (the site then uses engine remote with a key); the CLI needs the engine of 3.0.0~beta.13.486 and later
 - update (import): a folder of the old install the new simulator replaces is shown with the folder it has instead
 - feature (import): `opensim import --simulator FILE --simulator FILE... GRID` plans several simulators into one grid together, checked between them (ports, region names and UUIDs, places), written in their order, refused when something is wrong between them; the plan says the settings of the original that are not kept, counted by why, and lists the ones the new config writes its own way; the CLI needs the engine of 3.0.0~beta.13.482 and later
 - feature (backup): `opensim restore FILE|ARCHIVE [--apply]` puts a backup back on this machine through the engine (`POST /setups/restores`): planned by default, written with --apply, the databases first, nothing this machine has replaced

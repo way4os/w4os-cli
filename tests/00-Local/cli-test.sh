@@ -139,6 +139,15 @@ function test_web_prints_caddy_snippet() {
 	assert_exec "'$OPENSIM' web tender_tern snippet caddy" --stdout-contains 'php_fastcgi'
 }
 
+function test_web_api_prints_the_pool_and_the_local_listener_of_the_engine_api() {
+	make_test_grid
+	assert_exec "'$OPENSIM' web tender_tern api caddy --port 8781" --stdout-contains '[opensim-api]'
+	assert_exec "'$OPENSIM' web tender_tern api caddy --port 8781" --stdout-contains 'http://127.0.0.1:8781'
+	assert_exec "'$OPENSIM' web tender_tern api nginx" --stdout-contains 'listen 127.0.0.1:8780;'
+	assert_exec "'$OPENSIM' web tender_tern api nginx" --stdout-contains 'api_url http://127.0.0.1:8780/api'
+	assert_exec "'$OPENSIM' web tender_tern api lighttpd" --exit 2 --stderr-contains 'unknown web server'
+}
+
 function test_web_set_writes_the_one_key_of_a_page_and_says_robust_must_restart() {
 	make_test_grid
 	assert_exec "'$OPENSIM' web tender_tern set search https://site.example.org/search" --stdout-contains 'restart Robust'

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # opensim web: show, check, or print web-server snippets for a grid.
 
-USAGE="opensim web [GRID] [show|check|snippet caddy|nginx|apache|set PAGE URL] [options]"
-HELP="Show grid web services and who serves each page (the helpers under their base, the site elsewhere), check their URLs, print a server snippet, or set the address of a page (helpers, search, profile, guide, welcome, status, directory). Options: --docroot DIR, --socket PATH."
+USAGE="opensim web [GRID] [show|check|snippet caddy|nginx|apache|api caddy|nginx|apache|set PAGE URL] [options]"
+HELP="Show grid web services and who serves each page (the helpers under their base, the site elsewhere), check their URLs, print a server snippet, or set the address of a page (helpers, search, profile, guide, welcome, status, directory). api prints what serves the engine API to the sites of this machine as the user of the instances: a PHP-FPM pool of its own, and a listener on 127.0.0.1 for its paths only (the site then uses engine remote with a key). Options: --docroot DIR, --socket PATH, --port N, --web-group GROUP."
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 

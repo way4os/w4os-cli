@@ -118,10 +118,10 @@ final class Commands
     /** @param list<string> $args */
     public static function web(Environment $environment, array $args): int
     {
-        $options = ['grid' => '', 'docroot' => '', 'socket' => ''];
+        $options = ['grid' => '', 'docroot' => '', 'socket' => '', 'port' => '', 'web-group' => ''];
         $words = [];
         for ($i = 0; $i < count($args); $i++) {
-            if (preg_match('/^--(grid|docroot|socket)(?:=(.*))?$/', $args[$i], $m)) {
+            if (preg_match('/^--(grid|docroot|socket|port|web-group)(?:=(.*))?$/', $args[$i], $m)) {
                 if (isset($m[2])) {
                     $options[$m[1]] = $m[2];
                 } elseif (isset($args[$i + 1])) {
@@ -133,7 +133,7 @@ final class Commands
                 $words[] = $args[$i];
             }
         }
-        $actions = ['show', 'snippet', 'check', 'set'];
+        $actions = ['show', 'snippet', 'check', 'set', 'api'];
         $action = 'show';
         if ($words !== [] && !in_array($words[0], $actions, true)) {
             $options['grid'] = $options['grid'] ?: array_shift($words);
@@ -170,6 +170,22 @@ final class Commands
             if ($set['restart'] !== null) {
                 fwrite(STDOUT, "The viewers are told once it restarts: restart {$set['restart']} (opensim restart {$grid->nick()})\n");
             }
+            return 0;
+        }
+        // The engine API for the sites of this machine, run as the user of the instances: its pool, then what the web server needs
+        if ($action === 'api') {
+            $user = $environment->layout->systemUser() ?: (string) (posix_getpwuid(posix_geteuid())['name'] ?? 'opensim');
+            $socket = $options['socket'] !== '' ? $options['socket'] : Snippets::API_SOCKET;
+            $port = $options['port'] !== '' ? (int) $options['port'] : Snippets::API_PORT;
+            $group = $options['web-group'] !== '' ? $options['web-group'] : (($words[0] ?? '') === 'caddy' ? 'caddy' : 'www-data');
+            try {
+                $snippet = Snippets::api($words[0] ?? '', $grid->nick(), $options['docroot'], $socket, $port);
+            } catch (\InvalidArgumentException $e) {
+                return self::error('web', $e->getMessage() . ' (usage: opensim web [GRID] api caddy|nginx|apache [--socket PATH] [--port N] [--web-group GROUP])', 2);
+            }
+            fwrite(STDOUT, Snippets::pool($user, $group, $socket) . "\n" . $snippet);
+            fwrite(STDOUT, "\nThen a key for the site (opensim api-key create SITE), and in the site: engine remote, api_url http://127.0.0.1:$port/api, that key.\n");
+
             return 0;
         }
         $directory = $grid->directory();
