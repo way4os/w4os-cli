@@ -81,7 +81,7 @@ opensim setup --apply setup.json
 
 This preserves the region's UUID and original settings and leaves the simulator disabled. Database/file restoration and source shutdown come before enabling it.
 
-`opensim import --simulator FILE GRID [--apply]` brings a simulator of another install (its OpenSim.ini, or its file of `opensim.d` in the layout of opensim-debian, with the regions it names) into the grid GRID of this machine. Its database is kept as it is (the new config uses the same one, nothing is copied), its regions are copied with their UUID and their place, its ports and its own settings are kept. Without `--apply` it says what would be written and where, and writes nothing; with it, the simulator is written disabled: stop the old one, then `opensim enable` and `opensim start` the new one. `--name` and `--core` give its name in the grid and the core it runs with, when they are not the ones of its config and of the grid.
+`opensim import --simulator FILE GRID [--apply]` brings a simulator of another install (its OpenSim.ini, or its file of `opensim.d` in the layout of opensim-debian, with the regions it names) into the grid GRID of this machine. Its database is kept as it is (the new config uses the same one, nothing is copied), its regions are copied with their UUID and their place, its ports and its own settings are kept. Without `--apply` it says what would be written and where, and writes nothing; with it, the simulator is written disabled: stop the old one, then `opensim enable` and `opensim start` the new one. `--name` and `--core` give its name in the grid and the core it runs with, when they are not the ones of its config and of the grid. Several `--simulator` are planned together and checked between them (no two with one port, one region name or UUID, one place of the map), then written in their order; the plan also says the settings of the original that are not kept, and why.
 
 ```bash
 opensim import --simulator /opt/opensim/etc/opensim.d/redoutable.ini speculoos
@@ -95,7 +95,7 @@ opensim region add speculoos welcome --name "Welcome Two" --size 512 --roles Fal
 opensim simulator add speculoos north --region "North Shore" --owner "Gudule Lapointe" --apply
 ```
 
-- [x] import --simulator FILE GRID [--apply]
+- [x] import --simulator FILE [--simulator FILE...] GRID [--apply]: several simulators planned together, checked between them
 - [x] import FILE [--apply] (a setup file), region add, simulator add
 - [x] web [grid] [show|check]
 - [x] web [grid] snippet <caddy|nginx|apache>

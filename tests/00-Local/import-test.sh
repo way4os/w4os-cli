@@ -6,7 +6,7 @@
 
 OPENSIM="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/bin/opensim"
 
-PLAN='{"data":{"type":"imports","id":"demo.redoutable","attributes":{"kind":"simulator","mode":"plan","applied":false,"source":"/opt/opensim/etc/opensim.d/redoutable.ini","grid":"demo","simulator":"redoutable","slug":"demo.redoutable","core":"/core","config":"/etc/opensim/grids/demo/sims/demo.redoutable.ini","database":{"host":"localhost","name":"osredoutable","user":"opensim","kept":true},"ports":{"http":9250,"console":null},"regions":[{"file":"/opt/r/Redoutable.ini","to":"/etc/opensim/grids/demo/sims/demo.redoutable/regions/Redoutable.ini","name":"Redoutable","uuid":"1111","location":"1000,1000"}],"settings":[{"section":"XEngine","key":"MinThreads","value":"10","unknown":false}],"report":"/etc/opensim/grids/demo/sims/demo.redoutable.import-report.txt","writes":["/etc/opensim/grids/demo/sims/demo.redoutable.ini"],"reminders":["Stop the old one.","Then: opensim enable demo.redoutable, opensim start demo.redoutable."]}}}'
+PLAN='{"data":{"type":"imports","id":"demo.redoutable","attributes":{"kind":"simulator","mode":"plan","applied":false,"source":"/opt/opensim/etc/opensim.d/redoutable.ini","grid":"demo","simulator":"redoutable","slug":"demo.redoutable","core":"/core","config":"/etc/opensim/grids/demo/sims/demo.redoutable.ini","database":{"host":"localhost","name":"osredoutable","user":"opensim","kept":true},"ports":{"http":9250,"console":null},"regions":[{"file":"/opt/r/Redoutable.ini","to":"/etc/opensim/grids/demo/sims/demo.redoutable/regions/Redoutable.ini","name":"Redoutable","uuid":"1111","location":"1000,1000"}],"settings":[{"section":"XEngine","key":"MinThreads","value":"10","unknown":false}],"dropped":[{"section":"Launch","key":"SimName","value":"redoutable","reason":"layout"},{"section":"Network","key":"http_listener_port","value":"9250","reason":"same"},{"section":"Network","key":"ExternalHostName","value":"old.example.org","reason":"replaced"}],"report":"/etc/opensim/grids/demo/sims/demo.redoutable.import-report.txt","writes":["/etc/opensim/grids/demo/sims/demo.redoutable.ini"],"reminders":["Stop the old one.","Then: opensim enable demo.redoutable, opensim start demo.redoutable."]}}}'
 REFUSED='{"type":"about:blank","title":"Bad request","status":400,"detail":"the grid already has the simulator demo.redoutable","code":"invalid-request"}'
 
 function set_up() {
@@ -50,6 +50,30 @@ function test_plans_the_import_and_says_nothing_was_written() {
 	assert_contains "Would write:" "$out"
 	assert_contains "Nothing was written: add --apply to write it." "$out"
 	assert_contains "- Then: opensim enable demo.redoutable, opensim start demo.redoutable." "$out"
+	assert_contains "Settings left: 3 (layout 1, replaced 1, same 1)" "$out"
+	assert_contains "  [Network] ExternalHostName = old.example.org: written by the new config its own way" "$out"
+}
+
+function test_plans_several_simulators_together_and_says_what_is_wrong_between_them() {
+	engine_says "$(jq -c '{data: {type: "imports", id: "demo", attributes: {kind: "simulator", mode: "plan", applied: false, grid: "demo", steps: [.data.attributes, (.data.attributes | .slug = "demo.residences" | .simulator = "residences")], writes: ["/a", "/b"], problems: {"simulators.1": "the port 9250 is also the one of the simulator 1"}, reminders: []}}}' <<<"$PLAN")"
+	printf '[Network]\nhttp_listener_port = 9250\n' >"$WORK/residences.ini"
+
+	local out status=0
+	out=$("$OPENSIM" import --simulator "$WORK/redoutable.ini" --simulator "$WORK/residences.ini" demo 2>&1) || status=$?
+
+	assert_same "[\"$(realpath "$WORK/redoutable.ini")\",\"$(realpath "$WORK/residences.ini")\"]" "$(jq -c '[.data.attributes.simulators[].file]' "$ENGINE_LOG")"
+	assert_contains "Simulator residences (demo.residences) of the grid demo" "$out"
+	assert_contains "Problems, nothing can be written:" "$out"
+	assert_contains "  simulators.1: the port 9250 is also the one of the simulator 1" "$out"
+	assert_not_same "0" "$status"
+}
+
+function test_several_simulators_take_no_name_nor_core() {
+	local out status=0
+	out=$("$OPENSIM" import --simulator "$WORK/redoutable.ini" --simulator "$WORK/redoutable.ini" demo --name Fort 2>&1) || status=$?
+
+	assert_not_same "0" "$status"
+	assert_contains "--name and --core are for one simulator" "$out"
 }
 
 function test_applies_with_the_name_and_the_core_given() {
@@ -78,7 +102,7 @@ function test_needs_a_file_and_a_grid() {
 	out=$("$OPENSIM" import --simulator "$WORK/redoutable.ini" 2>&1) || status=$?
 
 	assert_not_same "0" "$status"
-	assert_contains "opensim import --simulator FILE GRID" "$out"
+	assert_contains "opensim import --simulator FILE" "$out"
 }
 
 FILES='{"data":{"type":"files","id":"demo","attributes":{"mode":"plan","applied":false,"grid":"demo","steps":[{"kind":"simulator","simulator":"North","slug":"demo.north","config":"/etc/opensim/grids/demo/sims/demo.north.ini","ports":{"http":9010,"console":null},"database":{"host":"localhost","name":"demo_north","user":"opensim"},"estate":{"name":"Ada Love Estate","owner":"Ada Love"},"region":{"name":"Big Garden","location":"1000,1000","size":512,"roles":["FallbackRegion"],"port":9011,"file":"/etc/opensim/grids/demo/sims/demo.north/regions/BigGarden.ini"}}],"writes":["/etc/opensim/grids/demo/sims/demo.north.ini","/etc/opensim/grids/demo/sims/demo.north/regions/BigGarden.ini"],"problems":{},"reminders":["opensim start demo.north"],"notes":[{"code":"plan-reserves-nothing","params":{},"detail":"A plan reserves nothing."}]}}}'

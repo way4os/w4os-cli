@@ -3,25 +3,26 @@
 # install joins a grid of this machine: planned, written with --apply only.
 
 USAGE="opensim import FILE [--apply]
-       opensim import --simulator FILE GRID [--name NAME] [--core DIR] [--apply]"
+       opensim import --simulator FILE [--simulator FILE...] GRID [--name NAME] [--core DIR] [--apply]"
 HELP="Applies a setup file (JSON or YAML: the simulators of a grid of this machine, their regions with name, location, size, roles) to the grid it names, or brings a simulator of another install (its OpenSim.ini, or its file of opensim.d, and the regions it names) into the grid GRID of this machine. Its database is kept as it is (the same one, nothing is copied), its regions are copied with their UUID and their place, its ports and its own settings are kept. Without --apply, says what would be written and where, and writes nothing.
   FILE              a setup file: its simulators are made, or given its regions when the grid has them
-  --simulator FILE  the config of a simulator of another install
-  --name NAME       its name in the grid, when it is not the one of its config
-  --core DIR        the core it runs with, when it is not the one of the grid
+  --simulator FILE  the config of a simulator of another install; several, planned together and checked between them (ports,
+                    region names and UUIDs, places of the map), written in their order
+  --name NAME       its name in the grid, when it is not the one of its config (one simulator only)
+  --core DIR        the core it runs with, when it is not the one of the grid (one simulator only)
   --apply           write it (disabled: stop the old one, then opensim enable and opensim start the new one)"
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 
-file= grid= name= core= mode=plan
+files=() grid= name= core= mode=plan
 while (($#)); do
 	case "$1" in
 	--simulator)
 		(($# > 1)) || die "--simulator requires the config of the simulator"
-		file=$2
+		files+=("$2")
 		shift 2
 		;;
-	--simulator=*) file=${1#*=}; shift ;;
+	--simulator=*) files+=("${1#*=}"); shift ;;
 	--name)
 		(($# > 1)) || die "--name requires a name"
 		name=$2
@@ -44,32 +45,58 @@ while (($#)); do
 	esac
 done
 # A setup file: the one word given, without --simulator
-if [[ -z "$file" ]]; then
+if ((${#files[@]} == 0)); then
 	[[ -n "$grid" && -r "$grid" ]] || die "usage: $USAGE"
 	setup_file "$grid" "$mode"
 	exit
 fi
-[[ -n "$file" && -n "$grid" ]] || die "usage: $USAGE"
-[[ -r "$file" ]] || die "cannot read $file"
-file=$(realpath "$file")
+[[ -n "$grid" ]] || die "usage: $USAGE"
+((${#files[@]} == 1)) || [[ -z "$name$core" ]] || die "--name and --core are for one simulator (usage: $USAGE)"
+paths=()
+for file in "${files[@]}"; do
+	[[ -r "$file" ]] || die "cannot read $file"
+	paths+=("$(realpath "$file")")
+done
 
-request=$(jq -cn --arg file "$file" --arg grid "$grid" --arg name "$name" --arg core "$core" --arg mode "$mode" \
-	'{data: {type: "imports", attributes: ({kind: "simulator", file: $file, grid: $grid, mode: $mode} + ({name: $name, core: $core} | with_entries(select(.value != ""))))}}')
+if ((${#paths[@]} == 1)); then
+	request=$(jq -cn --arg file "${paths[0]}" --arg grid "$grid" --arg name "$name" --arg core "$core" --arg mode "$mode" \
+		'{data: {type: "imports", attributes: ({kind: "simulator", file: $file, grid: $grid, mode: $mode} + ({name: $name, core: $core} | with_entries(select(.value != ""))))}}')
+else
+	request=$(jq -cn --arg grid "$grid" --arg mode "$mode" '{data: {type: "imports", attributes: {kind: "simulator", grid: $grid, mode: $mode, simulators: ($ARGS.positional | map({file: .}))}}}' --args "${paths[@]}")
+fi
 reply=$(engine POST /setups/imports --data=- <<<"$request") || true
 jq -e '.data.attributes' <<<"$reply" >/dev/null 2>&1 ||
 	die "$(jq -r 'if .detail then .detail else (.title // "the engine did not answer") end' <<<"$reply" 2>/dev/null || printf '%s' "$reply")"
 
-# The plan, or what was written: what the engine says, as lines
-jq -r '.data.attributes |
-	"Simulator \(.simulator) (\(.slug)) of the grid \(.grid), from \(.source)",
-	"Config:   \(.config)",
-	"Database: \(.database.name) @ \(.database.host) (user \(.database.user)), kept as it is",
-	"Ports:    http \(.ports.http)" + (if .ports.console then ", console \(.ports.console)" else "" end),
-	"Regions:  \(.regions | length)",
-	(.regions[] | "  \(.name) (\(.uuid), \(.location)): \(.file) -> \(.to)"),
-	"Settings kept: \(.settings | length)",
-	(if .applied then "Written:" else "Would write:" end),
-	(.writes[] | "  \(.)"),
-	"",
-	(if .applied then "Report:   \(.report)" else "Nothing was written: add --apply to write it." end),
-	(.reminders[] | "- \(if type == "object" then .detail else . end)")' <<<"$reply"
+# The plan, or what was written: what the engine says, as lines (several simulators: each, then what is wrong between them)
+jq -r '
+	def said: if type == "object" then .detail else . end;
+	def step:
+		"Simulator \(.simulator) (\(.slug)) of the grid \(.grid), from \(.source)",
+		"Config:   \(.config)",
+		"Database: \(.database.name) @ \(.database.host) (user \(.database.user)), kept as it is",
+		"Ports:    http \(.ports.http)" + (if .ports.console then ", console \(.ports.console)" else "" end),
+		"Regions:  \(.regions | length)",
+		(.regions[] | "  \(.name) (\(.uuid), \(.location)): \(.file) -> \(.to)"),
+		"Settings kept: \(.settings | length)",
+		(if .dropped then "Settings left: \(.dropped | length)" + (if (.dropped | length) > 0 then " (" + (.dropped | group_by(.reason) | map("\(.[0].reason) \(length)") | join(", ")) + ")" else "" end) else empty end),
+		((.dropped // [])[] | select(.reason == "replaced") | "  [\(.section)] \(.key) = \(.value): written by the new config its own way");
+	.data.attributes |
+	if .steps then
+		(.steps[] | step, ""),
+		(if (.problems | length) > 0 then "Problems, nothing can be written:", (.problems | to_entries[] | "  \(.key): \(.value)") else empty end),
+		(if .applied then "Written:" else "Would write:" end),
+		(.writes[] | "  \(.)"),
+		"",
+		(if .applied then empty else "Nothing was written: add --apply to write it." end),
+		(.reminders[] | "- \(said)")
+	else
+		step,
+		(if .applied then "Written:" else "Would write:" end),
+		(.writes[] | "  \(.)"),
+		"",
+		(if .applied then "Report:   \(.report)" else "Nothing was written: add --apply to write it." end),
+		(.reminders[] | "- \(said)")
+	end' <<<"$reply"
+# Several simulators that cannot be written together end in an error
+jq -e '(.data.attributes.problems // {}) | length == 0' <<<"$reply" >/dev/null
