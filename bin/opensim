@@ -5,7 +5,7 @@ set -e
 here=$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")
 libexec=$(cd "$here/../libexec" && pwd)
 
-COMMANDOPTS=setup,import,region,simulator,status,ports,start,stop,restart,console,screen,enable,disable,web,next,ban,save,load,backup,restore,rest,install-dotnet
+COMMANDOPTS=setup,import,region,simulator,status,ports,start,stop,restart,console,screen,enable,disable,web,next,ban,save,load,backup,restore,api-key,rest,install-dotnet
 HELP=$(
 	cat <<USAGE
 
@@ -26,6 +26,7 @@ HELP=$(
   save|load       save or restore IAR and OAR archives
   backup          back up grid configuration, data, and databases
   restore         put a backup back on this machine (planned, --apply writes)
+  api-key         make, list or revoke the keys of the engine API
   rest            use the remote OpenSim console client
   install-dotnet  install the .NET runtime OpenSimulator needs
 

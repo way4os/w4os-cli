@@ -230,6 +230,20 @@ function test_rest_keeps_the_password_of_the_environment_for_the_system_user() {
 	assert_contains 'OPENSIM_REST_PASSWORD' "$(grep '^export PRESERVE_ENV=' "$OPENSIM")"
 }
 
+function test_api_key_creates_lists_and_revokes_a_key_by_its_label() {
+	local out key
+	out=$("$OPENSIM" api-key create mini-site 2>&1)
+	key=$(grep -o 'osk_[A-Za-z0-9_-]*' <<<"$out" | head -1)
+	assert_not_empty "$key"
+	# The key is shown once: the list has its label and its date, never the key
+	assert_exec "'$OPENSIM' api-key list" --stdout-contains 'mini-site'
+	assert_not_contains "$key" "$("$OPENSIM" api-key list 2>&1)"
+	assert_exec "'$OPENSIM' api-key revoke mini-site" --stdout-contains 'revoked'
+	assert_exec "'$OPENSIM' api-key list" --stdout-contains 'revoked'
+	assert_exec "'$OPENSIM' api-key revoke nothing-here" --exit 1 --stderr-contains 'no key'
+	assert_exec "'$OPENSIM' api-key create" --exit 2 --stderr-contains 'usage'
+}
+
 function test_rest_delegates_to_rest_cli() {
 	assert_exec "'$OPENSIM' rest --help" --stdout-contains 'Run the opensim-rest-php console client'
 }

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# opensim api-key: the keys of the engine API, made, listed and revoked by the user of the instances.
+
+USAGE="opensim api-key create LABEL | list | revoke LABEL|ID"
+HELP="The keys that open the engine API (a site in engine remote, a script): create makes one with a label and shows it once, list shows their labels and dates (never the keys), revoke closes one by its label or its id. Run as the user of the instances, whose state folder keeps them."
+
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+run api-key "$@"

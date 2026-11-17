@@ -243,6 +243,8 @@ switch ($command) {
         exit(Commands::backup($engine, $args));
     case 'ban':
         exit(Commands::ban($engine, $args));
+    case 'api-key':
+        exit(Commands::apiKey($engine, $args));
     case 'rest':
         exit(Commands::rest($args, $engine));
     case 'console':

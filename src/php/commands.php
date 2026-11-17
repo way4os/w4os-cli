@@ -115,6 +115,49 @@ final class Commands
         return $failed ? 1 : 0;
     }
 
+    /**
+     * The keys of the engine API (opensim api-key create LABEL | list | revoke LABEL|ID): made, listed and revoked by the user of the
+     * instances, whose state folder keeps them; a key is shown once, when it is made.
+     *
+     * @param list<string> $args
+     */
+    public static function apiKey(Environment $environment, array $args): int
+    {
+        $keys = \OpenSim\Security\ApiKeys::for($environment);
+        $action = $args[0] ?? '';
+        $what = trim(implode(' ', array_slice($args, 1)));
+        if ($action === 'create' && $what !== '') {
+            $made = $keys->create($what);
+            fwrite(STDOUT, "{$made['key']}\n");
+            fwrite(STDERR, "api-key: key {$made['id']} ($what) made; it is shown once, keep it now\n");
+
+            return 0;
+        }
+        if ($action === 'list') {
+            foreach ($keys->all() as $key) {
+                printf(
+                    "%-10s %-30s %s%s\n",
+                    $key['id'],
+                    $key['label'],
+                    date('Y-m-d H:i', (int) $key['created']),
+                    $key['revoked'] !== null ? '  revoked ' . date('Y-m-d H:i', (int) $key['revoked']) : '',
+                );
+            }
+
+            return 0;
+        }
+        if ($action === 'revoke' && $what !== '') {
+            if (!$keys->revoke($what)) {
+                return self::error('api-key', "no key to revoke called $what (a label or an id: opensim api-key list)");
+            }
+            fwrite(STDOUT, "$what revoked\n");
+
+            return 0;
+        }
+
+        return self::error('api-key', 'usage: opensim api-key create LABEL | list | revoke LABEL|ID', 2);
+    }
+
     /** @param list<string> $args */
     public static function web(Environment $environment, array $args): int
     {
