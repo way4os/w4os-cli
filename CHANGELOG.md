@@ -2,8 +2,9 @@
 
 ### Unreleased
 
+- feature (setup): `opensim simulator add --estate NAME`, the estate its regions join (made when none has that name); by default the estate of --owner; the plan says the estate of a new simulator
 - fix (rest): `opensim rest --url ... --user ...` keeps OPENSIM_REST_PASSWORD when it runs as the system user; `opensim rest INSTANCE -- COMMAND` sends a command to the remote console of an instance, at the address and with the account of its config, its secrets masked
-- feature (setup): `opensim simulator add --db-admin USER` (or OPENSIM_DB_ADMIN_USER) makes the database with an administrator of the database server, its password from OPENSIM_DB_ADMIN_PASS or asked, never on the command line; the plan of a setup file says its notes (a plan reserves nothing); the CLI needs the engine of 3.0.0~beta.13.470 and later
+- feature (setup): `opensim simulator add --db-admin USER` (or OPENSIM_DB_ADMIN_USER) makes the database with an administrator of the database server, its password from OPENSIM_DB_ADMIN_PASS or asked, never on the command line; the plan of a setup file says its notes (a plan reserves nothing); the CLI needs the engine of 3.0.0~beta.13.473 and later
 - feature (regions): `opensim region set GRID REGION [--roles ROLE,...] [--owner UUID]` gives a region these roles and only them, or another owner (the owner of its estate), through the engine, and says what is left to do (restart Robust)
 - feature (setup): `opensim import FILE [--apply]` applies a setup file to a grid of this machine, `opensim region add GRID SIMULATOR --name NAME [...]` gives a region to a simulator (`--size`, `--roles`, `--location`, `--port`), `opensim simulator add GRID NAME --region NAME [...]` makes a simulator with its first region, all through the engine (`POST /setups/files`): planned, written with --apply, nothing started
 - update (setup): the bottom of a form in dialog says that Enter goes to the next field and Tab reaches the buttons

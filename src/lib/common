@@ -152,7 +152,7 @@ setup_file_report() { # reply
 	jq -r '.data.attributes |
 		"Grid \(.grid)",
 		(.steps[] |
-			(if .kind == "simulator" then "Simulator \(.simulator) (\(.slug)): \(.config), http \(.ports.http), database \(.database.name) @ \(.database.host)" else "Region of \(.slug):" end),
+			(if .kind == "simulator" then "Simulator \(.simulator) (\(.slug)): \(.config), http \(.ports.http), database \(.database.name) @ \(.database.host)" + (if .estate then ", estate \(.estate.name)" + (if .estate.owner then " (\(.estate.owner))" else "" end) else "" end) else "Region of \(.slug):" end),
 			(if .region then "  \(.region.name) at \(.region.location), \(.region.size) m, port \(.region.port)" + (if (.region.roles | length) > 0 then ", " + (.region.roles | join(", ")) else "" end) + ": \(.region.file)" else empty end)),
 		(if .applied then "Written:" else "Would write:" end),
 		(.writes[] | "  \(.)"),

@@ -81,7 +81,7 @@ function test_needs_a_file_and_a_grid() {
 	assert_contains "opensim import --simulator FILE GRID" "$out"
 }
 
-FILES='{"data":{"type":"files","id":"demo","attributes":{"mode":"plan","applied":false,"grid":"demo","steps":[{"kind":"simulator","simulator":"North","slug":"demo.north","config":"/etc/opensim/grids/demo/sims/demo.north.ini","ports":{"http":9010,"console":null},"database":{"host":"localhost","name":"demo_north","user":"opensim"},"region":{"name":"Big Garden","location":"1000,1000","size":512,"roles":["FallbackRegion"],"port":9011,"file":"/etc/opensim/grids/demo/sims/demo.north/regions/BigGarden.ini"}}],"writes":["/etc/opensim/grids/demo/sims/demo.north.ini","/etc/opensim/grids/demo/sims/demo.north/regions/BigGarden.ini"],"problems":{},"reminders":["opensim start demo.north"],"notes":["A plan reserves nothing."]}}}'
+FILES='{"data":{"type":"files","id":"demo","attributes":{"mode":"plan","applied":false,"grid":"demo","steps":[{"kind":"simulator","simulator":"North","slug":"demo.north","config":"/etc/opensim/grids/demo/sims/demo.north.ini","ports":{"http":9010,"console":null},"database":{"host":"localhost","name":"demo_north","user":"opensim"},"estate":{"name":"Ada Love Estate","owner":"Ada Love"},"region":{"name":"Big Garden","location":"1000,1000","size":512,"roles":["FallbackRegion"],"port":9011,"file":"/etc/opensim/grids/demo/sims/demo.north/regions/BigGarden.ini"}}],"writes":["/etc/opensim/grids/demo/sims/demo.north.ini","/etc/opensim/grids/demo/sims/demo.north/regions/BigGarden.ini"],"problems":{},"reminders":["opensim start demo.north"],"notes":["A plan reserves nothing."]}}}'
 
 function test_applies_a_setup_file_given_alone() {
 	engine_says "$FILES"
@@ -91,7 +91,7 @@ function test_applies_a_setup_file_given_alone() {
 	out=$("$OPENSIM" import "$WORK/setup.yaml" 2>&1)
 
 	assert_same '{"text":"grid:\n  nick: demo\n","mode":"plan"}' "$(jq -c '.data.attributes' "$ENGINE_LOG")"
-	assert_contains "Simulator North (demo.north): /etc/opensim/grids/demo/sims/demo.north.ini, http 9010, database demo_north @ localhost" "$out"
+	assert_contains "Simulator North (demo.north): /etc/opensim/grids/demo/sims/demo.north.ini, http 9010, database demo_north @ localhost, estate Ada Love Estate (Ada Love)" "$out"
 	assert_contains "  Big Garden at 1000,1000, 512 m, port 9011, FallbackRegion: /etc/opensim/grids/demo/sims/demo.north/regions/BigGarden.ini" "$out"
 	assert_contains "Nothing was written: add --apply to write it, then:" "$out"
 	assert_contains "  opensim start demo.north" "$out"
@@ -105,6 +105,14 @@ function test_gives_a_region_to_a_simulator() {
 
 	assert_same '{"grid":{"nick":"demo"},"simulators":[{"name":"alpha","regions":[{"name":"Alpha Two","location":"1200,1200","size":512,"roles":["FallbackRegion","DefaultHGRegion"]}]}]}' "$(jq -c '.data.attributes.setup' "$ENGINE_LOG")"
 	assert_same "apply" "$(jq -r '.data.attributes.mode' "$ENGINE_LOG")"
+}
+
+function test_gives_the_estate_its_regions_join() {
+	engine_says "$FILES"
+
+	"$OPENSIM" simulator add demo North --region "Big Garden" --owner "Ada Love" --estate "Ada Land" >/dev/null 2>&1
+
+	assert_same '{"owner":"Ada Love","name":"Ada Land"}' "$(jq -c '.data.attributes.setup.simulators[0].estate' "$ENGINE_LOG")"
 }
 
 function test_gives_the_administrator_of_the_database_server_never_on_the_command_line() {
