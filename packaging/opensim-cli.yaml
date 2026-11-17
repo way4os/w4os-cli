@@ -26,8 +26,8 @@ depends:
     - dialog
     - default-mysql-client | virtual-mysql-client
     - jq
-    # The first engine with everything the CLI calls (95f7784: the import of a simulator)
-    - opensim-engine (>= 3.0.0~beta.13.461)
+    # The first engine with everything the CLI calls (8269052: setup files applied to a grid)
+    - opensim-engine (>= 3.0.0~beta.13.463)
     - opensim-rest-php
     - php-cli (>= 2:8.2)
     - php-curl
