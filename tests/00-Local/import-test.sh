@@ -114,3 +114,33 @@ function test_makes_a_simulator_with_its_first_region_and_the_database_of_the_en
 	assert_same '{"name":"North","estate":{"owner":"Ada Love"},"database":{"user":"opensim","password":"secret"},"regions":[{"name":"Big Garden","size":512}]}' "$(jq -c '.data.attributes.setup.simulators[0]' "$ENGINE_LOG")"
 	assert_same "plan" "$(jq -r '.data.attributes.mode' "$ENGINE_LOG")"
 }
+
+REGION='{"data":{"type":"regions","id":"aaaa","attributes":{"name":"Big Garden","roles":["FallbackRegion","Persistent"],"ownerName":"Bob Root"}},"meta":{"reminders":["Robust reads Region_Big_Garden when it starts: restart Robust (opensim restart demo)."]}}'
+READ_ONLY='{"type":"about:blank","title":"Bad request","status":400,"detail":"the name of a region is the one of its file, changed there by its operator","code":"field-read-only"}'
+
+function test_sets_the_roles_and_the_owner_of_a_region_and_says_what_is_left_to_do() {
+	engine_says "$REGION"
+
+	out=$("$OPENSIM" region set demo "Big Garden" --roles FallbackRegion,Persistent --owner 22222222-2222-4222-8222-222222222222 2>&1)
+
+	assert_same '{"data":{"type":"regions","attributes":{"roles":["FallbackRegion","Persistent"],"owner":"22222222-2222-4222-8222-222222222222"}}}' "$(jq -c . "$ENGINE_LOG")"
+	assert_contains "Big Garden: FallbackRegion, Persistent; owner Bob Root" "$out"
+	assert_contains "Then:" "$out"
+	assert_contains "  Robust reads Region_Big_Garden when it starts: restart Robust (opensim restart demo)." "$out"
+}
+
+function test_takes_no_roles_to_take_them_all_away_and_says_why_the_engine_refuses() {
+	engine_says "$READ_ONLY"
+
+	"$OPENSIM" region set demo Welcome --roles "" >/dev/null 2>&1
+	assert_same '{"data":{"type":"regions","attributes":{"roles":[]}}}' "$(jq -c . "$ENGINE_LOG")"
+	engine_says "$READ_ONLY"
+	out=$("$OPENSIM" region set demo Welcome --roles "" 2>&1) && fail "a refusal ends in an error"
+	assert_contains "the name of a region is the one of its file" "$out"
+}
+
+function test_set_needs_something_to_set() {
+	out=$("$OPENSIM" region set demo Welcome 2>&1) && fail "nothing to set is an error"
+	assert_contains "usage" "$out"
+}
+

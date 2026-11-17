@@ -1,10 +1,49 @@
 #!/usr/bin/env bash
-# opensim region add: a region given to a simulator of a grid of this machine, through the engine (a setup file of one region).
+# opensim region: a region given to a simulator of a grid of this machine (add), or its roles and its owner changed (set), through the
+# engine.
 
-USAGE="opensim region add GRID SIMULATOR --name NAME [--location X,Y] [--size METERS] [--roles ROLE,...] [--port PORT] [--apply]"
-HELP="Gives a region to the simulator SIMULATOR of the grid GRID (made when the grid has no simulator of that name). What is not given is proposed by the engine: the nearest free place, the next port. --size is a multiple of 256 meters; --roles are DefaultRegion, DefaultHGRegion, FallbackRegion... Without --apply, says what would be written and where, and writes nothing."
+USAGE="opensim region add GRID SIMULATOR --name NAME [--location X,Y] [--size METERS] [--roles ROLE,...] [--port PORT] [--apply]
+       opensim region set GRID REGION [--roles ROLE,...] [--owner UUID]"
+HELP="add gives a region to the simulator SIMULATOR of the grid GRID (made when the grid has no simulator of that name). What is not given is proposed by the engine: the nearest free place, the next port. --size is a multiple of 256 meters; --roles are DefaultRegion, DefaultHGRegion, FallbackRegion... Without --apply, says what would be written and where, and writes nothing.
+set gives the region REGION (its name or its UUID) these roles and only them (--roles \"\" takes them all away), or another owner (--owner, the UUID of an avatar: the owner of its estate). Its name, its place and its size are changed in its file."
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+# set: the roles and the owner of a region, by the PATCH of the engine
+if [[ "${1:-}" == set ]]; then
+	shift
+	words=() given=()
+	declare -A value=()
+	while (($#)); do
+		case "$1" in
+		--roles | --owner)
+			(($# > 1)) || die "$1 requires a value"
+			value[${1#--}]=$2 given+=("${1#--}")
+			shift 2
+			;;
+		--roles=* | --owner=*)
+			key=${1%%=*} key=${key#--}
+			value[$key]=${1#*=} given+=("$key")
+			shift
+			;;
+		-*) die "unknown option $1 (usage: $USAGE)" ;;
+		*) words+=("$1"); shift ;;
+		esac
+	done
+	((${#words[@]} == 2 && ${#given[@]} > 0)) || die "usage: $USAGE"
+	attributes=$(jq -cn --arg roles "${value[roles]-}" --arg owner "${value[owner]-}" --arg given "${given[*]}" '
+		($given | split(" ")) as $asked
+		| (if ($asked | index("roles")) then {roles: ($roles | split(",") | map(select(. != "")))} else {} end)
+		+ (if ($asked | index("owner")) then {owner: $owner} else {} end)')
+	path="/grids/$(jq -rn --arg v "${words[0]}" '$v | @uri')/regions/$(jq -rn --arg v "${words[1]}" '$v | @uri')"
+	reply=$(jq -cn --argjson attributes "$attributes" '{data: {type: "regions", attributes: $attributes}}' | engine PATCH "$path" --data=-) || true
+	jq -e '.data.attributes' <<<"$reply" >/dev/null 2>&1 ||
+		die "$(jq -r 'if .detail then .detail else (.title // "the engine did not answer") end' <<<"$reply" 2>/dev/null || printf '%s' "$reply")"
+	jq -r '.data.attributes as $a
+		| "\($a.name): \(if ($a.roles | length) > 0 then ($a.roles | join(", ")) else "no role" end); owner \($a.ownerName // $a.owner // "nobody")",
+		(if (.meta.reminders // []) | length > 0 then "Then:", (.meta.reminders[] | "  \(.)") else empty end)' <<<"$reply"
+	exit 0
+fi
 
 [[ "${1:-}" == add ]] || die "usage: $USAGE"
 shift
