@@ -472,11 +472,11 @@ function test_screen_title_describes_the_current_step() {
 	out=$(setup_with_dialog)
 	log=$(cat "$DIALOG_LOG")
 	assert_contains "Written in /etc/opensim/grids/amy." "$out"
-	assert_contains "--title OpenSim setup --cancel-label Quit --no-tags --menu  10 60 3 grid Grid standalone Standalone speculoos Speculoos (not implemented)" "$log"
-	assert_contains "--title Grid --cancel-label Back --insecure --mixedform  11 72 2 Grid name 1 1 Amy 1" "$log"
+	assert_contains "--title OpenSim setup --cancel-label Quit --no-tags --menu   10 60 3 grid Grid standalone Standalone speculoos Speculoos (not implemented)" "$log"
+	assert_contains "--title Grid --cancel-label Back --insecure --mixedform   11 72 2 Grid name 1 1 Amy 1" "$log"
 	assert_contains "Password 2 1  2" "$(grep mixedform "$DIALOG_LOG")"
-	assert_contains "--title Options --cancel-label Back --no-tags --separate-output --checklist  10 50 2 c_ssl SSL (not implemented) off c_hypergrid Hypergrid on" "$log"
-	assert_contains "--title Review --ok-label Install --cancel-label Back --scrollbar --no-tags --menu  12 78 5" "$log"
+	assert_contains "--title Options --cancel-label Back --no-tags --separate-output --checklist   10 50 2 c_ssl SSL (not implemented) off c_hypergrid Hypergrid on" "$log"
+	assert_contains "--title Review --ok-label Install --cancel-label Back --scrollbar --no-tags --menu   12 78 5" "$log"
 	assert_not_contains "--ok-label OK" "$log"
 	assert_equals "menu mixedform checklist menu" "$(grep -oE -- '--(menu|mixedform|checklist)' "$DIALOG_LOG" | sed 's/--//' | tr '\n' ' ' | sed 's/ $//')"
 	assert_equals '{"type":"standalone"}' "$(request 2 '.answers | tojson')"
