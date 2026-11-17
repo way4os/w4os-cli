@@ -72,4 +72,4 @@ jq -r '.data.attributes |
 	(.writes[] | "  \(.)"),
 	"",
 	(if .applied then "Report:   \(.report)" else "Nothing was written: add --apply to write it." end),
-	(.reminders[] | "- \(.)")' <<<"$reply"
+	(.reminders[] | "- \(if type == "object" then .detail else . end)")' <<<"$reply"

@@ -41,7 +41,7 @@ if [[ "${1:-}" == set ]]; then
 		die "$(jq -r 'if .detail then .detail else (.title // "the engine did not answer") end' <<<"$reply" 2>/dev/null || printf '%s' "$reply")"
 	jq -r '.data.attributes as $a
 		| "\($a.name): \(if ($a.roles | length) > 0 then ($a.roles | join(", ")) else "no role" end); owner \($a.ownerName // $a.owner // "nobody")",
-		(if (.meta.reminders // []) | length > 0 then "Then:", (.meta.reminders[] | "  \(.)") else empty end)' <<<"$reply"
+		(if (.meta.reminders // []) | length > 0 then "Then:", (.meta.reminders[] | "  \(if type == "object" then .detail else . end)") else empty end)' <<<"$reply"
 	exit 0
 fi
 

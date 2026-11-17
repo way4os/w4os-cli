@@ -158,6 +158,6 @@ setup_file_report() { # reply
 		(.writes[] | "  \(.)"),
 		"",
 		(if .applied then "Then:" else "Nothing was written: add --apply to write it, then:" end),
-		(.reminders[] | "  \(.)"),
-		((.notes // [])[] | "Note: \(.)")' <<<"$1"
+		(.reminders[] | "  \(if type == "object" then .detail else . end)"),
+		((.notes // [])[] | "Note: \(if type == "object" then .detail else . end)")' <<<"$1"
 }

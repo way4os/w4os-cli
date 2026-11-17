@@ -81,7 +81,7 @@ function test_needs_a_file_and_a_grid() {
 	assert_contains "opensim import --simulator FILE GRID" "$out"
 }
 
-FILES='{"data":{"type":"files","id":"demo","attributes":{"mode":"plan","applied":false,"grid":"demo","steps":[{"kind":"simulator","simulator":"North","slug":"demo.north","config":"/etc/opensim/grids/demo/sims/demo.north.ini","ports":{"http":9010,"console":null},"database":{"host":"localhost","name":"demo_north","user":"opensim"},"estate":{"name":"Ada Love Estate","owner":"Ada Love"},"region":{"name":"Big Garden","location":"1000,1000","size":512,"roles":["FallbackRegion"],"port":9011,"file":"/etc/opensim/grids/demo/sims/demo.north/regions/BigGarden.ini"}}],"writes":["/etc/opensim/grids/demo/sims/demo.north.ini","/etc/opensim/grids/demo/sims/demo.north/regions/BigGarden.ini"],"problems":{},"reminders":["opensim start demo.north"],"notes":["A plan reserves nothing."]}}}'
+FILES='{"data":{"type":"files","id":"demo","attributes":{"mode":"plan","applied":false,"grid":"demo","steps":[{"kind":"simulator","simulator":"North","slug":"demo.north","config":"/etc/opensim/grids/demo/sims/demo.north.ini","ports":{"http":9010,"console":null},"database":{"host":"localhost","name":"demo_north","user":"opensim"},"estate":{"name":"Ada Love Estate","owner":"Ada Love"},"region":{"name":"Big Garden","location":"1000,1000","size":512,"roles":["FallbackRegion"],"port":9011,"file":"/etc/opensim/grids/demo/sims/demo.north/regions/BigGarden.ini"}}],"writes":["/etc/opensim/grids/demo/sims/demo.north.ini","/etc/opensim/grids/demo/sims/demo.north/regions/BigGarden.ini"],"problems":{},"reminders":["opensim start demo.north"],"notes":[{"code":"plan-reserves-nothing","params":{},"detail":"A plan reserves nothing."}]}}}'
 
 function test_applies_a_setup_file_given_alone() {
 	engine_says "$FILES"
@@ -132,7 +132,7 @@ function test_makes_a_simulator_with_its_first_region_and_the_database_of_the_en
 	assert_same "plan" "$(jq -r '.data.attributes.mode' "$ENGINE_LOG")"
 }
 
-REGION='{"data":{"type":"regions","id":"aaaa","attributes":{"name":"Big Garden","roles":["FallbackRegion","Persistent"],"ownerName":"Bob Root"}},"meta":{"reminders":["Robust reads Region_Big_Garden when it starts: restart Robust (opensim restart demo)."]}}'
+REGION='{"data":{"type":"regions","id":"aaaa","attributes":{"name":"Big Garden","roles":["FallbackRegion","Persistent"],"ownerName":"Bob Root"}},"meta":{"reminders":[{"code":"robust-restart-roles","params":{"key":"Region_Big_Garden","restart":"opensim restart demo"},"detail":"Robust reads Region_Big_Garden when it starts: restart Robust (opensim restart demo)."}]}}'
 READ_ONLY='{"type":"about:blank","title":"Bad request","status":400,"detail":"the name of a region is the one of its file, changed there by its operator","code":"field-read-only"}'
 
 function test_sets_the_roles_and_the_owner_of_a_region_and_says_what_is_left_to_do() {
