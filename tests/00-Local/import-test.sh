@@ -99,7 +99,7 @@ function test_applies_with_the_name_and_the_core_given() {
 	assert_contains "Report:   /etc/opensim/grids/demo/sims/demo.redoutable.import-report.txt" "$out"
 }
 
-SETTINGS='{"data":{"type":"imports","id":"demo","attributes":{"kind":"grid-settings","mode":"plan","applied":false,"grid":"demo","source":"/opt/opensim/etc/grids/Old/OpenSim.ini","target":"/etc/opensim/grids/demo/OpenSim.ini","settings":{"Search":{"Module":"OpenSimSearch","SearchURL":"https://web.example.org/helpers/query.php?gk=http://grid.example.org:8002"},"Gloebit":{"GLBEnvironment":"production","GLBSecret":"***"}},"notes":["Economy/CurrencyServer: the money of DTL/NSL is not used any more"]}}}'
+SETTINGS='{"data":{"type":"imports","id":"demo","attributes":{"kind":"grid-settings","mode":"plan","applied":false,"grid":"demo","source":"/opt/opensim/etc/grids/Old/OpenSim.ini","target":"/etc/opensim/grids/demo/OpenSim.ini","settings":{"Search":{"Module":"OpenSimSearch"}},"files":{"/etc/opensim/grids/demo/OpenSim.ini":{"Const":{"WebURL":"https://web.example.org"},"Search":{"Module":"OpenSimSearch","SearchURL":"${Const|WebURL}/helpers/query.php"},"Gloebit":{"Include-Gloebit":"${Const|EtcDirectory}/Gloebit.ini"}},"/etc/opensim/grids/demo/Gloebit.ini":{"Gloebit":{"GLBEnvironment":"production","GLBSecret":"***"}}},"notes":["Economy/CurrencyServer: the money of DTL/NSL is not handled (old code, to install by hand), left out"]}}}'
 
 function test_plans_the_settings_of_a_grid_of_another_install_the_secrets_masked() {
 	engine_says "$SETTINGS"
@@ -109,10 +109,13 @@ function test_plans_the_settings_of_a_grid_of_another_install_the_secrets_masked
 	out=$("$OPENSIM" import --grid-settings "$WORK/OpenSim.ini" demo 2>&1)
 
 	assert_same '{"kind":"grid-settings","file":"'"$(realpath "$WORK/OpenSim.ini")"'","grid":"demo","mode":"plan"}' "$(jq -c '.data.attributes' "$ENGINE_LOG")"
-	assert_contains "Settings of the grid demo, from /opt/opensim/etc/grids/Old/OpenSim.ini, into /etc/opensim/grids/demo/OpenSim.ini" "$out"
-	assert_contains "  [Search] SearchURL = https://web.example.org/helpers/query.php?gk=http://grid.example.org:8002" "$out"
+	assert_contains "Settings of the grid demo, from /opt/opensim/etc/grids/Old/OpenSim.ini" "$out"
+	assert_contains "Into /etc/opensim/grids/demo/OpenSim.ini:" "$out"
+	assert_contains "  [Const] WebURL = https://web.example.org" "$out"
+	assert_contains "  [Search] SearchURL = \${Const|WebURL}/helpers/query.php" "$out"
+	assert_contains "Into /etc/opensim/grids/demo/Gloebit.ini:" "$out"
 	assert_contains "  [Gloebit] GLBSecret = ***" "$out"
-	assert_contains "- Economy/CurrencyServer: the money of DTL/NSL is not used any more" "$out"
+	assert_contains "- Economy/CurrencyServer: the money of DTL/NSL is not handled (old code, to install by hand), left out" "$out"
 	assert_contains "Nothing was written: add --apply to write it." "$out"
 }
 
@@ -124,7 +127,7 @@ function test_applies_the_settings_of_a_grid_and_says_what_lays_them_in_its_simu
 	out=$("$OPENSIM" import --grid-settings "$WORK/OpenSim.ini" demo --apply 2>&1)
 
 	assert_same "apply" "$(jq -r '.data.attributes.mode' "$ENGINE_LOG")"
-	assert_contains "Written to /etc/opensim/grids/demo/OpenSim.ini" "$out"
+	assert_contains "Written to /etc/opensim/grids/demo/Gloebit.ini, /etc/opensim/grids/demo/OpenSim.ini" "$out"
 	assert_contains "opensim api POST /grids/demo/options/repair mode=apply" "$out"
 }
 

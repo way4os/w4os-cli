@@ -68,11 +68,11 @@ if [[ -n "$settings" ]]; then
 		die "$(jq -r 'if .detail then .detail else (.title // "the engine did not answer") end' <<<"$reply" 2>/dev/null || printf '%s' "$reply")"
 	# The plan, or what was written: the values as the engine says them, a secret masked
 	jq -r '.data.attributes |
-		"Settings of the grid \(.grid), from \(.source), into \(.target)",
-		(if (.settings | length) == 0 then "Nothing to bring: the grid has them already." else (.settings | to_entries[] | .key as $section | .value | to_entries[] | "  [\($section)] \(.key) = \(.value)") end),
+		"Settings of the grid \(.grid), from \(.source)",
+		(if ((.files // {}) | length) == 0 then "Nothing to bring: the grid has them already." else ((.files // {}) | to_entries[] | "Into \(.key):", (.value | to_entries[] | .key as $section | .value | to_entries[] | "  [\($section)] \(.key) = \(.value)")) end),
 		(.notes[] | "- \(.)"),
 		"",
-		(if .applied then "Written to \(.target)", "Then the repair of the options lays them in its simulators (at the next upgrade of the packages, or now: opensim api POST /grids/\(.grid)/options/repair mode=apply)" elif (.settings | length) > 0 then "Nothing was written: add --apply to write it." else empty end)' <<<"$reply"
+		(if .applied then "Written to \((.files // {}) | keys | join(", "))", "Then the repair of the options lays them in its simulators (at the next upgrade of the packages, or now: opensim api POST /grids/\(.grid)/options/repair mode=apply)" elif ((.files // {}) | length) > 0 then "Nothing was written: add --apply to write it." else empty end)' <<<"$reply"
 	exit
 fi
 # A setup file: the one word given, without --simulator
