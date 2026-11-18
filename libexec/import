@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # opensim import: brings what another install has into this one, through the engine (POST /setups/imports). A simulator of an older
-# install joins a grid of this machine: planned, written with --apply only.
+# install joins a grid of this machine, or the settings of an older grid come into the OpenSim.ini of a grid of this machine: planned,
+# written with --apply only.
 
 USAGE="opensim import FILE [--apply]
-       opensim import --simulator FILE [--simulator FILE...] GRID [--name NAME] [--core DIR] [--apply]"
+       opensim import --simulator FILE [--simulator FILE...] GRID [--name NAME] [--core DIR] [--apply]
+       opensim import --grid-settings FILE GRID [--apply]"
 HELP="Applies a setup file (JSON or YAML: the simulators of a grid of this machine, their regions with name, location, size, roles) to the grid it names, or brings a simulator of another install (its OpenSim.ini, or its file of opensim.d, and the regions it names) into the grid GRID of this machine. Its database is kept as it is (the same one, nothing is copied), its regions are copied with their UUID and their place, its ports and its own settings are kept. Without --apply, says what would be written and where, and writes nothing.
   FILE              a setup file: its simulators are made, or given its regions when the grid has them
   --simulator FILE  the config of a simulator of another install; several, planned together and checked between them (ports,
@@ -11,11 +13,15 @@ HELP="Applies a setup file (JSON or YAML: the simulators of a grid of this machi
   --name NAME       its name in the grid, when it is not the one of its config (one simulator only)
   --core DIR        the core it runs with, when it is not the one of the grid (one simulator only)
   --no-scripts      do not copy the state of its scripts (every script starts again from the beginning)
+  --grid-settings FILE
+                    the OpenSim.ini of a grid of another install: the settings of its options (search, economy and Gloebit,
+                    offline messages, profiles, groups), with the files it includes, come into the OpenSim.ini of GRID, where
+                    the repair of the options finds them for its simulators; what GRID says already is kept, a secret is masked
   --apply           write it (disabled: stop the old one, then opensim enable and opensim start the new one)"
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 
-files=() grid= name= core= mode=plan scripts=true
+files=() grid= name= core= mode=plan scripts=true settings=
 while (($#)); do
 	case "$1" in
 	--simulator)
@@ -24,6 +30,12 @@ while (($#)); do
 		shift 2
 		;;
 	--simulator=*) files+=("${1#*=}"); shift ;;
+	--grid-settings)
+		(($# > 1)) || die "--grid-settings requires the OpenSim.ini of the other grid"
+		settings=$2
+		shift 2
+		;;
+	--grid-settings=*) settings=${1#*=}; shift ;;
 	--name)
 		(($# > 1)) || die "--name requires a name"
 		name=$2
@@ -46,6 +58,23 @@ while (($#)); do
 		;;
 	esac
 done
+# The settings of a grid of another install, into the OpenSim.ini of a grid of this machine
+if [[ -n "$settings" ]]; then
+	[[ -n "$grid" ]] && ((${#files[@]} == 0)) || die "usage: $USAGE"
+	[[ -r "$settings" ]] || die "cannot read $settings"
+	request=$(jq -cn --arg file "$(realpath "$settings")" --arg grid "$grid" --arg mode "$mode" '{data: {type: "imports", attributes: {kind: "grid-settings", file: $file, grid: $grid, mode: $mode}}}')
+	reply=$(engine POST /setups/imports --data=- <<<"$request") || true
+	jq -e '.data.attributes' <<<"$reply" >/dev/null 2>&1 ||
+		die "$(jq -r 'if .detail then .detail else (.title // "the engine did not answer") end' <<<"$reply" 2>/dev/null || printf '%s' "$reply")"
+	# The plan, or what was written: the values as the engine says them, a secret masked
+	jq -r '.data.attributes |
+		"Settings of the grid \(.grid), from \(.source), into \(.target)",
+		(if (.settings | length) == 0 then "Nothing to bring: the grid has them already." else (.settings | to_entries[] | .key as $section | .value | to_entries[] | "  [\($section)] \(.key) = \(.value)") end),
+		(.notes[] | "- \(.)"),
+		"",
+		(if .applied then "Written to \(.target)", "Then the repair of the options lays them in its simulators (at the next upgrade of the packages, or now: opensim api POST /grids/\(.grid)/options/repair mode=apply)" elif (.settings | length) > 0 then "Nothing was written: add --apply to write it." else empty end)' <<<"$reply"
+	exit
+fi
 # A setup file: the one word given, without --simulator
 if ((${#files[@]} == 0)); then
 	[[ -n "$grid" && -r "$grid" ]] || die "usage: $USAGE"

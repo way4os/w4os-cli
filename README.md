@@ -88,6 +88,13 @@ opensim import --simulator /opt/opensim/etc/opensim.d/redoutable.ini speculoos
 opensim import --simulator /opt/opensim/etc/opensim.d/redoutable.ini speculoos --apply
 ```
 
+`opensim import --grid-settings FILE GRID [--apply]` brings the settings of a grid of another install (its OpenSim.ini, with the files it includes, as OpenSimulator reads them) into the OpenSim.ini of the grid GRID of this machine: the ones of its options (search and data services, economy and Gloebit, offline messages, profiles, groups), what GRID says already being kept, a folder of a simulator and the money of DTL/NSL left out. The plan masks the secrets (keys, passwords, connection strings). The repair of the options then lays them in the simulators of the grid, at the next upgrade of the packages or with `opensim api POST /grids/GRID/options/repair mode=apply`: nobody edits a file.
+
+```bash
+opensim import --grid-settings /opt/opensim/etc/grids/Speculoos/OpenSim.ini speculoos
+opensim import --grid-settings /opt/opensim/etc/grids/Speculoos/OpenSim.ini speculoos --apply
+```
+
 `opensim import FILE [--apply]` applies a setup file (JSON or YAML, the format of the setup files) to the grid of this machine it names: its simulators are made with their regions, or given its regions when the grid has them. `opensim region add GRID SIMULATOR --name NAME [--location X,Y] [--size METERS] [--roles ROLE,...] [--port PORT] [--apply]` gives one region to a simulator, `opensim simulator add GRID NAME --region NAME [--size METERS] [--roles ...] [--http-port PORT] [--owner 'First Last'] [--apply]` makes a simulator with its first region (its database from `OPENSIM_DB_HOST`, `OPENSIM_DB_USER`, `OPENSIM_DB_PASS`, made when missing). What is not given is proposed by the engine (ports, the nearest free place); without `--apply` they say what would be written and where; nothing is started.
 
 ```bash

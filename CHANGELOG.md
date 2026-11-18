@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- feature (import): `opensim import --grid-settings FILE GRID [--apply]` brings the settings of the options of a grid of another install (its OpenSim.ini and its includes: search, economy and Gloebit, offline messages, profiles, groups) into the OpenSim.ini of a grid of this machine, a secret masked in the plan, for the repair of the options to lay them in its simulators; the CLI needs the engine of 3.0.0~beta.13 with `kind` `grid-settings` (77889ae) and later
 - feature (api): `opensim api-key create LABEL | list | revoke LABEL|ID`, the keys of the engine API made, listed (labels and dates, never the keys) and revoked by the user of the instances; a key is shown once
 - feature (import): the plan says the backup of the source it makes first and where the state of the scripts goes; `--no-scripts` leaves the scripts out; `opensim backup --simulator FILE [GRID]` makes that backup of a simulator of another install alone (its databases, its config, its includes, its regions); the CLI needs the engine of 3.0.0~beta.13.493 and later
 - feature (web): `opensim web GRID api caddy|nginx|apache [--socket PATH] [--port N] [--web-group GROUP]` prints what serves the engine API to the sites of this machine as the user of the instances: a PHP-FPM pool of its own and a listener on 127.0.0.1 for the paths of the API only (the site then uses engine remote with a key); the CLI needs the engine of 3.0.0~beta.13.486 and later

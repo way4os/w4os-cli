@@ -99,6 +99,43 @@ function test_applies_with_the_name_and_the_core_given() {
 	assert_contains "Report:   /etc/opensim/grids/demo/sims/demo.redoutable.import-report.txt" "$out"
 }
 
+SETTINGS='{"data":{"type":"imports","id":"demo","attributes":{"kind":"grid-settings","mode":"plan","applied":false,"grid":"demo","source":"/opt/opensim/etc/grids/Old/OpenSim.ini","target":"/etc/opensim/grids/demo/OpenSim.ini","settings":{"Search":{"Module":"OpenSimSearch","SearchURL":"https://web.example.org/helpers/query.php?gk=http://grid.example.org:8002"},"Gloebit":{"GLBEnvironment":"production","GLBSecret":"***"}},"notes":["Economy/CurrencyServer: the money of DTL/NSL is not used any more"]}}}'
+
+function test_plans_the_settings_of_a_grid_of_another_install_the_secrets_masked() {
+	engine_says "$SETTINGS"
+	printf '[Search]\nModule = OpenSimSearch\n' >"$WORK/OpenSim.ini"
+
+	local out
+	out=$("$OPENSIM" import --grid-settings "$WORK/OpenSim.ini" demo 2>&1)
+
+	assert_same '{"kind":"grid-settings","file":"'"$(realpath "$WORK/OpenSim.ini")"'","grid":"demo","mode":"plan"}' "$(jq -c '.data.attributes' "$ENGINE_LOG")"
+	assert_contains "Settings of the grid demo, from /opt/opensim/etc/grids/Old/OpenSim.ini, into /etc/opensim/grids/demo/OpenSim.ini" "$out"
+	assert_contains "  [Search] SearchURL = https://web.example.org/helpers/query.php?gk=http://grid.example.org:8002" "$out"
+	assert_contains "  [Gloebit] GLBSecret = ***" "$out"
+	assert_contains "- Economy/CurrencyServer: the money of DTL/NSL is not used any more" "$out"
+	assert_contains "Nothing was written: add --apply to write it." "$out"
+}
+
+function test_applies_the_settings_of_a_grid_and_says_what_lays_them_in_its_simulators() {
+	engine_says "${SETTINGS/\"applied\":false/\"applied\":true}"
+	printf '[Search]\nModule = OpenSimSearch\n' >"$WORK/OpenSim.ini"
+
+	local out
+	out=$("$OPENSIM" import --grid-settings "$WORK/OpenSim.ini" demo --apply 2>&1)
+
+	assert_same "apply" "$(jq -r '.data.attributes.mode' "$ENGINE_LOG")"
+	assert_contains "Written to /etc/opensim/grids/demo/OpenSim.ini" "$out"
+	assert_contains "opensim api POST /grids/demo/options/repair mode=apply" "$out"
+}
+
+function test_the_settings_of_a_grid_need_a_file_and_a_grid() {
+	local out status=0
+	out=$("$OPENSIM" import --grid-settings "$WORK/none.ini" demo 2>&1) || status=$?
+
+	assert_not_same "0" "$status"
+	assert_contains "cannot read" "$out"
+}
+
 function test_says_why_the_engine_refuses() {
 	engine_says "$REFUSED"
 
