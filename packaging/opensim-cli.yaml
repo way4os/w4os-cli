@@ -38,13 +38,11 @@ depends:
     - podman-compose
     - sudo
 
-# The tools of the kit before the CLI had a package of its own: the same command, the same services. They are replaced (their files
-# are this package's now), they cannot be installed with it, and what depends on them is satisfied by it
+# opensim-tools, the approach before this one: the same command, the same services, never both. A server that has it keeps it, with
+# the packages of its generation; a newer one asks for this package, which removes it
 conflicts:
     - opensim-tools
 replaces:
-    - opensim-tools
-provides:
     - opensim-tools
 
 recommends:
