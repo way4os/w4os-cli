@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- fix (packaging): opensim-cli takes the place of the tools of the kit as Debian renames a package: it conflicts with opensim-tools, replaces it (the same command, the same services) and provides it, so that what depends on opensim-tools is satisfied by it and both are never installed
 - update (import): `--grid-settings` shows every file it lays, the OpenSim.ini of the grid and its Gloebit.ini (the one place of the settings of Gloebit), the constants kept as references; the CLI needs the engine with the `files` of the plan (bfe73e3) and later
 - feature (import): `opensim import --grid-settings FILE GRID [--apply]` brings the settings of the options of a grid of another install (its OpenSim.ini and its includes: search, economy and Gloebit, offline messages, profiles, groups) into the OpenSim.ini of a grid of this machine, a secret masked in the plan, for the repair of the options to lay them in its simulators; the CLI needs the engine of 3.0.0~beta.13 with `kind` `grid-settings` (77889ae) and later
 - feature (api): `opensim api-key create LABEL | list | revoke LABEL|ID`, the keys of the engine API made, listed (labels and dates, never the keys) and revoked by the user of the instances; a key is shown once
