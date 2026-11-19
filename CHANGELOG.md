@@ -2,27 +2,27 @@
 
 ### Unreleased
 
-- feature (settings): `opensim settings GRID [PAGE] [--set NAME=VALUE]`, the settings pages of a grid from the engine
-- feature (posts): `opensim posts GRID` and `opensim posts delete GRID ID`, the posts of the avatars of a grid
-- fix (packaging): opensim-cli conflicts with opensim-tools, the approach before it (the same command, the same services): the two are never installed together, a newer package asks for opensim-cli, which removes opensim-tools
-- update (import): `--grid-settings` shows every file it lays, the OpenSim.ini of the grid and its Gloebit.ini (the one place of the settings of Gloebit), the constants kept as references; the CLI needs the engine with the `files` of the plan (bfe73e3) and later
-- feature (import): `opensim import --grid-settings FILE GRID [--apply]` brings the settings of the options of a grid of another install (its OpenSim.ini and its includes: search, economy and Gloebit, offline messages, profiles, groups) into the OpenSim.ini of a grid of this machine, a secret masked in the plan, for the repair of the options to lay them in its simulators; the CLI needs the engine of 3.0.0~beta.13 with `kind` `grid-settings` (77889ae) and later
-- feature (api): `opensim api-key create LABEL | list | revoke LABEL|ID`, the keys of the engine API made, listed (labels and dates, never the keys) and revoked by the user of the instances; a key is shown once
-- feature (import): the plan says the backup of the source it makes first and where the state of the scripts goes; `--no-scripts` leaves the scripts out; `opensim backup --simulator FILE [GRID]` makes that backup of a simulator of another install alone (its databases, its config, its includes, its regions); the CLI needs the engine of 3.0.0~beta.13.493 and later
-- feature (web): `opensim web GRID api caddy|nginx|apache [--socket PATH] [--port N] [--web-group GROUP]` prints what serves the engine API to the sites of this machine as the user of the instances: a PHP-FPM pool of its own and a listener on 127.0.0.1 for the paths of the API only (the site then uses engine remote with a key); the CLI needs the engine of 3.0.0~beta.13.486 and later
-- update (import): a folder of the old install the new simulator replaces is shown with the folder it has instead
-- feature (import): `opensim import --simulator FILE --simulator FILE... GRID` plans several simulators into one grid together, checked between them (ports, region names and UUIDs, places), written in their order, refused when something is wrong between them; the plan says the settings of the original that are not kept, counted by why, and lists the ones the new config writes its own way; the CLI needs the engine of 3.0.0~beta.13.482 and later
-- feature (backup): `opensim restore FILE|ARCHIVE [--apply]` puts a backup back on this machine through the engine (`POST /setups/restores`): planned by default, written with --apply, the databases first, nothing this machine has replaced
-- update (setup, regions, import): the reminders and the notes the engine gives as notices (code, params, detail) are shown by their detail, the older strings as they are
-- feature (setup): `opensim simulator add --estate NAME`, the estate its regions join (made when none has that name); by default the estate of --owner; the plan says the estate of a new simulator
-- fix (rest): `opensim rest --url ... --user ...` keeps OPENSIM_REST_PASSWORD when it runs as the system user; `opensim rest INSTANCE -- COMMAND` sends a command to the remote console of an instance, at the address and with the account of its config, its secrets masked
-- feature (setup): `opensim simulator add --db-admin USER` (or OPENSIM_DB_ADMIN_USER) makes the database with an administrator of the database server, its password from OPENSIM_DB_ADMIN_PASS or asked, never on the command line; the plan of a setup file says its notes (a plan reserves nothing); the CLI needs the engine of 3.0.0~beta.13.478 and later
-- feature (regions): `opensim region set GRID REGION [--roles ROLE,...] [--owner UUID]` gives a region these roles and only them, or another owner (the owner of its estate), through the engine, and says what is left to do (restart Robust)
-- feature (setup): `opensim import FILE [--apply]` applies a setup file to a grid of this machine, `opensim region add GRID SIMULATOR --name NAME [...]` gives a region to a simulator (`--size`, `--roles`, `--location`, `--port`), `opensim simulator add GRID NAME --region NAME [...]` makes a simulator with its first region, all through the engine (`POST /setups/files`): planned, written with --apply, nothing started
-- update (setup): the bottom of a form in dialog says that Enter goes to the next field and Tab reaches the buttons
-- fix (setup): a screen of the engine without a text (the form of a simulator joining a grid) can be answered in dialog: dialog refuses an empty text above a form, a checklist or a menu at once (status 255, taken as Quit), a space is given instead
-- feature (import): `opensim import --simulator FILE GRID [--name NAME] [--core DIR] [--apply]`, a simulator of another install joins a grid of this machine through the engine (`POST /setups/imports`): planned, written with --apply only
-- feature (web): `opensim web <grid> set helpers|search|profile|guide|welcome|status|directory URL` sets the one setting of a page (and says when Robust must restart); `web show` lists each page with who serves it, the helpers under their base or the site (engine SitePages)
+- feature (settings): `opensim settings GRID [PAGE] [--set NAME=VALUE]` shows and sets the settings pages of a grid
+- feature (posts): `opensim posts GRID` and `opensim posts delete GRID ID` list and delete the posts of a grid
+- fix (packaging): opensim-cli now conflicts with and replaces opensim-tools
+- update (import): `--grid-settings` shows every file it lays, including OpenSim.ini and Gloebit.ini
+- feature (import): `opensim import --grid-settings FILE GRID [--apply]` imports the option settings of another install's grid
+- feature (api): `opensim api-key create LABEL | list | revoke LABEL|ID` manages the engine API keys
+- feature (import): the plan shows the source backup and script state; `--no-scripts` skips scripts; `opensim backup --simulator FILE [GRID]` added
+- feature (web): `opensim web GRID api caddy|nginx|apache` prints the config serving the engine API to local sites
+- update (import): a replaced folder of the old install is shown with the folder that replaces it
+- feature (import): `opensim import --simulator FILE --simulator FILE... GRID` plans several simulators into one grid, checked together
+- feature (backup): `opensim restore FILE|ARCHIVE [--apply]` restores a backup through the engine, planned by default
+- update (setup, regions, import): engine notices are shown by their detail
+- feature (setup): `opensim simulator add --estate NAME` sets the estate a simulator's regions join
+- fix (rest): `opensim rest` keeps `OPENSIM_REST_PASSWORD` as the system user; `opensim rest INSTANCE -- COMMAND` sends a console command
+- feature (setup): `opensim simulator add --db-admin USER` creates the database with a database administrator account
+- feature (regions): `opensim region set GRID REGION [--roles ROLE,...] [--owner UUID]` sets a region's roles and owner
+- feature (setup): `opensim import FILE`, `opensim region add` and `opensim simulator add` apply setup files and add regions and simulators
+- update (setup): the form footer says Enter goes to the next field and Tab reaches the buttons
+- fix (setup): dialog no longer fails on an engine screen without a text
+- feature (import): `opensim import --simulator FILE GRID [--name NAME] [--core DIR] [--apply]` imports a simulator from another install
+- feature (web): `opensim web <grid> set helpers|search|profile|guide|welcome|status|directory URL` sets a page setting; `web show` lists page servers
 - fix: duplicate build-tools package in require and require-dev
 
 ### 3.0.0-beta.4
