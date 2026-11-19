@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # A stand-in for opensim-api that replays canned replies: the n-th call gets the n-th file of $ENGINE_REPLIES (1.json, 2.json...), and the
-# requests it gets are logged, one JSON document a line, in $ENGINE_LOG.
+# requests it gets are logged, one JSON document a line, in $ENGINE_LOG; its arguments, one call a line, in $ENGINE_CALLS when it is set.
 dir=${ENGINE_REPLIES:?}
+[[ -n "${ENGINE_CALLS:-}" ]] && printf '%s\n' "$*" >>"$ENGINE_CALLS"
 n=$(($(cat "$dir/.count" 2>/dev/null || echo 0) + 1))
 echo "$n" >"$dir/.count"
 jq -c . >>"${ENGINE_LOG:?}"

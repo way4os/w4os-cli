@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# opensim settings: the settings pages of a grid (the models, the economy, the search...), read and changed through the engine.
+
+USAGE="opensim settings GRID [PAGE] [--set NAME=VALUE...]"
+HELP="Without PAGE, lists the pages of settings of the grid GRID. With PAGE, shows its settings: a secret as ********, a database by its parts (searchDatabase.host...), what the options of the grid set marked as such. --set NAME=VALUE changes one (NAME.PART=VALUE for a part of a database, a list as VALUE,VALUE); what the options set is changed with opensim enable and disable."
+
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+words=() sets=()
+while (($#)); do
+	case "$1" in
+	--set)
+		(($# > 1)) || die "--set requires NAME=VALUE"
+		sets+=("$2")
+		shift 2
+		;;
+	--set=*) sets+=("${1#*=}"); shift ;;
+	-*) die "unknown option $1 (usage: $USAGE)" ;;
+	*) words+=("$1"); shift ;;
+	esac
+done
+((${#words[@]} >= 1 && ${#words[@]} <= 2)) || die "usage: $USAGE"
+grid=${words[0]} page=${words[1]-}
+((${#sets[@]} == 0)) || [[ -n "$page" ]] || die "--set needs a PAGE (usage: $USAGE)"
+for set in "${sets[@]}"; do
+	[[ "$set" == *=* && "${set%%=*}" != "" ]] || die "--set takes NAME=VALUE, not $set"
+done
+
+# What the engine refused, else nothing
+refused() {
+	jq -er 'select(.status? >= 400 or (.code? and (.data? | not))) | .detail // .title' <<<"$1" 2>/dev/null
+}
+
+# The settings of an answer, a line each; a database by its parts; what the options set marked (the names of $2)
+show() {
+	jq -r --argjson fixed "${2:-[]}" '.data.attributes | to_entries[]
+		| .key as $name
+		| if (.value | type) == "object" then (.value | to_entries[] | select(.key != "options") | "\($name).\(.key) = \(.value // "(not set)")")
+		  elif (.value | type) == "array" then "\($name) = \(if (.value | length) > 0 then (.value | join(", ")) else "(none)" end)"
+		  else "\($name) = \(.value // "(not set)")\(if ($fixed | index($name)) then " (set by the options of the grid)" else "" end)" end' <<<"$1"
+}
+
+path_of() { printf '/grids/%s/settings/%s' "$(jq -rn --arg v "$1" '$v | @uri')" "$(jq -rn --arg v "$2" '$v | @uri')"; }
+
+if ((${#sets[@]} > 0)); then
+	attributes=$(printf '%s\n' "${sets[@]}" | jq -Rn '[inputs | capture("^(?<name>[^=]+)=(?<value>.*)$")]
+		| reduce .[] as $set ({}; setpath($set.name | split("."); $set.value))')
+	reply=$(jq -cn --arg page "$page" --argjson attributes "$attributes" '{data: {type: "settings", id: $page, attributes: $attributes}}' |
+		engine PATCH "$(path_of "$grid" "$page")" --data=-) || true
+	why=$(refused "$reply") && die "$why"
+	jq -e '.data.attributes' <<<"$reply" >/dev/null 2>&1 || die "the engine did not answer"
+	show "$reply"
+	exit 0
+fi
+
+contract=$(engine GET /openapi.json </dev/null) || die "the engine did not answer"
+if [[ -z "$page" ]]; then
+	jq -r '.paths | keys[] | select(startswith("/grids/{grid}/settings/")) | ltrimstr("/grids/{grid}/settings/")' <<<"$contract"
+	exit 0
+fi
+fixed=$(jq -c --arg path "/grids/{grid}/settings/$page" '[.paths[$path].get["x-form"].fields[]? | select(.readOnly) | .name]' <<<"$contract")
+reply=$(engine GET "$(path_of "$grid" "$page")" </dev/null) || true
+why=$(refused "$reply") && die "$why"
+jq -e '.data.attributes' <<<"$reply" >/dev/null 2>&1 || die "the engine did not answer"
+show "$reply" "$fixed"

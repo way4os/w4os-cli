@@ -108,6 +108,8 @@ opensim simulator add speculoos north --region "North Shore" --owner "Gudule Lap
 - [x] web [grid] snippet <caddy|nginx|apache>
 - [x] next <grid> location [X,Y] [COUNT] [-e X,Y]
 - [x] ban [grid] <name|uuid>... [--output DIR]
+- [x] settings GRID [PAGE] [--set NAME=VALUE...]: the settings pages of a grid (models, economy, search, guide, offline, assets), a secret masked, a database by its parts (`--set searchDatabase.host=...`)
+- [x] posts GRID [--author UUID] [--search WORDS] [--page N], posts delete GRID ID: the posts of the avatars of a grid (Flux)
 
 #### Archives and backups
 

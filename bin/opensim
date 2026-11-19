@@ -5,7 +5,7 @@ set -e
 here=$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")
 libexec=$(cd "$here/../libexec" && pwd)
 
-COMMANDOPTS=setup,import,region,simulator,status,ports,start,stop,restart,console,screen,enable,disable,web,next,ban,save,load,backup,restore,api-key,rest,install-dotnet
+COMMANDOPTS=setup,import,region,simulator,settings,posts,status,ports,start,stop,restart,console,screen,enable,disable,web,next,ban,save,load,backup,restore,api-key,rest,install-dotnet
 HELP=$(
 	cat <<USAGE
 
@@ -21,6 +21,8 @@ HELP=$(
   import          apply a setup file, or bring a simulator of another install into a grid (planned, --apply writes)
   region add      give a region to a simulator of a grid (planned, --apply writes)
   simulator add   make a simulator in a grid with its first region (planned, --apply writes)
+  settings        read or change the settings pages of a grid (economy, search, guide...)
+  posts           list or delete the posts of the avatars of a grid
   next            find free ports or region locations
   ban             prepare user cleanup and estate ban files
   save|load       save or restore IAR and OAR archives

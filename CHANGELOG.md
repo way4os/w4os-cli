@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+- feature (settings): `opensim settings GRID [PAGE] [--set NAME=VALUE]`, the settings pages of a grid from the engine
+- feature (posts): `opensim posts GRID` and `opensim posts delete GRID ID`, the posts of the avatars of a grid
 - fix (packaging): opensim-cli conflicts with opensim-tools, the approach before it (the same command, the same services): the two are never installed together, a newer package asks for opensim-cli, which removes opensim-tools
 - update (import): `--grid-settings` shows every file it lays, the OpenSim.ini of the grid and its Gloebit.ini (the one place of the settings of Gloebit), the constants kept as references; the CLI needs the engine with the `files` of the plan (bfe73e3) and later
 - feature (import): `opensim import --grid-settings FILE GRID [--apply]` brings the settings of the options of a grid of another install (its OpenSim.ini and its includes: search, economy and Gloebit, offline messages, profiles, groups) into the OpenSim.ini of a grid of this machine, a secret masked in the plan, for the repair of the options to lay them in its simulators; the CLI needs the engine of 3.0.0~beta.13 with `kind` `grid-settings` (77889ae) and later

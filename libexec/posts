@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# opensim posts: the posts of the avatars of a grid (Flux), listed and deleted through the engine.
+
+USAGE="opensim posts GRID [--author UUID] [--search WORDS] [--page N]
+       opensim posts delete GRID ID"
+HELP="Lists the posts of every avatar of the grid GRID, the newest first: their date, their author, their text and their id; --author keeps the ones of an avatar, --search the ones with these words (in the text or the name of the author), 50 a page. delete deletes the post ID."
+
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+# What the engine refused, else nothing
+refused() {
+	jq -er 'select(.status? >= 400 or (.code? and (.data? | not))) | .detail // .title' <<<"$1" 2>/dev/null
+}
+uri() { jq -rn --arg v "$1" '$v | @uri'; }
+
+if [[ "${1:-}" == delete ]]; then
+	(($# == 3)) || die "usage: $USAGE"
+	reply=$(engine DELETE "/grids/$(uri "$2")/posts/$(uri "$3")" </dev/null) || true
+	why=$(refused "$reply") && die "$why"
+	say "post $3 deleted"
+	exit 0
+fi
+
+words=() query=()
+while (($#)); do
+	case "$1" in
+	--author | --search | --page)
+		(($# > 1)) || die "$1 requires a value"
+		case "$1" in
+		--author) query+=("filter[author]=$2") ;;
+		--search) query+=("search=$2") ;;
+		--page) query+=("page[number]=$2" "page[size]=50") ;;
+		esac
+		shift 2
+		;;
+	-*) die "unknown option $1 (usage: $USAGE)" ;;
+	*) words+=("$1"); shift ;;
+	esac
+done
+((${#words[@]} == 1)) || die "usage: $USAGE"
+reply=$(engine GET "/grids/$(uri "${words[0]}")/posts" "${query[@]}" </dev/null) || true
+why=$(refused "$reply") && die "$why"
+jq -e '.data' <<<"$reply" >/dev/null 2>&1 || die "the engine did not answer"
+jq -r '(.data[] | "\(.attributes.created | strftime("%Y-%m-%d %H:%M"))  \(.attributes.name): \(.attributes.content)  [\(.id)]"),
+	"\(.meta.total) post\(if .meta.total == 1 then "" else "s" end)"' <<<"$reply"
