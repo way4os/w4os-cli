@@ -12,7 +12,8 @@ REFUSED='{"type":"about:blank","title":"Bad request","status":400,"detail":"the 
 function set_up() {
 	WORK="$(mktemp -d)"
 	export HOME="$WORK" OPENSIM_SYSTEM_USER=
-	unset OPENSIM_CONF OPENSIM_RC OPENSIM_DB_ADMIN_USER OPENSIM_DB_ADMIN_PASS
+	# What the caller's environment says of the databases is not the test's
+	unset OPENSIM_CONF OPENSIM_RC OPENSIM_DB_ADMIN_USER OPENSIM_DB_ADMIN_PASS OPENSIM_DB_HOST OPENSIM_DB_PORT OPENSIM_DB_NAME OPENSIM_DB_USER OPENSIM_DB_PASS
 	mkdir -p "$WORK/etc"
 	cat >"$WORK/.opensim.conf" <<-INI
 		[Defaults]

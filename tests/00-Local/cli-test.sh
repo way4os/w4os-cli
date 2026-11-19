@@ -170,8 +170,12 @@ function test_web_show_says_who_serves_each_page() {
 	make_test_grid
 	"$OPENSIM" web tender_tern set helpers https://site.example.org/helpers >/dev/null
 	"$OPENSIM" web tender_tern set search https://site.example.org/search >/dev/null
-	assert_exec "'$OPENSIM' web tender_tern show" --stdout-contains 'site (config)'
-	assert_exec "'$OPENSIM' web tender_tern show" --stdout-contains 'https://site.example.org/helpers/guide'
+	local out
+	out=$("$OPENSIM" web tender_tern show)
+	assert_contains 'site (config)' "$out"
+	# A page the grid does not set has no address, not one guessed under the helpers
+	assert_same 1 "$(grep -cE '^  guide +\(none\)' <<<"$out")"
+	assert_not_contains 'https://site.example.org/helpers/guide' "$out"
 }
 
 function test_ban_reports_missing_grid() {
