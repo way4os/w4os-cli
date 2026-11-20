@@ -10,12 +10,16 @@
 #     ./kickstart.sh --remote root@server --setup
 #     ./kickstart.sh --podman
 #
-#   Or with the packages only:  sudo apt install opensim opensim-cli opensim-helpers && opensim setup
+#   Or with the packages only:  sudo apt install opensim-kit && opensim setup
 #
 # From a clone it runs the tools of the clone; its PHP libraries come from Composer.
 #
 # Setup is not started unless requested with --setup or RUN_SETUP=yes.
 # Options:  -y, --yes             do not ask before installing
+#           --testing             the test builds (charm-tests), on top of the releases
+#           --unstable-core       also the development version of OpenSimulator (opensim-unstable)
+#           --tools               only the command line and the engine, light (no core, no database, no website): to work on
+#                                 a grid installed otherwise (opensim import --accounts FILE --robust ROBUST_INI)
 #           --cleanup             remove an existing OpenSim installation first (asks for confirmation)
 #           --setup               run `opensim setup` after the full or OpenSim install
 #           --dependencies        install quick-install's own dependencies
@@ -31,7 +35,8 @@
 # Environment: APT_SOURCE_DIR=folder         install local packages (*.deb) from a folder
 #             APT_SOURCE=...                  complete primary APT source line (default: charm stable)
 #             APT_SOURCE_TESTS=...            optional additional APT source line
-#             OPENSIM_KIT_APT_DIST=...         legacy distribution override
+#             OPENSIM_KIT_APT_DIST=...         legacy distribution override (charm-tests: as --testing)
+#             UNSTABLE_CORE=yes                as --unstable-core
 #             OPENSIM_KIT_APT_COMPONENT=...    legacy component override
 #             OPENSIM_CONTAINER_IMAGE=IMAGE    default image for --podman (Ubuntu 26.04)
 
@@ -113,6 +118,9 @@ unset APT_SOURCE_DIR_WAS_SET APT_SOURCE_DIR_FROM_ENV
 MAGIIIC_KEY=https://apt.magiiic.com/magiiic-packaging.asc
 APT_SOURCE_FILE=${APT_SOURCE_FILE:-/etc/apt/sources.list.d/magiiic.list}
 OPENSIM_KIT_APT_DIST=${OPENSIM_KIT_APT_DIST:-charm}
+UNSTABLE_CORE=${UNSTABLE_CORE:-}
+# The sources and the packages, from the distribution and the options (run again once the options are read: --testing)
+plan_packages() {
 if [[ -z "${OPENSIM_KIT_APT_COMPONENT:-}" ]]; then
 	if [[ "$OPENSIM_KIT_APT_DIST" == charm-tests ]]; then
 		OPENSIM_KIT_APT_COMPONENT=dev
@@ -130,8 +138,7 @@ else
 		APT_REPOSITORIES+=("deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable unstable")
 		APT_REPOSITORIES+=("deb [trusted=yes] https://apt.magiiic.com charm-tests $OPENSIM_KIT_APT_COMPONENT")
 	else
-		APT_SOURCE="deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com $OPENSIM_KIT_APT_DIST $OPENSIM_KIT_APT_COMPONENT"
-		APT_REPOSITORIES+=("$APT_SOURCE")
+		APT_REPOSITORIES+=("deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com $OPENSIM_KIT_APT_DIST $OPENSIM_KIT_APT_COMPONENT")
 	fi
 fi
 for repository in "${APT_REPOSITORIES[@]}"; do
@@ -141,20 +148,23 @@ for repository in "${APT_REPOSITORIES[@]}"; do
 		exit 1
 	fi
 done
-# What the tools need on a machine that does not have the packages (a clone): the same as the package opensim-tools
+# What the tools need on a machine that does not have the packages (a clone): the dependencies of the package opensim-cli
 PHP_PACKAGES=(php-cli php-curl php-intl php-mbstring php-mysql php-xml)
+# opensim-kit: the command line, the engine, the website of a grid (w4os-site, with the helpers), the latest core and its essential
+# modules, a database server
 OPENSIM_PACKAGES=(
-	opensim-cli opensim-helpers
-	opensim-0.9.3.0 opensim-0.9.3.0-gloebit opensim-0.9.3.0-opensimsearch
+	opensim-kit
 	libsqlite3-0 mariadb-server
 	php-cli php-curl php-intl php-mbstring php-mysql php-xml
 	composer git unzip screen
 	openssh-server
 	libgdiplus
 )
-if [[ "$OPENSIM_KIT_APT_DIST" == charm-tests ]]; then
+if [[ "$UNSTABLE_CORE" == yes ]]; then
 	OPENSIM_PACKAGES+=(opensim-unstable)
 fi
+}
+plan_packages
 
 APT_SOURCE_DIR=${APT_SOURCE_DIR:-}
 ASSUME_YES=${ASSUME_YES:-}
@@ -1063,6 +1073,14 @@ phase_opensim() {
 	end_installation
 }
 
+# The command line and the engine alone, without what they recommend: no core, no database server, no website
+phase_tools() {
+	configure_package_sources || return $?
+	install_packages --no-install-recommends opensim-cli || die "could not install the tools"
+	say "Ready: the opensim command and the engine."
+	say "The accounts of a list into a grid installed otherwise: opensim import --accounts FILE --robust /path/to/Robust.HG.ini"
+}
+
 # === Actual business logic starts here ===
 
 # Tests source this file to exercise the pure APT helpers without installing
@@ -1129,6 +1147,21 @@ while (($#)); do
 		ASSUME_YES=yes
 		PODMAN_INSTALL_ARGS+=("$argument")
 		;;
+	--testing)
+		OPENSIM_KIT_APT_DIST=charm-tests
+		OPENSIM_KIT_APT_COMPONENT=
+		PODMAN_INSTALL_ARGS+=("$argument")
+		;;
+	--unstable-core)
+		UNSTABLE_CORE=yes
+		PODMAN_INSTALL_ARGS+=("$argument")
+		;;
+	--tools)
+		[[ "$PHASE_SELECTED" == no ]] || die "choose only one installation phase"
+		PHASE_SELECTED=yes
+		INSTALL_PHASE=tools
+		PODMAN_INSTALL_ARGS+=("$argument")
+		;;
 	--cleanup)
 		RUN_CLEANUP=yes
 		PODMAN_INSTALL_ARGS+=("$argument")
@@ -1191,10 +1224,12 @@ while (($#)); do
 	esac
 done
 case "$INSTALL_PHASE" in
-all | dependencies | mariadb | mysql | dotnet | opensim) ;;
+all | dependencies | mariadb | mysql | dotnet | opensim | tools) ;;
 *) die "invalid installation phase $INSTALL_PHASE" ;;
 esac
 [[ "$INSTALL_PHASE" == all || "$INSTALL_PHASE" == opensim ]] || [[ -z "$RUN_SETUP" ]] || die "--setup is only valid for the full install or --opensim"
+# The sources and the packages again, with the options read (--testing, --unstable-core)
+plan_packages
 [[ "$PODMAN_CONNECTION_SELECTED" == no || "$PODMAN_MODE" == yes ]] || die "--connection requires --podman"
 [[ "$PODMAN_IMAGE_SELECTED" == no || "$PODMAN_MODE" == yes ]] || die "--image requires --podman"
 
@@ -1238,4 +1273,5 @@ dependencies) phase_dependencies || die "quick-install dependencies failed" ;;
 mariadb | mysql) phase_database || die "database phase failed" ;;
 dotnet) phase_dotnet || die ".NET phase failed" ;;
 opensim) phase_opensim ;;
+tools) phase_tools ;;
 esac

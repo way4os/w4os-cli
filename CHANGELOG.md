@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- feature (kickstart): `--testing` (the test builds, no development core unless `--unstable-core`), `--tools` (the command line and the engine alone, light); the full install is opensim-kit, with the website of a grid
 - change (packaging): dialog and podman-compose are recommended, not required: a light install of the tools (--no-install-recommends)
 - feature (import): `opensim import --accounts FILE --robust ROBUST_INI` makes the accounts in a grid this install does not manage, as the caller
 - feature (import): `opensim import --robust FILE [--simulator FILE...]` migrates the grid of another install, planned, applied disabled, then `--switch` once the old Robust is stopped

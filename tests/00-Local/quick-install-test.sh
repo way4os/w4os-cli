@@ -176,6 +176,31 @@ function test_default_apt_repository_is_charm_stable() {
 	assert_equals 'deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable' "${APT_REPOSITORIES[0]}"
 }
 
+function test_testing_adds_the_test_builds_on_top_of_the_releases_and_no_development_core() {
+	local APT_SOURCE= APT_SOURCE_TESTS=
+	QUICK_INSTALL_LIBRARY_LOADED=no
+	quick_install_load_library || return
+	OPENSIM_KIT_APT_DIST=charm-tests OPENSIM_KIT_APT_COMPONENT= UNSTABLE_CORE=
+	plan_packages
+	assert_equals 'deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable unstable' "${APT_REPOSITORIES[0]}"
+	assert_equals 'deb [trusted=yes] https://apt.magiiic.com charm-tests dev' "${APT_REPOSITORIES[1]}"
+	assert_not_contains 'opensim-unstable' "${OPENSIM_PACKAGES[*]}"
+
+	UNSTABLE_CORE=yes
+	plan_packages
+	assert_contains 'opensim-unstable' "${OPENSIM_PACKAGES[*]}"
+}
+
+function test_tools_install_the_command_line_alone_without_what_it_recommends() {
+	quick_install_load_library || return
+	local calls=$WORK/install-calls
+	configure_package_sources() { return 0; }
+	install_packages() { printf '%s\n' "$*" >>"$calls"; }
+	opensim() { return 0; }
+	phase_tools >/dev/null
+	assert_equals '--no-install-recommends opensim-cli' "$(cat "$calls")"
+}
+
 function test_apt_source_parser_accepts_multiword_options() {
 	quick_install_load_library || return
 	local source='deb [arch=amd64 signed-by=/usr/share/keyrings/example.gpg] https://packages.example.test/debian bookworm main'
@@ -277,11 +302,9 @@ function test_clone_install_requests_all_packages_when_cli_and_engine_are_instal
 	end_installation() { return 0; }
 	phase_opensim
 	installed="$(cat "$calls")"
-	assert_contains 'opensim-cli' "$installed"
-	assert_contains 'opensim-helpers' "$installed"
-	assert_contains 'opensim-0.9.3.0' "$installed"
-	assert_contains 'opensim-0.9.3.0-gloebit' "$installed"
-	assert_contains 'opensim-0.9.3.0-opensimsearch' "$installed"
+	# The kit: the command line, the engine, the website of a grid, the latest core and its modules
+	assert_contains 'opensim-kit' "$installed"
+	assert_not_contains 'opensim-unstable' "$installed"
 	assert_contains 'libsqlite3-0' "$installed"
 	assert_contains 'mariadb-server' "$installed"
 	assert_contains 'php-cli' "$installed"

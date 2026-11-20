@@ -16,7 +16,17 @@ chmod +x kickstart.sh
 ./kickstart.sh --setup
 ```
 
-See `./kickstart.sh --help` for other options.
+See `./kickstart.sh --help` for other options:
+
+- `--testing` installs the test builds (charm-tests) on top of the releases, for whoever tries what comes next; `--unstable-core` adds the development version of OpenSimulator.
+- `--tools` installs only the command line and the engine, light (no OpenSimulator, no database server, no website), to work on a grid installed otherwise, for instance to import the accounts of a list into it.
+
+The same in one line, through a pipe:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/GuduleLapointe/opensim-cli/refs/heads/dev/kickstart.sh | sudo bash -s -- --testing --setup
+curl -fsSL https://raw.githubusercontent.com/GuduleLapointe/opensim-cli/refs/heads/dev/kickstart.sh | sudo bash -s -- --testing --tools
+```
 
 See our [wiki](https://github.com/GuduleLapointe/opensim-cli/wiki) for detailed instructions.
 
@@ -46,6 +56,7 @@ Fully tested on:
 - [x] from local git clone
 - [x] from local deb packages
 - [x] remote shortcut to install on a distant server
+- [x] test builds (`--testing`), the tools alone (`--tools`)
 - [ ] advanced/expert install
 - [ ] support Homebrew (macos)
 
