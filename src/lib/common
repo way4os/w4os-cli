@@ -86,6 +86,43 @@ as_system_user() {
 	fi
 }
 
+# The accounts of a list: the list read as its caller and sent to the import (run as the user of the instances), the result, with the
+# passwords made, kept for the caller only (mode 600)
+import_accounts() {
+	local -a arguments=()
+	local list= result= apply= csv status=0
+	while (($#)); do
+		case "$1" in
+		--accounts)
+			(($# > 1)) || die "--accounts requires the list of the accounts"
+			list=$2
+			shift 2
+			;;
+		--accounts=*) list=${1#*=}; shift ;;
+		--result)
+			(($# > 1)) || die "--result requires a file"
+			result=$2
+			shift 2
+			;;
+		--result=*) result=${1#*=}; shift ;;
+		--apply) apply=yes; arguments+=("$1"); shift ;;
+		*) arguments+=("$1"); shift ;;
+		esac
+	done
+	[[ -r "$list" ]] || die "cannot read $list"
+	if [[ "$list" =~ \.ya?ml$ && " ${arguments[*]} " != *" --format"* ]]; then
+		arguments+=(--format yaml)
+	fi
+	csv=$(as_system_user "$CLI_ROOT/libexec/import" --accounts - ${arguments[@]+"${arguments[@]}"} <"$list") || status=$?
+	if [[ -n "$apply" && -n "$csv" ]]; then
+		result=${result:-accounts-result-$(date +%Y%m%d-%H%M%S).csv}
+		(umask 077 && printf '%s\n' "$csv" >"$result") || die "could not write $result"
+		chmod 600 "$result"
+		say "Result (with the passwords made here): $result"
+	fi
+	return "$status"
+}
+
 # Read private setup inputs as their caller and pass them to the service account without changing their permissions.
 run_setup() {
 	local -a arguments=("$@") inputs=() indexes=()

@@ -5,7 +5,8 @@
 
 USAGE="opensim import FILE [--apply]
        opensim import --simulator FILE [--simulator FILE...] GRID [--name NAME] [--core DIR] [--apply]
-       opensim import --grid-settings FILE GRID [--apply]"
+       opensim import --grid-settings FILE GRID [--apply]
+       opensim import --accounts FILE GRID [--format csv|json|yaml] [--keep-going] [--result FILE] [--apply]"
 HELP="Applies a setup file (JSON or YAML: the simulators of a grid of this machine, their regions with name, location, size, roles) to the grid it names, or brings a simulator of another install (its OpenSim.ini, or its file of opensim.d, and the regions it names) into the grid GRID of this machine. Its database is kept as it is (the same one, nothing is copied), its regions are copied with their UUID and their place, its ports and its own settings are kept. Without --apply, says what would be written and where, and writes nothing.
   FILE              a setup file: its simulators are made, or given its regions when the grid has them
   --simulator FILE  the config of a simulator of another install; several, planned together and checked between them (ports,
@@ -17,13 +18,30 @@ HELP="Applies a setup file (JSON or YAML: the simulators of a grid of this machi
                     the OpenSim.ini of a grid of another install: the settings of its options (search, economy and Gloebit,
                     offline messages, profiles, groups), with the files it includes, come into the OpenSim.ini of GRID, where
                     the repair of the options finds them for its simulators; what GRID says already is kept, a secret is masked
+  --accounts FILE   a list of accounts to make in GRID: CSV (first, last, email, password, with or without a header line), JSON
+                    or YAML (a list of objects with the same keys); the names GRID has are skipped, an account given no
+                    password gets one, kept in the result file (mode 600, accounts-result-<date>.csv or --result FILE), never
+                    shown; the first failure stops the others, unless --keep-going
   --apply           write it (disabled: stop the old one, then opensim enable and opensim start the new one)"
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 
-files=() grid= name= core= mode=plan scripts=true settings=
+files=() grid= name= core= mode=plan scripts=true settings= accounts= format= keep=false
 while (($#)); do
 	case "$1" in
+	--accounts)
+		(($# > 1)) || die "--accounts requires the list of the accounts"
+		accounts=$2
+		shift 2
+		;;
+	--accounts=*) accounts=${1#*=}; shift ;;
+	--format)
+		(($# > 1)) || die "--format requires csv, json or yaml"
+		format=$2
+		shift 2
+		;;
+	--format=*) format=${1#*=}; shift ;;
+	--keep-going) keep=true; shift ;;
 	--simulator)
 		(($# > 1)) || die "--simulator requires the config of the simulator"
 		files+=("$2")
@@ -58,6 +76,32 @@ while (($#)); do
 		;;
 	esac
 done
+# The accounts of a list (- : from the standard input, as the command line sends the file of its caller): what is done on the error
+# output, the result (with the passwords made here) on the standard output once applied, for the caller to keep
+if [[ -n "$accounts" ]]; then
+	[[ -n "$grid" ]] && ((${#files[@]} == 0)) && [[ -z "$settings" ]] || die "usage: $USAGE"
+	if [[ "$accounts" == - ]]; then
+		text=$(cat)
+	else
+		[[ -r "$accounts" ]] || die "cannot read $accounts"
+		text=$(<"$accounts")
+	fi
+	request=$(jq -cn --arg text "$text" --arg grid "$grid" --arg mode "$mode" --arg format "$format" --argjson keep "$keep" \
+		'{data: {type: "imports", attributes: ({kind: "accounts", text: $text, grid: $grid, mode: $mode, keepGoing: $keep} + (if $format != "" then {format: $format} else {} end))}}')
+	reply=$(engine POST /setups/imports --data=- <<<"$request") || true
+	jq -e '.data.attributes' <<<"$reply" >/dev/null 2>&1 ||
+		die "$(jq -r 'if .detail then .detail else (.title // "the engine did not answer") end' <<<"$reply" 2>/dev/null || printf '%s' "$reply")"
+	jq -r '.data.attributes |
+		(.errors[] | "import: \(.)"),
+		(.results[] | "\(.status)\(" " * (14 - (.status | length))) \(.first) \(.last)" + (if .detail != "" then " (\(.detail))" else "" end)),
+		"",
+		(.counts | to_entries | map("\(.value) \(.key)") | join(", ")),
+		(if .applied then empty else "Nothing was written: --apply makes the accounts." end)' <<<"$reply" >&2
+	jq -r '.data.attributes.csv // empty' <<<"$reply"
+	# A line that cannot be used, an account that failed or was not tried: an error
+	jq -e '.data.attributes | (.errors | length) == 0 and ((.counts.failed // 0) + (.counts["not tried"] // 0)) == 0' <<<"$reply" >/dev/null
+	exit
+fi
 # The settings of a grid of another install, into the OpenSim.ini of a grid of this machine
 if [[ -n "$settings" ]]; then
 	[[ -n "$grid" ]] && ((${#files[@]} == 0)) || die "usage: $USAGE"

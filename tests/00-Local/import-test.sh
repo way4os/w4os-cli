@@ -265,3 +265,32 @@ function test_restores_an_archive_by_its_id_with_apply_and_says_why_the_engine_r
 	assert_contains "this machine has already what the backup holds" "$out"
 }
 
+
+function test_accounts_are_sent_from_the_list_of_the_caller_and_the_result_kept_for_them_only() {
+	local api="$WORK/opensim-api" list="$WORK/list.csv"
+	printf 'first,last\nJohn,Roe\n' >"$list"
+	cat >"$api" <<-'API'
+	#!/usr/bin/env bash
+	cat >"$WORK/request.json"
+	mode=$(jq -r '.data.attributes.mode' "$WORK/request.json")
+	jq -cn --arg mode "$mode" '{data: {type: "imports", attributes: ({kind: "accounts", grid: "demo", mode: $mode, applied: ($mode == "apply"), errors: ["line 3: name \"Bad\" must be a first and a last name"], counts: {"created": 1}, results: [{first: "John", last: "Roe", email: "", status: (if $mode == "apply" then "created" else "would create" end), detail: "", generated: true, password: "Made1234abcd"}]} + (if $mode == "apply" then {csv: "first,last,email,status,password,detail\nJohn,Roe,,created,Made1234abcd,\n"} else {} end))}}'
+	API
+	chmod +x "$api"
+	export WORK
+
+	local plan
+	plan=$(cd "$WORK" && OPENSIM_API="$api" "$OPENSIM" import --accounts "$list" demo 2>&1)
+	assert_contains "would create   John Roe" "$plan"
+	assert_contains "line 3:" "$plan"
+	assert_contains "Nothing was written" "$plan"
+	assert_contains "John,Roe" "$(jq -r '.data.attributes.text' "$WORK/request.json")"
+	assert_not_contains "Made1234abcd" "$plan"
+
+	local applied
+	applied=$(cd "$WORK" && OPENSIM_API="$api" "$OPENSIM" import --accounts "$list" demo --apply --keep-going --result "$WORK/result.csv" 2>&1)
+	assert_contains "created        John Roe" "$applied"
+	assert_equals "true" "$(jq -r '.data.attributes.keepGoing' "$WORK/request.json")"
+	assert_contains "Made1234abcd" "$(cat "$WORK/result.csv")"
+	assert_equals "600" "$(stat -c %a "$WORK/result.csv" 2>/dev/null || stat -f %Lp "$WORK/result.csv")"
+	assert_not_contains "Made1234abcd" "$applied"
+}

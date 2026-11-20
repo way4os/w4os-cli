@@ -139,6 +139,14 @@ setup)
 	run_setup "$@"
 	;;
 
+import)
+	# The accounts of a list: the list is the caller's, so is the result
+	for argument in "$@"; do
+		[[ "$argument" != --accounts* ]] || { import_accounts "$@"; exit; }
+	done
+	as_system_user "$libexec/import" "$@"
+	;;
+
 install-dotnet)
 	log install-dotnet as root
 	# The runtime is installed for the whole system: as root, whoever calls

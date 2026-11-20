@@ -95,6 +95,13 @@ opensim import --grid-settings /opt/opensim/etc/grids/Speculoos/OpenSim.ini spec
 opensim import --grid-settings /opt/opensim/etc/grids/Speculoos/OpenSim.ini speculoos --apply
 ```
 
+`opensim import --accounts FILE GRID [--format csv|json|yaml] [--keep-going] [--result FILE] [--apply]` makes the accounts of a list in the grid GRID: CSV (first, last, email, password, with or without a header line), JSON or YAML (a list of objects with the same keys). The names the grid has are skipped, a line that cannot be used is told and left out, an account given no password gets one, and the first failure stops the others unless `--keep-going`. Without `--apply` it says what it would make. Once applied, the result (each account, and the passwords made here, never shown) is written for the caller only, mode 600: `--result FILE`, else `accounts-result-<date>.csv` in the current folder.
+
+```bash
+opensim import --accounts members.csv demo
+opensim import --accounts members.csv demo --apply --result members-made.csv
+```
+
 `opensim import FILE [--apply]` applies a setup file (JSON or YAML, the format of the setup files) to the grid of this machine it names: its simulators are made with their regions, or given its regions when the grid has them. `opensim region add GRID SIMULATOR --name NAME [--location X,Y] [--size METERS] [--roles ROLE,...] [--port PORT] [--apply]` gives one region to a simulator, `opensim simulator add GRID NAME --region NAME [--size METERS] [--roles ...] [--http-port PORT] [--owner 'First Last'] [--apply]` makes a simulator with its first region (its database from `OPENSIM_DB_HOST`, `OPENSIM_DB_USER`, `OPENSIM_DB_PASS`, made when missing). What is not given is proposed by the engine (ports, the nearest free place); without `--apply` they say what would be written and where; nothing is started.
 
 ```bash
