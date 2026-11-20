@@ -322,3 +322,22 @@ function test_a_grid_of_another_install_is_migrated_planned_applied_switched() {
 	assert_equals "true plan" "$(jq -r '.data.attributes | "\(.switch) \(.mode)"' "$WORK/request.json")"
 	assert_contains "Started: oldgrid, oldgrid.welcome" "$switched"
 }
+
+function test_accounts_go_to_a_grid_this_install_does_not_manage_by_its_robust_config() {
+	local api="$WORK/opensim-api" list="$WORK/list.csv" robust="$WORK/elsewhere/Robust.HG.ini"
+	mkdir -p "$WORK/elsewhere"
+	printf '[GridInfoService]\ngridnick = faraway\n' >"$robust"
+	printf 'John,Roe\n' >"$list"
+	cat >"$api" <<-'API'
+	#!/usr/bin/env bash
+	cat >"$WORK/request.json"
+	jq -cn '{data: {type: "imports", attributes: {kind: "accounts", grid: "faraway", mode: "plan", applied: false, errors: [], counts: {"would create": 1}, results: [{first: "John", last: "Roe", email: "", status: "would create", detail: "", generated: true}]}}}'
+	API
+	chmod +x "$api"
+	export WORK
+
+	local plan
+	plan=$(OPENSIM_API="$api" "$OPENSIM" import --accounts "$list" --robust "$robust" 2>&1)
+	assert_contains "would create   John Roe" "$plan"
+	assert_equals "accounts $(realpath "$robust") null" "$(jq -r '.data.attributes | "\(.kind) \(.robust) \(.grid)"' "$WORK/request.json")"
+}

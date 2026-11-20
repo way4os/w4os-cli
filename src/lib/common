@@ -90,7 +90,7 @@ as_system_user() {
 # passwords made, kept for the caller only (mode 600)
 import_accounts() {
 	local -a arguments=()
-	local list= result= apply= csv status=0
+	local list= result= apply= csv status=0 runner=as_system_user
 	while (($#)); do
 		case "$1" in
 		--accounts)
@@ -106,6 +106,8 @@ import_accounts() {
 			;;
 		--result=*) result=${1#*=}; shift ;;
 		--apply) apply=yes; arguments+=("$1"); shift ;;
+		# A grid this install does not manage: its config is the caller's to read, the import runs as them
+		--robust | --robust=*) runner=; arguments+=("$1"); shift ;;
 		*) arguments+=("$1"); shift ;;
 		esac
 	done
@@ -113,7 +115,7 @@ import_accounts() {
 	if [[ "$list" =~ \.ya?ml$ && " ${arguments[*]} " != *" --format"* ]]; then
 		arguments+=(--format yaml)
 	fi
-	csv=$(as_system_user "$CLI_ROOT/libexec/import" --accounts - ${arguments[@]+"${arguments[@]}"} <"$list") || status=$?
+	csv=$($runner "$CLI_ROOT/libexec/import" --accounts - ${arguments[@]+"${arguments[@]}"} <"$list") || status=$?
 	if [[ -n "$apply" && -n "$csv" ]]; then
 		result=${result:-accounts-result-$(date +%Y%m%d-%H%M%S).csv}
 		(umask 077 && printf '%s\n' "$csv" >"$result") || die "could not write $result"

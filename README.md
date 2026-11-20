@@ -110,6 +110,12 @@ opensim import --accounts members.csv demo
 opensim import --accounts members.csv demo --apply --result members-made.csv
 ```
 
+The grid may be one this install does not manage: `--robust ROBUST_INI` instead of GRID names it by its Robust config, where it is (its databases are the ones it names; nothing is registered nor written but the accounts). It runs as the caller, who reads that config, and needs only the engine and this command line.
+
+```bash
+opensim import --accounts members.csv --robust /opt/opensim/bin/Robust.HG.ini --apply
+```
+
 `opensim import FILE [--apply]` applies a setup file (JSON or YAML, the format of the setup files) to the grid of this machine it names: its simulators are made with their regions, or given its regions when the grid has them. `opensim region add GRID SIMULATOR --name NAME [--location X,Y] [--size METERS] [--roles ROLE,...] [--port PORT] [--apply]` gives one region to a simulator, `opensim simulator add GRID NAME --region NAME [--size METERS] [--roles ...] [--http-port PORT] [--owner 'First Last'] [--apply]` makes a simulator with its first region (its database from `OPENSIM_DB_HOST`, `OPENSIM_DB_USER`, `OPENSIM_DB_PASS`, made when missing). What is not given is proposed by the engine (ports, the nearest free place); without `--apply` they say what would be written and where; nothing is started.
 
 ```bash
