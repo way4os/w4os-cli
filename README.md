@@ -10,10 +10,10 @@ The command line to set up and manage OpenSimulator, in bash. It asks the questi
 
 This will install OpenSimulator, OpenSim Engine and all required packages from official apt repository.
 
-```
-curl -fsSL https://raw.githubusercontent.com/GuduleLapointe/opensim-cli/refs/heads/dev/kickstart.sh -o kickstart.sh
+```bash
+curl -fsSL -o kickstart.sh https://raw.githubusercontent.com/GuduleLapointe/opensim-cli/refs/heads/dev/kickstart.sh
 chmod +x kickstart.sh
-./kickstart.sh --setup
+sudo ./kickstart.sh --setup
 ```
 
 See `./kickstart.sh --help` for other options:
@@ -21,12 +21,15 @@ See `./kickstart.sh --help` for other options:
 - `--testing` installs the test builds (charm-tests) on top of the releases, for whoever tries what comes next; `--unstable-core` adds the development version of OpenSimulator.
 - `--tools` installs only the command line and the engine, light (no OpenSimulator, no database server, no website), to work on a grid installed otherwise, for instance to import the accounts of a list into it.
 
-The same in one line, through a pipe:
+For instance, the tools alone from the test builds:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/GuduleLapointe/opensim-cli/refs/heads/dev/kickstart.sh | sudo bash -s -- --testing --setup
-curl -fsSL https://raw.githubusercontent.com/GuduleLapointe/opensim-cli/refs/heads/dev/kickstart.sh | sudo bash -s -- --testing --tools
+curl -fsSL -o kickstart.sh https://raw.githubusercontent.com/GuduleLapointe/opensim-cli/refs/heads/dev/kickstart.sh
+chmod +x kickstart.sh
+sudo ./kickstart.sh --testing --tools
 ```
+
+The same in one line, for those who know the pipe form: `curl -fsSL <address of kickstart.sh> | sudo bash -s -- --testing --tools`.
 
 See our [wiki](https://github.com/GuduleLapointe/opensim-cli/wiki) for detailed instructions.
 

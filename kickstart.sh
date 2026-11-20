@@ -2,8 +2,10 @@
 
 # OpenSim Install script: installs OpenSim and optionally starts `opensim setup`.
 #
-#   One command, from the web (Debian or Ubuntu):
-#     curl -fsSL https://raw.githubusercontent.com/GuduleLapointe/opensim-cli/dev/kickstart.sh | sudo bash
+#   From the web (Debian or Ubuntu): download it, then run it with its options
+#     curl -fsSL -o kickstart.sh https://raw.githubusercontent.com/GuduleLapointe/opensim-cli/dev/kickstart.sh
+#     chmod +x kickstart.sh && sudo ./kickstart.sh --setup
+#   or in one line: curl -fsSL https://raw.githubusercontent.com/GuduleLapointe/opensim-cli/dev/kickstart.sh | sudo bash -s -- --setup
 #
 #   Or from a clone of the repository:
 #     git clone https://github.com/GuduleLapointe/opensim-cli.git && cd opensim-cli && ./kickstart.sh
