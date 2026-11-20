@@ -95,6 +95,14 @@ opensim import --grid-settings /opt/opensim/etc/grids/Speculoos/OpenSim.ini spec
 opensim import --grid-settings /opt/opensim/etc/grids/Speculoos/OpenSim.ini speculoos --apply
 ```
 
+`opensim import --robust FILE [--nick NICK] [--core DIR] [--simulator FILE...] [--apply] [--switch]` migrates the grid of another install into this one: the same grid, its database kept as it is (so its accounts and its regions), its Robust config made the way this install makes one with the settings of the old one put back, the places of its data kept where they are, its simulators with it (`--simulator`, their OpenSim.ini). The old install is never changed. Without `--apply` it says what it would write; `--apply` writes it disabled, after a backup of its database and its files; once the old Robust is stopped (and kept from starting again), `--switch` enables and starts the grid and its simulators here.
+
+```bash
+opensim import --robust /opt/opensim/bin/Robust.HG.ini --simulator /opt/opensim/bin/OpenSim.ini
+opensim import --robust /opt/opensim/bin/Robust.HG.ini --simulator /opt/opensim/bin/OpenSim.ini --apply
+opensim import --robust /opt/opensim/bin/Robust.HG.ini --switch
+```
+
 `opensim import --accounts FILE GRID [--format csv|json|yaml] [--keep-going] [--result FILE] [--apply]` makes the accounts of a list in the grid GRID: CSV (first, last, email, password, with or without a header line), JSON or YAML (a list of objects with the same keys). The names the grid has are skipped, a line that cannot be used is told and left out, an account given no password gets one, and the first failure stops the others unless `--keep-going`. Without `--apply` it says what it would make. Once applied, the result (each account, and the passwords made here, never shown) is written for the caller only, mode 600: `--result FILE`, else `accounts-result-<date>.csv` in the current folder.
 
 ```bash

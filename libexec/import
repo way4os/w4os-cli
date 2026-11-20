@@ -6,7 +6,8 @@
 USAGE="opensim import FILE [--apply]
        opensim import --simulator FILE [--simulator FILE...] GRID [--name NAME] [--core DIR] [--apply]
        opensim import --grid-settings FILE GRID [--apply]
-       opensim import --accounts FILE GRID [--format csv|json|yaml] [--keep-going] [--result FILE] [--apply]"
+       opensim import --accounts FILE GRID [--format csv|json|yaml] [--keep-going] [--result FILE] [--apply]
+       opensim import --robust FILE [--nick NICK] [--core DIR] [--simulator FILE...] [--apply] [--switch]"
 HELP="Applies a setup file (JSON or YAML: the simulators of a grid of this machine, their regions with name, location, size, roles) to the grid it names, or brings a simulator of another install (its OpenSim.ini, or its file of opensim.d, and the regions it names) into the grid GRID of this machine. Its database is kept as it is (the same one, nothing is copied), its regions are copied with their UUID and their place, its ports and its own settings are kept. Without --apply, says what would be written and where, and writes nothing.
   FILE              a setup file: its simulators are made, or given its regions when the grid has them
   --simulator FILE  the config of a simulator of another install; several, planned together and checked between them (ports,
@@ -22,11 +23,17 @@ HELP="Applies a setup file (JSON or YAML: the simulators of a grid of this machi
                     or YAML (a list of objects with the same keys); the names GRID has are skipped, an account given no
                     password gets one, kept in the result file (mode 600, accounts-result-<date>.csv or --result FILE), never
                     shown; the first failure stops the others, unless --keep-going
+  --robust FILE     the Robust config of a grid of another install (Robust.HG.ini, Robust.ini), migrated into this one: the
+                    same grid (its database kept as it is, so its accounts and its regions), its config made here with its own
+                    settings kept, the old install never changed; --simulator brings its simulators in the same run, --nick
+                    and --core when they are not the ones of its config and of this install
+  --switch          once the old Robust is stopped: the grid and its simulators enabled and started here (with --apply, or
+                    after it)
   --apply           write it (disabled: stop the old one, then opensim enable and opensim start the new one)"
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 
-files=() grid= name= core= mode=plan scripts=true settings= accounts= format= keep=false
+files=() grid= name= core= mode=plan scripts=true settings= accounts= format= keep=false robust= nick= switch=false
 while (($#)); do
 	case "$1" in
 	--accounts)
@@ -42,6 +49,19 @@ while (($#)); do
 		;;
 	--format=*) format=${1#*=}; shift ;;
 	--keep-going) keep=true; shift ;;
+	--robust)
+		(($# > 1)) || die "--robust requires the Robust config of the other install"
+		robust=$2
+		shift 2
+		;;
+	--robust=*) robust=${1#*=}; shift ;;
+	--nick)
+		(($# > 1)) || die "--nick requires a nick"
+		nick=$2
+		shift 2
+		;;
+	--nick=*) nick=${1#*=}; shift ;;
+	--switch) switch=true; shift ;;
 	--simulator)
 		(($# > 1)) || die "--simulator requires the config of the simulator"
 		files+=("$2")
@@ -76,6 +96,42 @@ while (($#)); do
 		;;
 	esac
 done
+# A grid of another install, migrated: the same grid, its config made here, its simulators with it; switched once the old one is stopped
+if [[ -n "$robust" ]]; then
+	[[ -z "$grid$settings$accounts$name" ]] || die "usage: $USAGE"
+	[[ -r "$robust" ]] || die "cannot read $robust"
+	paths=()
+	for file in ${files[@]+"${files[@]}"}; do
+		[[ -r "$file" ]] || die "cannot read $file"
+		paths+=("$(realpath "$file")")
+	done
+	request=$(jq -cn --arg file "$(realpath "$robust")" --arg nick "$nick" --arg core "$core" --arg mode "$mode" --argjson switch "$switch" --argjson scripts "$scripts" \
+		'{data: {type: "imports", attributes: ({kind: "robust", file: $file, mode: $mode, switch: $switch, simulators: ($ARGS.positional | map({file: .} + (if $scripts then {} else {scripts: false} end)))} + ({nick: $nick, core: $core} | with_entries(select(.value != ""))))}}' \
+		--args ${paths[@]+"${paths[@]}"})
+	reply=$(engine POST /setups/imports --data=- <<<"$request") || true
+	jq -e '.data.attributes' <<<"$reply" >/dev/null 2>&1 ||
+		die "$(jq -r 'if .detail then .detail else (.title // "the engine did not answer") end' <<<"$reply" 2>/dev/null || printf '%s' "$reply")"
+	jq -r '
+		def said: if type == "object" then .detail else . end;
+		.data.attributes |
+		"Grid \(.name) (\(.grid)), from \(.source)",
+		"Config:   \(.config)",
+		"Database: \(.database.name) @ \(.database.host) (user \(.database.user)), kept as it is",
+		"Ports:    public \(.ports.public), private \(.ports.private)" + (if .ports.console then ", console \(.ports.console)" else "" end),
+		"Settings kept: \(.settings | length)",
+		((.settings // [])[] | "  [\(.section)] \(.key) = \(.value)"),
+		"Settings left: \((.dropped // []) | length)" + (if ((.dropped // []) | length) > 0 then " (" + (.dropped | group_by(.reason) | map("\(.[0].reason) \(length)") | join(", ")) + ")" else "" end),
+		(if .backup then "Backup of the source first: \(.backup.file) (databases \(.backup.databases | join(", ")))" else empty end),
+		(if ((.simulators.steps // []) | length) > 0 then "Simulators: " + (.simulators.steps | map("\(.simulator) (\(.slug))") | join(", ")) else empty end),
+		(if ((.problems // {}) | length) > 0 then "Problems, nothing can be written:", (.problems | to_entries[] | "  \(.key): \(.value)") else empty end),
+		"",
+		(if .applied then "Written:" else "Would write:" end),
+		((.writes // [])[] | "  \(.)"),
+		(if .applied then "Report:   \(.report)" elif .switched then empty else "Nothing was written: add --apply to write it." end),
+		(if .switched then "Started: \(.started | join(", "))" else ((.reminders // [])[] | "- \(said)") end)' <<<"$reply"
+	jq -e '(.data.attributes.problems // {}) | length == 0' <<<"$reply" >/dev/null
+	exit
+fi
 # The accounts of a list (- : from the standard input, as the command line sends the file of its caller): what is done on the error
 # output, the result (with the passwords made here) on the standard output once applied, for the caller to keep
 if [[ -n "$accounts" ]]; then

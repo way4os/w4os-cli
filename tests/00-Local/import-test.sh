@@ -294,3 +294,31 @@ function test_accounts_are_sent_from_the_list_of_the_caller_and_the_result_kept_
 	assert_equals "600" "$(stat -c %a "$WORK/result.csv" 2>/dev/null || stat -f %Lp "$WORK/result.csv")"
 	assert_not_contains "Made1234abcd" "$applied"
 }
+
+function test_a_grid_of_another_install_is_migrated_planned_applied_switched() {
+	local api="$WORK/opensim-api" robust="$WORK/old/bin/Robust.HG.ini" sim="$WORK/old/bin/OpenSim.ini"
+	mkdir -p "$WORK/old/bin"
+	printf '[GridInfoService]\ngridnick = oldgrid\n' >"$robust"
+	printf '[Network]\nhttp_listener_port = 9100\n' >"$sim"
+	cat >"$api" <<-'API'
+	#!/usr/bin/env bash
+	cat >"$WORK/request.json"
+	jq -c '.data.attributes as $a | {data: {type: "imports", attributes: {kind: "robust", mode: $a.mode, applied: ($a.mode == "apply"), switched: ($a.switch // false), started: (if $a.switch then ["oldgrid", "oldgrid.welcome"] else [] end), grid: "oldgrid", name: "Old Grid", source: $a.file, config: "/etc/opensim/grids/oldgrid/Robust.HG.ini", database: {host: "db.example.org", name: "oldgrid", user: "olduser", kept: true}, ports: {public: 8102, private: 8103, console: null}, settings: [{section: "LoginService", key: "WelcomeMessage", value: "Hello"}], dropped: [{section: "Startup", key: "PIDFile", value: "/x", reason: "layout"}], report: "/etc/opensim/grids/oldgrid/oldgrid.import-report.txt", backup: {file: "/var/backups/opensim/oldgrid/robust/x.tar.gz", databases: ["oldgrid"], files: ["a"]}, simulators: {steps: [{simulator: "Welcome", slug: "oldgrid.welcome", regions: [{name: "Welcome"}]}]}, problems: {}, writes: ["/etc/opensim/grids/oldgrid/Robust.HG.ini"], reminders: [{detail: "The old Robust of oldgrid keeps running until it is stopped"}]}}}' "$WORK/request.json"
+	API
+	chmod +x "$api"
+	export WORK
+
+	local plan
+	plan=$(OPENSIM_API="$api" "$OPENSIM" import --robust "$robust" --simulator "$sim" --nick oldgrid 2>&1)
+	assert_contains "Grid Old Grid (oldgrid), from $(realpath "$robust")" "$plan"
+	assert_contains "Database: oldgrid @ db.example.org (user olduser), kept as it is" "$plan"
+	assert_contains "Simulators: Welcome (oldgrid.welcome)" "$plan"
+	assert_contains "The old Robust of oldgrid keeps running" "$plan"
+	assert_contains "Nothing was written" "$plan"
+	assert_equals "robust oldgrid plan $(realpath "$sim")" "$(jq -r '.data.attributes | "\(.kind) \(.nick) \(.mode) \(.simulators[0].file)"' "$WORK/request.json")"
+
+	local switched
+	switched=$(OPENSIM_API="$api" "$OPENSIM" import --robust "$robust" --switch 2>&1)
+	assert_equals "true plan" "$(jq -r '.data.attributes | "\(.switch) \(.mode)"' "$WORK/request.json")"
+	assert_contains "Started: oldgrid, oldgrid.welcome" "$switched"
+}

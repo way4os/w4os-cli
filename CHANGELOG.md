@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- feature (import): `opensim import --robust FILE [--simulator FILE...]` migrates the grid of another install, planned, applied disabled, then `--switch` once the old Robust is stopped
 - feature (import): `opensim import --accounts FILE GRID` makes the accounts of a list (CSV, JSON, YAML), the result with the passwords made kept for the caller only
 - feature (api): `opensim api [METHOD] PATH [name=value...]` asks the engine API of this machine, as the commands and the README said
 - fix: the options after a command are its own (`opensim save iar -h URL -v`); `-v` and `-q` reach the engine; OPENSIM_IAR_PASSWORD, OPENSIM_CONF, DEBUG and QUIET go through sudo
