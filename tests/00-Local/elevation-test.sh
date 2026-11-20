@@ -50,3 +50,15 @@ function test_setup_does_not_escalate_to_root_for_the_system_layout() {
     assert_contains "sudo -u nobody" "$output"
     assert_not_contains "prepare-layout" "$output"
 }
+
+function test_the_variables_of_archives_debug_and_config_go_to_the_system_user() {
+    printf '#!/bin/sh\necho "sudo $*"\n' >"$WORK/bin/sudo"
+    chmod +x "$WORK/bin/sudo"
+    local output
+    output=$(PATH="$WORK/bin:$PATH" "$OPENSIM" status 2>&1)
+
+    assert_contains "OPENSIM_IAR_PASSWORD" "$output"
+    assert_contains "OPENSIM_CONF" "$output"
+    assert_contains ",DEBUG," "$output"
+    assert_contains ",QUIET " "$output"
+}

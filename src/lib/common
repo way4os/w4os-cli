@@ -16,6 +16,9 @@ _helpers="$CLI_ROOT/vendor/magicoli/bash-tools/bin/bash-helpers"
 # shellcheck disable=SC1090
 source "$_helpers"
 unset _helpers
+# -v and -q of the command line, for the engine and the commands it runs
+[[ "${DEBUG:-}" != yes ]] || export DEBUG
+[[ "${QUIET:-}" != yes ]] || export QUIET
 
 OPENSIM_API=${OPENSIM_API:-$CLI_ROOT/vendor/magicoli/opensim-engine/bin/opensim-api}
 [[ -x "$OPENSIM_API" ]] || die "The engine is not installed (composer install in $CLI_ROOT)"

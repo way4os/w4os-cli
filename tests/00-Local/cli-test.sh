@@ -279,3 +279,31 @@ INI
 	assert_exec "'$OPENSIM' enable tender_tern profiles" --stdout-contains 'profiles enabled for tender_tern'
 	assert_file_contains "$WORK/etc/opensim/grids/tender_tern/sims/tender_tern.welcome.ini" 'TestProfileSetting = enabled'
 }
+
+function test_api_asks_the_engine_and_gives_its_answer() {
+	local api="$WORK/opensim-api"
+	printf '#!/bin/sh\necho "engine $*"\n' >"$api"
+	chmod +x "$api"
+	assert_exec "OPENSIM_API='$api' '$OPENSIM' api GET /grids --grid=demo" \
+		--stdout-contains "engine GET /grids --grid=demo"
+}
+
+function test_verbose_and_quiet_reach_the_engine() {
+	local api="$WORK/opensim-api"
+	printf '#!/bin/sh\necho "DEBUG=$DEBUG QUIET=$QUIET"\n' >"$api"
+	chmod +x "$api"
+	assert_contains "DEBUG=yes" "$(OPENSIM_API="$api" "$OPENSIM" -v api GET /layout 2>&1)"
+	assert_contains "QUIET=yes" "$(OPENSIM_API="$api" "$OPENSIM" -q api GET /layout 2>&1)"
+}
+
+function test_the_options_after_the_command_are_its_own() {
+	local api="$WORK/opensim-api"
+	printf '#!/bin/sh\necho "engine $*"\n' >"$api"
+	chmod +x "$api"
+	# -h and -v of the archives of OpenSimulator (the home URL, verbose) are not the help nor the verbose of the command line
+	assert_contains "engine POST /archives -h http://home.example.org -v" \
+		"$(OPENSIM_API="$api" "$OPENSIM" api POST /archives -h http://home.example.org -v 2>&1)"
+	assert_not_contains "Save an inventory" "$("$OPENSIM" save iar -h http://home.example.org 2>&1)"
+	assert_contains "Save an inventory" "$("$OPENSIM" save -h 2>&1)"
+	assert_contains "Save an inventory" "$("$OPENSIM" save iar --help 2>&1)"
+}

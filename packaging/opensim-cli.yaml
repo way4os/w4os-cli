@@ -69,6 +69,10 @@ contents:
       type: symlink
     - src: share/bash-completion/opensim
       dst: /usr/share/bash-completion/completions/opensim
+    - src: packaging/opensim-cli.copyright
+      dst: /usr/share/doc/opensim-cli/copyright
+      file_info:
+          mode: 0644
     - src: packaging/opensim.service
       dst: /usr/lib/systemd/system/opensim.service
     - src: packaging/opensim-backup.service

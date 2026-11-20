@@ -2,6 +2,10 @@
 
 ### Unreleased
 
+- feature (api): `opensim api [METHOD] PATH [name=value...]` asks the engine API of this machine, as the commands and the README said
+- fix: the options after a command are its own (`opensim save iar -h URL -v`); `-v` and `-q` reach the engine; OPENSIM_IAR_PASSWORD, OPENSIM_CONF, DEBUG and QUIET go through sudo
+- fix (packaging): rest-php comes from its package, not from the vendor folder; copyright of the package
+- remove (kickstart): the start_setup that sourced a frontend no longer there
 - feature (settings): `opensim settings GRID [PAGE] [--set NAME=VALUE]` shows and sets the settings pages of a grid
 - feature (posts): `opensim posts GRID` and `opensim posts delete GRID ID` list and delete the posts of a grid
 - fix (packaging): opensim-cli now conflicts with and replaces opensim-tools

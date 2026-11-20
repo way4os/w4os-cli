@@ -480,27 +480,6 @@ run_container_tool() {
 	fi
 }
 
-start_setup() { # the library of the questions, then the command to run, which gets the keyboard even when this script came through a pipe
-	local frontend=$1 status=0
-	shift
-	if [[ -z "$RUN_SETUP" ]]; then
-		say "Ready. Run '$*' when you want to make your grid."
-		exit 0
-	fi
-	say "Starting the setup..."
-	# The questions are shown here (dialog or plain prompts), unless nobody has a keyboard to answer
-	if [[ -r "$frontend" ]] && (: </dev/tty) 2>/dev/null; then
-		# shellcheck source=libexec/setup-frontend.sh
-		source "$frontend"
-		frontend_run "$@" || status=$?
-		exit "$status"
-	fi
-	if [[ ! -t 0 && -r /dev/tty ]]; then
-		exec "$@" </dev/tty
-	fi
-	exec "$@"
-}
-
 recover_dpkg_configuration() {
 	if [[ "$DPKG_CONFIGURED" != yes ]]; then
 		say "Complete any interrupted package configuration"

@@ -119,6 +119,7 @@ opensim simulator add speculoos north --region "North Shore" --owner "Gudule Lap
 - [x] load oar [GRID [SIM|REGION]] [--merge] [options] [FILE]
 - [x] backup [GRID [SIM]] [--logs] [--archives] [--output DIR] [--keep N]
 - [x] restore FILE|ARCHIVE [--apply]: a backup put back on this machine (planned; --apply writes, nothing here replaced)
+- [x] api [METHOD] PATH [name=value...] [--data=JSON|@FILE|-] [--grid=NICK]: asks the engine API of this machine as the user of the instances, the answer in JSON
 - [x] api-key create LABEL | list | revoke LABEL|ID: the keys of the engine API, run as the user of the instances; a key is shown once
 
 #### This machine

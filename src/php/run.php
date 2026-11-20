@@ -40,16 +40,16 @@ if (!class_exists(OpenSim::class)) {
     exit(2);
 }
 
-/** What the engine says, on the error output as `opensim: <message>`; the details with DEBUG=yes. */
+/** What the engine says, on the error output as `opensim: <message>`; the details with DEBUG=yes, the errors only with QUIET=yes. */
 final class CliReporter implements PendingReporterInterface
 {
     private bool $pending = false;
 
-    public function __construct(private readonly bool $debug = false) {}
+    public function __construct(private readonly bool $debug = false, private readonly bool $quiet = false) {}
 
     public function info(string $message): void
     {
-        fwrite(STDERR, "opensim: $message\n");
+        $this->quiet || fwrite(STDERR, "opensim: $message\n");
     }
 
     public function error(string $message): void
@@ -64,6 +64,9 @@ final class CliReporter implements PendingReporterInterface
 
     public function step(string $text): void
     {
+        if ($this->quiet) {
+            return;
+        }
         fwrite(STDERR, ($this->pending ? "\r\033[K" : '') . "opensim: $text\n");
         $this->pending = false;
     }
@@ -71,7 +74,7 @@ final class CliReporter implements PendingReporterInterface
     /** What the wait is on, on one line a terminal replaces with the next. */
     public function pending(string $text): void
     {
-        if (stream_isatty(STDERR)) {
+        if (!$this->quiet && stream_isatty(STDERR)) {
             fwrite(STDERR, "\r\033[Kopensim: $text");
             $this->pending = true;
         }
@@ -209,7 +212,10 @@ if ($command === 'system-user') {
 $simulators = in_array('--simulators', $args, true) || in_array('--sims', $args, true);
 $words = array_values(array_filter($args, static fn(string $a): bool => $a === '' || $a[0] !== '-'));
 $engine = OpenSim::environment(
-    new CliReporter(in_array(strtolower((string) getenv('DEBUG')), ['yes', 'true', '1'], true)),
+    new CliReporter(
+        in_array(strtolower((string) getenv('DEBUG')), ['yes', 'true', '1'], true),
+        in_array(strtolower((string) getenv('QUIET')), ['yes', 'true', '1'], true),
+    ),
 );
 require_once __DIR__ . '/commands.php';
 require_once __DIR__ . '/BanPlan.php';

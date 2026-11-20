@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# opensim api: asks the engine API of this machine, as the user of the instances, and prints its answer (JSON).
+
+USAGE="opensim api [METHOD] PATH [name=value...] [--data=JSON|@FILE|-] [--grid=NICK]"
+HELP="Ask the engine API of this machine: GET by default, the values as name=value or --data, the answer in JSON (opensim api GET /grids)."
+
+# The options are the engine's: only a first -h or a --help is the help
+arguments=("$@")
+[[ "${1:-}" == -h || " $* " == *" --help "* ]] || set --
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+engine ${arguments[@]+"${arguments[@]}"}
