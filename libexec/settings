@@ -50,6 +50,8 @@ if ((${#sets[@]} > 0)); then
 	why=$(refused "$reply") && die "$why"
 	jq -e '.data.attributes' <<<"$reply" >/dev/null 2>&1 || die "the engine did not answer"
 	show "$reply"
+	# What the change leaves to do: the restart of what reads it
+	jq -r '(.meta.reminders // [])[] | "- \(.detail)"' <<<"$reply"
 	exit 0
 fi
 

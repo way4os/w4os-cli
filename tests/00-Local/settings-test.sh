@@ -92,6 +92,15 @@ function test_changes_settings_a_part_of_a_database_alone_and_says_why_the_engin
 	assert_contains "is set by the options of the grid" "$out"
 }
 
+function test_a_change_says_the_restart_it_needs() {
+	engine_says '{"data":{"type":"settings","id":"economy","attributes":{"currencySymbol":"ZZ$"}},"meta":{"reminders":[{"code":"restart-grid","params":{"restart":"opensim restart demo"},"detail":"Grid restart is required: opensim restart demo."}]}}'
+
+	out=$("$OPENSIM" settings demo economy --set currencySymbol=ZZ\$ 2>&1)
+
+	assert_contains "currencySymbol = ZZ$" "$out"
+	assert_contains "Grid restart is required: opensim restart demo." "$out"
+}
+
 function test_set_needs_a_name_and_a_value() {
 	out=$("$OPENSIM" settings demo economy --set economyUrl 2>&1) && fail "a setting without a value is an error"
 	assert_contains "NAME=VALUE" "$out"

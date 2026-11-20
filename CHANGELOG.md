@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- new (settings): `opensim settings --set` says when the grid or the simulators must restart
 - new: `opensim --version`, and with -v the versions of everything that matters on the machine
 - feature (kickstart): `--testing` (the test builds, no development core unless `--unstable-core`), `--tools` (the command line and the engine alone, light); the full install is opensim-kit, with the website of a grid
 - change (packaging): dialog and podman-compose are recommended, not required: a light install of the tools (--no-install-recommends)
