@@ -11,7 +11,7 @@ The command line to set up and manage OpenSimulator, in bash. It asks the questi
 This will install OpenSimulator, OpenSim Engine and all required packages from official apt repository.
 
 ```bash
-curl -fsSL -o kickstart.sh https://raw.githubusercontent.com/GuduleLapointe/opensim-cli/refs/heads/dev/kickstart.sh
+curl -fsSL -O https://w4os.org/kickstart.sh
 chmod +x kickstart.sh
 sudo ./kickstart.sh --setup
 ```
@@ -24,12 +24,12 @@ See `./kickstart.sh --help` for other options:
 For instance, the tools alone from the test builds:
 
 ```bash
-curl -fsSL -o kickstart.sh https://raw.githubusercontent.com/GuduleLapointe/opensim-cli/refs/heads/dev/kickstart.sh
+curl -fsSL -O https://w4os.org/kickstart.sh
 chmod +x kickstart.sh
 sudo ./kickstart.sh --testing --tools
 ```
 
-The same in one line, for those who know the pipe form: `curl -fsSL <address of kickstart.sh> | sudo bash -s -- --testing --tools`.
+The same in one line, for those who know the pipe form: `curl -fsSL https://w4os.org/kickstart.sh | sudo bash -s -- --testing --tools`.
 
 See our [wiki](https://github.com/GuduleLapointe/opensim-cli/wiki) for detailed instructions.
 
