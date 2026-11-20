@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- change (packaging): dialog and podman-compose are recommended, not required: a light install of the tools (--no-install-recommends)
 - feature (import): `opensim import --accounts FILE --robust ROBUST_INI` makes the accounts in a grid this install does not manage, as the caller
 - feature (import): `opensim import --robust FILE [--simulator FILE...]` migrates the grid of another install, planned, applied disabled, then `--switch` once the old Robust is stopped
 - feature (import): `opensim import --accounts FILE GRID` makes the accounts of a list (CSV, JSON, YAML), the result with the passwords made kept for the caller only

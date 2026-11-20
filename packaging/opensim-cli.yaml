@@ -23,7 +23,6 @@ depends:
     - bash-tools
     - bsdextrautils | bsdmainutils
     - curl
-    - dialog
     - default-mysql-client | virtual-mysql-client
     - jq
     # The first engine with everything the CLI calls (8269052: setup files applied to a grid)
@@ -35,7 +34,6 @@ depends:
     - php-mbstring
     - php-mysql
     - php-xml
-    - podman-compose
     - sudo
 
 # opensim-tools, the approach before this one: the same command, the same services, never both. A server that has it keeps it, with
@@ -45,8 +43,12 @@ conflicts:
 replaces:
     - opensim-tools
 
+# What some commands need (a light install of the tools, --no-install-recommends, has the rest): the questions of the setup at a
+# terminal (dialog), the instances in containers (podman-compose)
 recommends:
     - default-mysql-server | virtual-mysql-server
+    - dialog
+    - podman-compose
     - uuid-runtime
 suggests:
     - opensim
