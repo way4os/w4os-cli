@@ -6,6 +6,7 @@
 #     curl -fsSL -O https://w4os.org/kickstart.sh
 #     chmod +x kickstart.sh && sudo ./kickstart.sh --setup
 #   or in one line: curl -fsSL https://w4os.org/kickstart.sh | sudo bash -s -- --setup
+#   The development branch (the test builds, --testing): https://w4os.org/kickstart-dev.sh
 #
 #   Or from a clone of the repository:
 #     git clone https://github.com/GuduleLapointe/opensim-cli.git && cd opensim-cli && ./kickstart.sh
