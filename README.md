@@ -119,6 +119,14 @@ opensim import --robust /opt/opensim/bin/Robust.HG.ini --simulator /opt/opensim/
 opensim import --robust /opt/opensim/bin/Robust.HG.ini --switch
 ```
 
+`opensim import --robust FILE --in-place [--simulator FILE...] [--name NAME] [--nick NICK] [--apply]` runs the grid of another install where it is, not migrated: only its section of the config of the suite (`[Grid <nick>]` of `/etc/opensim/opensim.conf`: its Robust config, its core, its simulators) is written, disabled; the install is never changed, and the suite runs it from its own files as any of its grids (`opensim enable`, `opensim start`), the settings of its helpers kept in that section. `--forget --apply` removes the section: the install is as it was.
+
+```bash
+opensim import --robust /opt/opensim/bin/Robust.HG.ini --in-place --simulator /opt/opensim/bin/OpenSim.ini --name welcome --apply
+opensim enable oldgrid && opensim start oldgrid
+opensim import --robust /opt/opensim/bin/Robust.HG.ini --forget --apply
+```
+
 `opensim import --accounts FILE GRID [--format csv|json|yaml] [--keep-going] [--result FILE] [--apply]` makes the accounts of a list in the grid GRID: CSV (first, last, email, password, with or without a header line), JSON or YAML (a list of objects with the same keys). The names the grid has are skipped, a line that cannot be used is told and left out, an account given no password gets one, and the first failure stops the others unless `--keep-going`. Without `--apply` it says what it would make. Once applied, the result (each account, and the passwords made here, never shown) is written for the caller only, mode 600: `--result FILE`, else `accounts-result-<date>.csv` in the current folder.
 
 ```bash

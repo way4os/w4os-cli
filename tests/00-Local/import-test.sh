@@ -341,3 +341,29 @@ function test_accounts_go_to_a_grid_this_install_does_not_manage_by_its_robust_c
 	assert_contains "would create   John Roe" "$plan"
 	assert_equals "accounts $(realpath "$robust") null" "$(jq -r '.data.attributes | "\(.kind) \(.robust) \(.grid)"' "$WORK/request.json")"
 }
+
+function test_an_existing_install_is_registered_in_place_or_forgotten() {
+	local api="$WORK/opensim-api" robust="$WORK/old/bin/Robust.HG.ini" sim="$WORK/old/bin/OpenSim.ini"
+	mkdir -p "$WORK/old/bin"
+	printf '[GridInfoService]\ngridnick = oldgrid\n' >"$robust"
+	printf '[Network]\nhttp_listener_port = 9100\n' >"$sim"
+	cat >"$api" <<-'API'
+	#!/usr/bin/env bash
+	cat >"$WORK/request.json"
+	jq -c '.data.attributes as $a | {data: {type: "imports", attributes: {kind: "robust", mode: $a.mode, inPlace: true, forget: ($a.forget // false), applied: ($a.mode == "apply"), grid: "oldgrid", config: "/etc/opensim/opensim.conf", section: {RobustIni: $a.file, CoreDirectory: "/old", Simulators: "welcome:/old/bin/OpenSim.ini"}, reminders: [{detail: "The grid is registered in place, disabled"}]}}}' "$WORK/request.json"
+	API
+	chmod +x "$api"
+	export WORK
+
+	local plan
+	plan=$(OPENSIM_API="$api" "$OPENSIM" import --robust "$robust" --in-place --simulator "$sim" --name welcome 2>&1)
+	assert_contains "Grid oldgrid in place: [Grid oldgrid] of /etc/opensim/opensim.conf" "$plan"
+	assert_contains "RobustIni = $(realpath "$robust")" "$plan"
+	assert_contains "Nothing was written" "$plan"
+	assert_equals "true false welcome" "$(jq -r '.data.attributes | "\(.inPlace) \(.forget) \(.simulators[0].name)"' "$WORK/request.json")"
+
+	local forgotten
+	forgotten=$(OPENSIM_API="$api" "$OPENSIM" import --robust "$robust" --forget --apply 2>&1)
+	assert_equals "true apply" "$(jq -r '.data.attributes | "\(.forget) \(.mode)"' "$WORK/request.json")"
+	assert_contains "Forgotten" "$forgotten"
+}

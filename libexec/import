@@ -7,7 +7,8 @@ USAGE="opensim import FILE [--apply]
        opensim import --simulator FILE [--simulator FILE...] GRID [--name NAME] [--core DIR] [--apply]
        opensim import --grid-settings FILE GRID [--apply]
        opensim import --accounts FILE GRID|--robust ROBUST_INI [--format csv|json|yaml] [--keep-going] [--result FILE] [--apply]
-       opensim import --robust FILE [--nick NICK] [--core DIR] [--simulator FILE...] [--apply] [--switch]"
+       opensim import --robust FILE [--nick NICK] [--core DIR] [--simulator FILE...] [--apply] [--switch]
+       opensim import --robust FILE --in-place [--nick NICK] [--simulator FILE...] [--name NAME] [--apply] | --forget [--apply]"
 HELP="Applies a setup file (JSON or YAML: the simulators of a grid of this machine, their regions with name, location, size, roles) to the grid it names, or brings a simulator of another install (its OpenSim.ini, or its file of opensim.d, and the regions it names) into the grid GRID of this machine. Its database is kept as it is (the same one, nothing is copied), its regions are copied with their UUID and their place, its ports and its own settings are kept. Without --apply, says what would be written and where, and writes nothing.
   FILE              a setup file: its simulators are made, or given its regions when the grid has them
   --simulator FILE  the config of a simulator of another install; several, planned together and checked between them (ports,
@@ -28,13 +29,16 @@ HELP="Applies a setup file (JSON or YAML: the simulators of a grid of this machi
                     same grid (its database kept as it is, so its accounts and its regions), its config made here with its own
                     settings kept, the old install never changed; --simulator brings its simulators in the same run, --nick
                     and --core when they are not the ones of its config and of this install
+  --in-place        the grid of another install run where it is, not migrated: only its section of the config of the suite
+                    ([Grid <nick>]: its Robust config, its core, its simulators) is written, disabled; the install is never
+                    changed; --name names its simulator (one), --forget removes the section
   --switch          once the old Robust is stopped: the grid and its simulators enabled and started here (with --apply, or
                     after it)
   --apply           write it (disabled: stop the old one, then opensim enable and opensim start the new one)"
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 
-files=() grid= name= core= mode=plan scripts=true settings= accounts= format= keep=false robust= nick= switch=false
+files=() grid= name= core= mode=plan scripts=true settings= accounts= format= keep=false robust= nick= switch=false inplace=false forget=false
 while (($#)); do
 	case "$1" in
 	--accounts)
@@ -63,6 +67,8 @@ while (($#)); do
 		;;
 	--nick=*) nick=${1#*=}; shift ;;
 	--switch) switch=true; shift ;;
+	--in-place) inplace=true; shift ;;
+	--forget) forget=true; shift ;;
 	--simulator)
 		(($# > 1)) || die "--simulator requires the config of the simulator"
 		files+=("$2")
@@ -98,6 +104,30 @@ while (($#)); do
 	esac
 done
 # A grid of another install, migrated: the same grid, its config made here, its simulators with it; switched once the old one is stopped
+# A grid of another install, run where it is: its section of the config of the suite planned, written, or removed
+if [[ -n "$robust" && -z "$accounts" ]] && [[ "$inplace" == true || "$forget" == true ]]; then
+	[[ -z "$grid$settings" ]] && { ((${#files[@]} <= 1)) || [[ -z "$name" ]]; } || die "usage: $USAGE"
+	[[ -r "$robust" ]] || die "cannot read $robust"
+	paths=()
+	for file in ${files[@]+"${files[@]}"}; do
+		[[ -r "$file" ]] || die "cannot read $file"
+		paths+=("$(realpath "$file")")
+	done
+	request=$(jq -cn --arg file "$(realpath "$robust")" --arg nick "$nick" --arg name "$name" --arg mode "$mode" --argjson forget "$forget" \
+		'{data: {type: "imports", attributes: ({kind: "robust", file: $file, mode: $mode, inPlace: true, forget: $forget, simulators: ($ARGS.positional | map({file: .} + (if $name != "" then {name: $name} else {} end)))} + (if $nick != "" then {nick: $nick} else {} end))}}' \
+		--args ${paths[@]+"${paths[@]}"})
+	reply=$(engine POST /setups/imports --data=- <<<"$request") || true
+	jq -e '.data.attributes' <<<"$reply" >/dev/null 2>&1 ||
+		die "$(jq -r 'if .detail then .detail else (.title // "the engine did not answer") end' <<<"$reply" 2>/dev/null || printf '%s' "$reply")"
+	jq -r '.data.attributes |
+		"Grid \(.grid) in place: [Grid \(.grid)] of \(.config)",
+		((.section // {}) | to_entries[] | "  \(.key) = \(.value)"),
+		"",
+		(if .forget then (if .applied then "Forgotten: the section is removed, the install is as it was." else "Nothing was removed: add --apply to forget it." end)
+		 elif .applied then "Written: the section of the grid, nothing else." else "Nothing was written: add --apply to write it." end),
+		((.reminders // [])[] | "- \(.detail)")' <<<"$reply"
+	exit
+fi
 if [[ -n "$robust" && -z "$accounts" ]]; then
 	[[ -z "$grid$settings$name" ]] || die "usage: $USAGE"
 	[[ -r "$robust" ]] || die "cannot read $robust"

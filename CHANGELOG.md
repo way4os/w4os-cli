@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- feature (import): `opensim import --robust FILE --in-place` runs the grid of another install where it is, its section of the config of the suite written alone; `--forget` removes it
 - doc: CONTAINERS.md, suggestions for Podman and Docker, not supported yet
 - new: `opensim oar pack|info|check|unpack`, the archives of regions of the caller
 - update: the bash completion knows every command, the grids, the disabled instances, the options of import, save, load, backup and oar
