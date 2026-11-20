@@ -307,3 +307,14 @@ function test_the_options_after_the_command_are_its_own() {
 	assert_contains "Save an inventory" "$("$OPENSIM" save -h 2>&1)"
 	assert_contains "Save an inventory" "$("$OPENSIM" save iar --help 2>&1)"
 }
+
+function test_version_tells_the_command_line_and_with_v_everything() {
+	local api="$WORK/opensim-api"
+	printf '#!/bin/sh\n[ "$1 $2" = "--version -v" ] && printf "%%-24s %%s\\n" opensim-engine 3.0.0-test PHP 8.4\n' >"$api"
+	chmod +x "$api"
+	assert_matches '^opensim-cli [^ ]+' "$(OPENSIM_API="$api" "$OPENSIM" --version 2>/dev/null)"
+	local all
+	all=$(OPENSIM_API="$api" "$OPENSIM" --version -v 2>/dev/null)
+	assert_contains "opensim-cli" "$all"
+	assert_matches "opensim-engine +3.0.0-test" "$all"
+}

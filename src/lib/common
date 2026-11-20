@@ -30,6 +30,17 @@ if [[ -r "$(dirname "$OPENSIM_API")/../lib/rc-helpers" ]]; then
 	source "$(dirname "$OPENSIM_API")/../lib/rc-helpers" && read_rc
 fi
 
+# The version of the command line: the package that installed it, else its git version in a clone, else the one being worked on
+cli_version() {
+	local version=
+	if [[ "$CLI_ROOT" == /usr/share/opensim-cli* ]] && command -v dpkg-query >/dev/null 2>&1; then
+		version=$(dpkg-query -W -f='${Version}' opensim-cli 2>/dev/null) || version=
+	fi
+	[[ -n "$version" || ! -e "$CLI_ROOT/.git" ]] || version=$(git -C "$CLI_ROOT" describe --tags --always --dirty 2>/dev/null) || version=
+	[[ -n "$version" || ! -f "$CLI_ROOT/.version" ]] || version="$(<"$CLI_ROOT/.version") (development)"
+	printf '%s\n' "${version:-unknown}"
+}
+
 # Ask the engine: engine POST /setups/quick --data=- < body
 engine() {
 	"$OPENSIM_API" "$@"

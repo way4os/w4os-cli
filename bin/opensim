@@ -34,6 +34,7 @@ HELP=$(
   install-dotnet  install the .NET runtime OpenSimulator needs
 
 System information
+  --version [-v]         the version of the command line; with -v, of everything that matters here (engine, helpers, site, cores)
   --layout --format=env  print the resolved layout and identities as shell exports
 USAGE
 )
@@ -62,6 +63,17 @@ done
 # $COMMAND and other runtime values are detected by lib/common
 . "$here/../src/lib/common" || die could not source opensim common helpers
 set -- "$@" ${command_args[@]+"${command_args[@]}"}
+
+# The version of the command line; with -v, of everything that matters on this machine (the engine tells the rest)
+if [[ " $* " == *" --version "* || " $* " == *" -V "* ]]; then
+	if [[ "${DEBUG:-}" == yes ]]; then
+		printf '%-24s %s\n' opensim-cli "$(cli_version)"
+		"$OPENSIM_API" --version -v
+	else
+		printf 'opensim-cli %s\n' "$(cli_version)"
+	fi
+	exit 0
+fi
 
 if [[ "${1:-}" == --layout ]]; then
 	shift

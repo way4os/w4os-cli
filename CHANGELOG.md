@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- new: `opensim --version`, and with -v the versions of everything that matters on the machine
 - feature (kickstart): `--testing` (the test builds, no development core unless `--unstable-core`), `--tools` (the command line and the engine alone, light); the full install is opensim-kit, with the website of a grid
 - change (packaging): dialog and podman-compose are recommended, not required: a light install of the tools (--no-install-recommends)
 - feature (import): `opensim import --accounts FILE --robust ROBUST_INI` makes the accounts in a grid this install does not manage, as the caller
