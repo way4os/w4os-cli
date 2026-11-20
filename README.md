@@ -32,6 +32,8 @@ See our [wiki](https://github.com/GuduleLapointe/opensim-cli/wiki) for detailed 
 
 To run the installer on an SSH server, download it locally first, then run `./kickstart.sh --remote root@server --setup`.
 
+Containers (Podman, Docker) are not supported yet: [CONTAINERS.md](CONTAINERS.md) has suggestions from the tests so far.
+
 ## Requirements
 
 - Bash 5+ (standard on Linux, `brew install bash` on macOS)
