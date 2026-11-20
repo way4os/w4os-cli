@@ -253,6 +253,8 @@ switch ($command) {
         exit(Commands::apiKey($engine, $args));
     case 'rest':
         exit(Commands::rest($args, $engine));
+    case 'oar':
+        exit(Commands::oar($args));
     case 'console':
         $name = $words[0] ?? '';
         $instance = $name === '' ? null : OpenSim::instance($engine, $name);

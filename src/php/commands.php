@@ -32,6 +32,53 @@ use OpenSim\Runtime\Environment;
 /** The local commands that use the engine's services and models. */
 final class Commands
 {
+    /**
+     * The archives of regions (OAR), the files of the caller: pack a folder, tell what an archive holds, check it, unpack it.
+     *
+     * @param list<string> $args pack DIR [FILE] | info FILE | check FILE | unpack FILE [DIR]
+     */
+    public static function oar(array $args): int
+    {
+        [$action, $source, $target] = array_pad(array_values($args), 3, null);
+        if (!in_array($action, ['pack', 'info', 'check', 'unpack'], true) || $source === null) {
+            fwrite(STDERR, "usage: opensim oar pack DIR [FILE] | info FILE | check FILE | unpack FILE [DIR]\n");
+
+            return 2;
+        }
+        try {
+            switch ($action) {
+                case 'pack':
+                    $dir = rtrim($source, '/');
+                    $target ??= preg_replace('/-src$/', '', $dir) . '.oar';
+                    \OpenSim\Archives\Oar::pack($dir, $target);
+                    echo "$target\n";
+
+                    return 0;
+                case 'info':
+                    foreach (\OpenSim\Archives\Oar::info($source) as $key => $value) {
+                        printf("%-16s %s\n", $key, is_array($value) ? implode('x', $value) : (is_bool($value) ? ($value ? 'yes' : 'no') : (string) ($value ?? '')));
+                    }
+
+                    return 0;
+                case 'check':
+                    $problems = \OpenSim\Archives\Oar::check($source);
+                    echo $problems === [] ? "ok\n" : implode("\n", $problems) . "\n";
+
+                    return $problems === [] ? 0 : 1;
+                default:
+                    $target ??= preg_replace('/\.oar$/', '', $source) . '-src';
+                    \OpenSim\Archives\Oar::unpack($source, $target);
+                    echo "$target\n";
+
+                    return 0;
+            }
+        } catch (\RuntimeException $error) {
+            fwrite(STDERR, 'opensim: error: ' . $error->getMessage() . "\n");
+
+            return 1;
+        }
+    }
+
     /** @param list<string> $args */
     public static function toggle(string $verb, Environment $environment, array $args): int
     {

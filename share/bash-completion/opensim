@@ -17,21 +17,78 @@ _opensim_instances()
   done | tr '[:upper:]' '[:lower:]' | sort -u
 }
 
+# Every instance, the disabled ones too (the configs of the grids and of their simulators)
+_opensim_all_instances()
+{
+  local etc dir file
+  for etc in $(_opensim_etc); do
+    for dir in "$etc"/grids/*/; do
+      [ -d "$dir" ] || continue
+      basename "$dir"
+      for file in "$dir"sims/*.ini; do
+        [ -e "$file" ] && basename "$file" .ini
+      done
+    done
+  done | tr '[:upper:]' '[:lower:]' | sort -u
+}
+
+# The nicks of the grids of this machine
+_opensim_grids()
+{
+  local etc dir
+  for etc in $(_opensim_etc); do
+    for dir in "$etc"/grids/*/; do
+      [ -d "$dir" ] && basename "$dir"
+    done
+  done | sort -u
+}
+
+# What follows an option that takes a file: the files
+_opensim_wants_file()
+{
+  case $1 in
+    --accounts|--robust|--simulator|--grid-settings|--result|--config|--prepare|--apply|--region-config|--output) return 0 ;;
+  esac
+  return 1
+}
+
 _opensim()
 {
-  local cur
+  local cur prev
   COMPREPLY=()
   cur=${COMP_WORDS[COMP_CWORD]}
+  prev=${COMP_WORDS[COMP_CWORD-1]}
   if [ "$COMP_CWORD" = 1 ]; then
-    COMPREPLY=( $(compgen -W "setup status ports start stop restart console screen enable disable web next ban save load backup restore api api-key rest install-dotnet" -- "$cur") )
+    COMPREPLY=( $(compgen -W "setup import region simulator settings posts status ports start stop restart console screen enable disable web next ban save load backup restore oar api api-key rest install-dotnet --version" -- "$cur") )
+    return
+  fi
+  if _opensim_wants_file "$prev"; then
+    COMPREPLY=( $(compgen -f -- "$cur") )
     return
   fi
   case ${COMP_WORDS[1]} in
+    --version)
+      COMPREPLY=( $(compgen -W "-v" -- "$cur") )
+      ;;
     setup)
       COMPREPLY=( $(compgen -W "--config --prepare --apply --region-config" -- "$cur") )
       ;;
+    import)
+      COMPREPLY=( $(compgen -W "$(_opensim_grids) --accounts --robust --simulator --grid-settings --name --core --nick --no-scripts --format --keep-going --result --switch --apply" -- "$cur") )
+      ;;
+    region|simulator)
+      if [ "$COMP_CWORD" = 2 ]; then
+        COMPREPLY=( $(compgen -W "add set" -- "$cur") )
+      else
+        COMPREPLY=( $(compgen -W "$(_opensim_grids) --apply" -- "$cur") )
+      fi
+      ;;
+    settings|posts)
+      [ "$COMP_CWORD" = 2 ] && COMPREPLY=( $(compgen -W "$(_opensim_grids)" -- "$cur") )
+      [ "$COMP_CWORD" -gt 2 ] && COMPREPLY=( $(compgen -W "--set delete" -- "$cur") )
+      ;;
     ports)
-      COMPREPLY=( $(compgen -W "$(_opensim_instances) --publish --ufw --private-address" -- "$cur") )
+      COMPREPLY=( $(compgen -W "$(_opensim_instances) --publish --ufw --private-address --from --manage-from" -- "$cur") )
       ;;
     start)
       COMPREPLY=( $(compgen -W "$(_opensim_instances) --simulators" -- "$cur") )
@@ -43,22 +100,48 @@ _opensim()
       [ "$COMP_CWORD" = 2 ] && COMPREPLY=( $(compgen -W "$(_opensim_instances)" -- "$cur") )
       ;;
     enable|disable)
-      COMPREPLY=( $(compgen -W "$(_opensim_instances) search economy profiles" -- "$cur") )
+      case $prev in
+        economy) COMPREPLY=( $(compgen -W "beta gloebit" -- "$cur") ) ;;
+        offline) COMPREPLY=( $(compgen -W "helpers robust" -- "$cur") ) ;;
+        *) COMPREPLY=( $(compgen -W "$(_opensim_all_instances) search economy profiles offline ossl-extended" -- "$cur") ) ;;
+      esac
       ;;
     web)
-      COMPREPLY=( $(compgen -W "$(_opensim_instances) show check snippet caddy nginx apache --grid --docroot --socket" -- "$cur") )
+      COMPREPLY=( $(compgen -W "$(_opensim_grids) show check snippet set api caddy nginx apache --grid --docroot --socket --port --web-group" -- "$cur") )
       ;;
     next)
-      COMPREPLY=( $(compgen -W "port location" -- "$cur") )
+      if [ "$COMP_CWORD" = 2 ]; then
+        COMPREPLY=( $(compgen -W "port $(_opensim_grids)" -- "$cur") )
+      elif [ "$COMP_CWORD" = 3 ] && [ "$prev" != port ]; then
+        COMPREPLY=( $(compgen -W "location" -- "$cur") )
+      else
+        COMPREPLY=( $(compgen -W "-e" -- "$cur") )
+      fi
       ;;
     ban)
-      COMPREPLY=( $(compgen -W "$(_opensim_instances) --output" -- "$cur") )
+      COMPREPLY=( $(compgen -W "$(_opensim_grids) --output" -- "$cur") )
       ;;
-    save|load)
-      COMPREPLY=( $(compgen -W "iar oar $(_opensim_instances)" -- "$cur") )
+    save)
+      COMPREPLY=( $(compgen -W "iar oar $(_opensim_instances) --keep --home --noassets --perm --skipbadassets --region --all --publish" -- "$cur") )
       ;;
-    backup|rest)
-      COMPREPLY=()
+    load)
+      COMPREPLY=( $(compgen -W "iar oar $(_opensim_instances) --merge --skip-assets --force-terrain --force-parcels --no-objects --displacement --rotation --default-user" -- "$cur") )
+      ;;
+    backup)
+      COMPREPLY=( $(compgen -W "$(_opensim_grids) --logs --archives --oars --output --keep --simulator" -- "$cur") )
+      ;;
+    oar)
+      if [ "$COMP_CWORD" = 2 ]; then
+        COMPREPLY=( $(compgen -W "pack info check unpack" -- "$cur") )
+      else
+        COMPREPLY=( $(compgen -f -- "$cur") )
+      fi
+      ;;
+    rest)
+      COMPREPLY=( $(compgen -W "$(_opensim_instances) --url --user --repl" -- "$cur") )
+      ;;
+    api)
+      COMPREPLY=( $(compgen -W "GET POST PATCH DELETE --data --grid" -- "$cur") )
       ;;
     api-key)
       COMPREPLY=( $(compgen -W "create list revoke" -- "$cur") )

@@ -318,3 +318,41 @@ function test_version_tells_the_command_line_and_with_v_everything() {
 	assert_contains "opensim-cli" "$all"
 	assert_matches "opensim-engine +3.0.0-test" "$all"
 }
+
+function test_oar_packs_reads_checks_and_unpacks_an_archive_of_regions() {
+	local src="$WORK/plaza-src"
+	mkdir -p "$src/assets" "$src/landdata" "$src/objects" "$src/settings" "$src/terrains"
+	printf '<?xml version="1.0" encoding="utf-8"?><archive major_version="0" minor_version="8"><creation_info><datetime>1700000000</datetime></creation_info><assets_included>False</assets_included><region_info><is_megaregion>False</is_megaregion><size_in_meters>256,256</size_in_meters></region_info></archive>' >"$src/archive.xml"
+	printf 'terrain' >"$src/terrains/Plaza.r32"
+	printf '<RegionSettings/>' >"$src/settings/Plaza.xml"
+
+	assert_contains "$WORK/plaza.oar" "$(cd "$WORK" && "$OPENSIM" oar pack "$src" 2>&1)"
+	assert_file_exists "$WORK/plaza.oar"
+	local info
+	info=$("$OPENSIM" oar info "$WORK/plaza.oar" 2>&1)
+	assert_contains "version" "$info"
+	assert_contains "256x256" "$info"
+	assert_exec "'$OPENSIM' oar check '$WORK/plaza.oar'" --exit 0 --stdout-contains "ok"
+	assert_contains "$WORK/out" "$("$OPENSIM" oar unpack "$WORK/plaza.oar" "$WORK/out" 2>&1)"
+	assert_file_exists "$WORK/out/terrains/Plaza.r32"
+	assert_exec "'$OPENSIM' oar" --exit 2 --stderr-contains "usage: opensim oar"
+}
+
+function test_completion_knows_every_command_and_the_grids() {
+	mkdir -p "$WORK/etc/opensim/grids/tender_tern/sims" "$WORK/etc/opensim/opensim.d"
+	touch "$WORK/etc/opensim/grids/tender_tern/sims/tender_tern.welcome.ini"
+	# shellcheck disable=SC1091
+	source "$(dirname "$OPENSIM")/../share/bash-completion/opensim"
+	local commands
+	commands=$(sed -n 's/^COMMANDOPTS=//p' "$OPENSIM" | tr ',' '\n' | sort)
+	COMP_WORDS=(opensim '') COMP_CWORD=1 OPENSIM_ETC_DIRS="$WORK/etc/opensim"
+	_opensim
+	assert_equals "$commands" "$(printf '%s\n' "${COMPREPLY[@]}" | grep -v -- '^--' | sort)"
+	COMP_WORDS=(opensim import '') COMP_CWORD=2
+	_opensim
+	assert_contains "tender_tern" "${COMPREPLY[*]}"
+	assert_contains "--accounts" "${COMPREPLY[*]}"
+	COMP_WORDS=(opensim enable '') COMP_CWORD=2
+	_opensim
+	assert_contains "tender_tern.welcome" "${COMPREPLY[*]}"
+}

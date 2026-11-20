@@ -72,7 +72,7 @@ Fully tested on:
 - [x] enable|disable <grid> economy [beta|gloebit] [<url prefix>]
 - [x] enable|disable <grid> profiles
 - [x] console|screen <instance>
-- [ ] command <instance> <text>|-
+- [ ] command <instance> <text>|- (not planned: `opensim rest`, the shortcuts such as `save oar` and `opensim console` do it)
 - [x] ports [instance...] [--ufw] [--private-address ADDRESS]
 
 `opensim ports` lists configured listeners and their TCP/UDP protocol. `--ufw` prints public firewall rules and comments for private/console ports.
@@ -140,7 +140,7 @@ opensim simulator add speculoos north --region "North Shore" --owner "Gudule Lap
 - [x] web [grid] snippet <caddy|nginx|apache>
 - [x] next <grid> location [X,Y] [COUNT] [-e X,Y]
 - [x] ban [grid] <name|uuid>... [--output DIR]
-- [x] settings GRID [PAGE] [--set NAME=VALUE...]: the settings pages of a grid (models, economy, search, guide, offline, assets), a secret masked, a database by its parts (`--set searchDatabase.host=...`)
+- [x] settings GRID [PAGE] [--set NAME=VALUE...]: the settings pages of a grid (models, economy, search, guide, offline, assets), a secret masked, a database by its parts (`--set searchDatabase.host=...`); a change says when the grid or the simulators must restart
 - [x] posts GRID [--author UUID] [--search WORDS] [--page N], posts delete GRID ID: the posts of the avatars of a grid (Flux)
 
 #### Archives and backups
@@ -158,7 +158,7 @@ opensim simulator add speculoos north --region "North Shore" --owner "Gudule Lap
 
 - [x] next port [-e PORT] [MIN] [COUNT]
 - [ ] profile list|add|default|remove
-- [ ] oar pack|info|check|unpack
+- [x] oar pack DIR [FILE] | info FILE | check FILE | unpack FILE [DIR]: the archives of regions, the files of the caller
 - [x] rest --url http://HOST:PORT --user USER (-- <command> | - | --repl)
 - [x] install-dotnet install the .NET runtime OpenSim needs (as root)
 

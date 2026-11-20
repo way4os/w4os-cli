@@ -5,7 +5,7 @@ set -e
 here=$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")
 libexec=$(cd "$here/../libexec" && pwd)
 
-COMMANDOPTS=setup,import,region,simulator,settings,posts,status,ports,start,stop,restart,console,screen,enable,disable,web,next,ban,save,load,backup,restore,api,api-key,rest,install-dotnet
+COMMANDOPTS=setup,import,region,simulator,settings,posts,status,ports,start,stop,restart,console,screen,enable,disable,web,next,ban,save,load,backup,restore,oar,api,api-key,rest,install-dotnet
 HELP=$(
 	cat <<USAGE
 
@@ -26,6 +26,7 @@ HELP=$(
   next            find free ports or region locations
   ban             prepare user cleanup and estate ban files
   save|load       save or restore IAR and OAR archives
+  oar             pack, read, check or unpack an archive of regions (OAR)
   backup          back up grid configuration, data, and databases
   restore         put a backup back on this machine (planned, --apply writes)
   api             ask the engine API of this machine (opensim api GET /grids)
@@ -157,6 +158,11 @@ import)
 		[[ "$argument" != --accounts* ]] || { import_accounts "$@"; exit; }
 	done
 	as_system_user "$libexec/import" "$@"
+	;;
+
+oar)
+	# The archives are the caller's files
+	"$libexec/$COMMAND" "$@"
 	;;
 
 install-dotnet)
