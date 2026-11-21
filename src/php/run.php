@@ -155,6 +155,8 @@ final class StdUi implements UiInterface
 function render(Status $status): string
 {
     $rows = [['INSTANCE', 'TYPE', 'PID', 'USER', '%CPU', '%MEM', 'RSS']];
+    // A Robust that runs but cannot read its database answers nothing that needs it: it is up, not working
+    $withoutDatabase = $status->withoutDatabase();
     foreach ($status->instances as $item) {
         $p = $item->process();
         $rows[] =
@@ -167,7 +169,7 @@ function render(Status $status): string
                     $p->user,
                     sprintf('%.1f', $p->cpu),
                     sprintf('%.1f', $p->memory),
-                    (string) $p->rss,
+                    (string) $p->rss . (in_array($item->name(), $withoutDatabase, true) ? '  [no database]' : ''),
                 ];
     }
     $widths = [];
@@ -185,7 +187,8 @@ function render(Status $status): string
         $text .= implode('', $cells) . "\n";
     }
     $t = $status->totals();
-    $line = $status->up() . ' up' . ($status->down() > 0 ? ', ' . $status->down() . ' down' : '');
+    $line = $status->up() . ' up' . ($status->down() > 0 ? ', ' . $status->down() . ' down' : '')
+        . ($withoutDatabase === [] ? '' : ', ' . count($withoutDatabase) . ' without its database (' . implode(', ', $withoutDatabase) . ')');
 
     return $text . sprintf("%s - cpu %.1f%% - mem %.1f%% - rss %d\n", $line, $t['cpu'], $t['memory'], $t['rss']);
 }
