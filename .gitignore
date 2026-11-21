@@ -1,31 +1,90 @@
-#*#
+## Common
+
 *~
+#*#
 \#*\#
+.DS_Store
 ._*
+.apdisk
 .#*
+**/.env
+.env
+.envrc
+.env.*
+.envrc.*
+!.env*.example
+*.backup
+node_modules/
 tmp/
 vendor/
-.env
-.env.*
-!.env.example
-tests/.env
-.bashunit/
-/build/
-/dist/
-.lerd.yaml
-.node-version
-*.log
-.DS_Store
 
-# AI assistants: personal instructions and settings
-AGENTS.md
+## Editors
+
+.codex/
+.crush/
+.crush.json
+.cursor/
+
+## AI-related
+
+.agents
+.claude
+.github/skills
+.gemini
+.github/copilot-instructions.md
+.junie
+.mcp.json
+.vibe
+.vscode
+.zed
+.phpactor.json
+phpunit.xml
 CLAUDE.md
 GEMINI.md
-.claude/
-.cursor/
-.gemini/
-.junie/
-.github/copilot-instructions.md
 opencode.json
+
+## Config
+
+# Do not ignore config/ in Laravel
+# config/**
+# !config/**example.*
+etc/**
+!etc/README.md
+.lerd.yaml
+auth.json
+deploy.*ml
+deploy.maml
+deploy.php
+herd.yml
+
+## Generated content
+
+.venv/
+venv/
+build/
+!/build/README.md
+__pycache__/
+
+## Data
+
+backups/**
+data/**
+!/data/.keep
+!/data/README.md
+logs/**
+storage/**
+.bashunit/**
+*.bak
+*.cache
+*.log
+*.pid
+*.pid.lock
+*.sql
+*.sqlite
+
+## Project
+
+/dist/
+.node-version
+AGENTS.md
 boost.json
-.mcp.json

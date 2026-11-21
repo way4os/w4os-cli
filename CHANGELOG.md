@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- update (git): .gitignore is the projects' template (macOS, editors, AI files, config, generated content, data) with this project's own rules after it
 - fix (packaging): the libraries and /usr/bin/opensim are links in the package whatever the machine that builds it has (nfpm took the mode of an existing target)
 - update (rename): the command line is w4os-cli, its command still opensim: the package w4os-cli in /usr/share/w4os-cli (opensim-cli an empty package that brings it), on w4os-engine and its API command w4os-api, the config of the suite /etc/w4os/w4os.conf, the repository way4os/w4os-cli, the composer name w4os/w4os-cli
 - feature (import): `opensim import --robust FILE --in-place` runs the grid of another install where it is, its section of the config of the suite written alone; `--forget` removes it
