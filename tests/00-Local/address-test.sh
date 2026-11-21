@@ -6,7 +6,7 @@
 
 OPENSIM="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/bin/opensim"
 
-PLANNED='{"data":{"type":"address","id":"demo","attributes":{"mode":"plan","from":{"host":"old.example.org","port":8002,"site":"http://10.0.0.5:8830"},"to":{"host":"dev.example.org","port":8002,"site":"http://site.example.org:8830"},"changes":[{"file":"/etc/opensim/grids/demo/Robust.HG.ini","line":3,"before":"    BaseHostname = \"old.example.org\"","after":"BaseHostname = \"dev.example.org\""}],"applied":false}}}'
+PLANNED='{"data":{"type":"address","id":"demo","attributes":{"mode":"plan","from":{"host":"old.example.org","port":8002,"site":"http://10.0.0.5:8830"},"to":{"host":"dev.example.org","port":8002,"site":"http://site.example.org:8830"},"changes":[{"file":"/etc/opensim/grids/demo/Robust.HG.ini","line":3,"before":"    BaseHostname = \"old.example.org\"","after":"BaseHostname = \"dev.example.org\""}],"rows":[{"database":"demo@localhost/demo","table":"UserAccounts","column":"ServiceURLs","before":"http://old.example.org:8002","after":"http://dev.example.org:8002","rows":11}],"applied":false}}}'
 APPLIED='{"data":{"type":"address","id":"demo","attributes":{"mode":"apply","from":{"host":"old.example.org","port":8002,"site":""},"to":{"host":"dev.example.org","port":8012,"site":""},"changes":[],"applied":true}},"meta":{"reminders":[{"code":"restart-grid","detail":"Grid restart is required: opensim restart demo."}]}}'
 REFUSED='{"type":"about:blank","title":"Invalid request","status":400,"detail":"the grid has this address already: give another host, port or site","code":"invalid-request"}'
 
@@ -52,6 +52,8 @@ function test_plans_the_change_by_default_and_shows_each_line() {
 	assert_contains "site: http://10.0.0.5:8830 -> http://site.example.org:8830" "$out"
 	assert_contains "/etc/opensim/grids/demo/Robust.HG.ini:3" "$out"
 	assert_contains '  + BaseHostname = "dev.example.org"' "$out"
+	assert_contains "In the databases:" "$out"
+	assert_contains "  UserAccounts.ServiceURLs (demo@localhost/demo): 11 rows, http://old.example.org:8002 -> http://dev.example.org:8002" "$out"
 	assert_contains "Nothing written: opensim address demo --host dev.example.org --site http://site.example.org:8830 --apply" "$out"
 }
 

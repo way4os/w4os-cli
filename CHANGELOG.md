@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- new (address): the plan shows the addresses the databases keep, each column with its rows
 - new (status): a running Robust that cannot read its database is marked [no database], and counted
 - new (address): opensim address GRID --host HOST --port PORT --site URL changes the address of a grid in every file of it, through the engine (POST /grids/{grid}/address): each line that would change first, --apply writes them and says what to restart
 - update (git): .gitignore is the projects' template (macOS, editors, AI files, config, generated content, data) with this project's own rules after it
