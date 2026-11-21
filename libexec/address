@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# opensim address: the address of a grid (its host, its public port, its web site) changed in every file of it, through the engine.
+
+USAGE="opensim address GRID [--host HOST] [--port PORT] [--site URL] [--apply]"
+HELP="Changes the address of the grid GRID at once in every file of it on this machine: its host and its public port (the login URI, host:port), its web site (http:// or https://), each given only when it changes. Robust's constants and ConsoleHost, the addresses under the old ones in the ini files of the grid and of its simulators, the regions' ExternalHostName (SYSTEMIP or the old host), the places of its list of destinations, setup.json, the web-server files. Without --apply, shows each line that would change and writes nothing; with it, writes them, then the grid and its simulators are restarted (opensim restart GRID --simulators)."
+
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+grid= host= port= site= mode=plan
+while (($#)); do
+	case "$1" in
+	--host | --port | --site)
+		(($# > 1)) || die "$1 requires a value (usage: $USAGE)"
+		printf -v "${1#--}" '%s' "$2"
+		shift 2
+		;;
+	--host=* | --port=* | --site=*)
+		name=${1%%=*}
+		printf -v "${name#--}" '%s' "${1#*=}"
+		shift
+		;;
+	--apply) mode=apply; shift ;;
+	-*) die "unknown option $1 (usage: $USAGE)" ;;
+	*)
+		[[ -z "$grid" ]] || die "usage: $USAGE"
+		grid=$1
+		shift
+		;;
+	esac
+done
+[[ -n "$grid" ]] || die "usage: $USAGE"
+[[ -n "$host$port$site" ]] || die "give the --host, the --port or the --site that changes (usage: $USAGE)"
+[[ -z "$port" || "$port" =~ ^[0-9]+$ ]] || die "--port takes a number, not $port"
+
+body=$(jq -cn --arg host "$host" --arg port "$port" --arg site "$site" --arg mode "$mode" '{data: {type: "address", attributes: (
+	{mode: $mode}
+	+ (if $host != "" then {host: $host} else {} end)
+	+ (if $port != "" then {port: ($port | tonumber)} else {} end)
+	+ (if $site != "" then {site: $site} else {} end))}}')
+reply=$(engine POST "/grids/$(jq -rn --arg v "$grid" '$v | @uri')/address" --data=- <<<"$body") || true
+why=$(jq -er 'select(.status? >= 400) | .detail // .title' <<<"$reply" 2>/dev/null) && die "$why"
+jq -e '.data.attributes' <<<"$reply" >/dev/null 2>&1 || die "the engine did not answer"
+
+jq -r '.data.attributes as $a
+	| "\($a.from.host):\($a.from.port) -> \($a.to.host):\($a.to.port)",
+	  "site: \(if $a.from.site == "" then "(none)" else $a.from.site end) -> \(if $a.to.site == "" then "(none)" else $a.to.site end)",
+	  "",
+	  (if ($a.changes | length) == 0 then "Nothing to change." else ($a.changes[] | "\(.file):\(.line)\n  - \(.before)\n  + \(.after)") end)' <<<"$reply"
+if [[ "$mode" == plan ]]; then
+	say ""
+	say "Nothing written: opensim address $grid${host:+ --host $host}${port:+ --port $port}${site:+ --site $site} --apply"
+else
+	jq -r '(.meta.reminders // [])[] | "- \(.detail)"' <<<"$reply"
+fi
