@@ -10,7 +10,7 @@ function set_up() {
     export HOME="$WORK" OPENSIM_SYSTEM_USER=nobody
     unset OPENSIM_CONF OPENSIM_RC
     mkdir -p "$WORK/bin" "$WORK/etc"
-    cat >"$WORK/.opensim.conf" <<-INI
+    cat >"$WORK/.w4os.conf" <<-INI
 	[Defaults]
 	EtcRoot = $WORK/etc
 	SystemUser = nobody

@@ -198,7 +198,7 @@ function test_tools_install_the_command_line_alone_without_what_it_recommends() 
 	install_packages() { printf '%s\n' "$*" >>"$calls"; }
 	opensim() { return 0; }
 	phase_tools >/dev/null
-	assert_equals '--no-install-recommends opensim-cli' "$(cat "$calls")"
+	assert_equals '--no-install-recommends w4os-cli' "$(cat "$calls")"
 }
 
 function test_apt_source_parser_accepts_multiword_options() {
@@ -293,7 +293,7 @@ function test_clone_install_requests_all_packages_when_cli_and_engine_are_instal
 	uname() { printf 'Linux\n'; }
 	dpkg-query() {
 		case "$*" in
-		*opensim-cli* | *opensim-engine*) printf 'installed\n' ;;
+		*w4os-cli* | *w4os-engine*) printf 'installed\n' ;;
 		*) return 1 ;;
 		esac
 	}

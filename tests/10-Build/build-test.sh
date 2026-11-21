@@ -14,7 +14,7 @@ function test_build_sh_produces_deb_and_zip() {
 
 	assert_exec "bash '$BUILD_SCRIPT' '$DEPLOY_STAGE' '$BUILD_ARTIFACTS'" \
 		'dev/build.sh should build and stage current packages'
-	assert_exec "test -s '$BUILD_ARTIFACTS/opensim-cli.zip'" \
+	assert_exec "test -s '$BUILD_ARTIFACTS/w4os-cli.zip'" \
 		'.zip package should be produced by this build'
 	assert_exec "test \$(find '$DEPLOY_STAGE/debs' -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d ' ') -eq 1" \
 		'the current OpenSim CLI .deb should be staged'

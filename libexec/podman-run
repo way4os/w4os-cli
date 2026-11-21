@@ -24,7 +24,7 @@ fi
 BASEDIR=$(cd $(dirname $0)/.. && pwd)
 log BASEDIR $BASEDIR
 SHAREDIR=$(cd $BASEDIR/share 2>/dev/null ||
-	cd /usr/share/opensim-cli/share 2>/dev/null && pwd) ||
+	cd /usr/share/w4os-cli/share 2>/dev/null && pwd) ||
 	exit 2
 log SHAREDIR $SHAREDIR
 log Images $SHAREDIR/podman/images

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Integration tests for opensim-cli
+# Integration tests for w4os-cli
 #
 # Run with: composer test
 #
@@ -14,7 +14,7 @@ function set_up() {
 	unset OPENSIM_CONF OPENSIM_RC
 	export OPENSIM_SYSTEM_USER=
 	mkdir -p "$WORK/bin" "$WORK/etc/opensim/opensim.d"
-	cat >"$WORK/.opensim.conf" <<-INI
+	cat >"$WORK/.w4os.conf" <<-INI
 		[Defaults]
 		EtcRoot = $WORK/etc/opensim
 		SystemUser =
@@ -53,7 +53,7 @@ function test_opensim_without_command_shows_usage() {
 }
 
 function test_layout_env_outputs_sourceable_system_and_current_identities() {
-	local api="$WORK/opensim-api" etc_real var_real logs_real
+	local api="$WORK/w4os-api" etc_real var_real logs_real
 	mkdir -p "$WORK/layout/etc-target" "$WORK/layout/var-target" "$WORK/layout/logs-target"
 	ln -s "$WORK/layout/etc-target" "$WORK/layout/etc-link"
 	ln -s "$WORK/layout/var-target" "$WORK/layout/var-link"
@@ -141,7 +141,7 @@ function test_web_prints_caddy_snippet() {
 
 function test_web_api_prints_the_pool_and_the_local_listener_of_the_engine_api() {
 	make_test_grid
-	assert_exec "'$OPENSIM' web tender_tern api caddy --port 8781" --stdout-contains '[opensim-api]'
+	assert_exec "'$OPENSIM' web tender_tern api caddy --port 8781" --stdout-contains '[w4os-api]'
 	assert_exec "'$OPENSIM' web tender_tern api caddy --port 8781" --stdout-contains 'http://127.0.0.1:8781'
 	assert_exec "'$OPENSIM' web tender_tern api nginx" --stdout-contains 'listen 127.0.0.1:8780;'
 	assert_exec "'$OPENSIM' web tender_tern api nginx" --stdout-contains 'api_url http://127.0.0.1:8780/api'
@@ -281,7 +281,7 @@ INI
 }
 
 function test_api_asks_the_engine_and_gives_its_answer() {
-	local api="$WORK/opensim-api"
+	local api="$WORK/w4os-api"
 	printf '#!/bin/sh\necho "engine $*"\n' >"$api"
 	chmod +x "$api"
 	assert_exec "OPENSIM_API='$api' '$OPENSIM' api GET /grids --grid=demo" \
@@ -289,7 +289,7 @@ function test_api_asks_the_engine_and_gives_its_answer() {
 }
 
 function test_verbose_and_quiet_reach_the_engine() {
-	local api="$WORK/opensim-api"
+	local api="$WORK/w4os-api"
 	printf '#!/bin/sh\necho "DEBUG=$DEBUG QUIET=$QUIET"\n' >"$api"
 	chmod +x "$api"
 	assert_contains "DEBUG=yes" "$(OPENSIM_API="$api" "$OPENSIM" -v api GET /layout 2>&1)"
@@ -297,7 +297,7 @@ function test_verbose_and_quiet_reach_the_engine() {
 }
 
 function test_the_options_after_the_command_are_its_own() {
-	local api="$WORK/opensim-api"
+	local api="$WORK/w4os-api"
 	printf '#!/bin/sh\necho "engine $*"\n' >"$api"
 	chmod +x "$api"
 	# -h and -v of the archives of OpenSimulator (the home URL, verbose) are not the help nor the verbose of the command line
@@ -309,14 +309,14 @@ function test_the_options_after_the_command_are_its_own() {
 }
 
 function test_version_tells_the_command_line_and_with_v_everything() {
-	local api="$WORK/opensim-api"
-	printf '#!/bin/sh\n[ "$1 $2" = "--version -v" ] && printf "%%-24s %%s\\n" opensim-engine 3.0.0-test PHP 8.4\n' >"$api"
+	local api="$WORK/w4os-api"
+	printf '#!/bin/sh\n[ "$1 $2" = "--version -v" ] && printf "%%-24s %%s\\n" w4os-engine 3.0.0-test PHP 8.4\n' >"$api"
 	chmod +x "$api"
-	assert_matches '^opensim-cli [^ ]+' "$(OPENSIM_API="$api" "$OPENSIM" --version 2>/dev/null)"
+	assert_matches '^w4os-cli [^ ]+' "$(OPENSIM_API="$api" "$OPENSIM" --version 2>/dev/null)"
 	local all
 	all=$(OPENSIM_API="$api" "$OPENSIM" --version -v 2>/dev/null)
-	assert_contains "opensim-cli" "$all"
-	assert_matches "opensim-engine +3.0.0-test" "$all"
+	assert_contains "w4os-cli" "$all"
+	assert_matches "w4os-engine +3.0.0-test" "$all"
 }
 
 function test_oar_packs_reads_checks_and_unpacks_an_archive_of_regions() {

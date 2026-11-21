@@ -5,9 +5,9 @@ BOOTSTRAP="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/bootstrap.sh"
 function set_up() {
 	WORK=$(mktemp -d)
 	local project=$WORK/project
-	mkdir -p "$project/tests" "$project/vendor/magicoli/opensim-engine/lib" "$WORK/home"
+	mkdir -p "$project/tests" "$project/vendor/w4os/w4os-engine/lib" "$WORK/home"
 	cp "$BOOTSTRAP" "$project/tests/bootstrap.sh"
-	cat >"$project/vendor/magicoli/opensim-engine/lib/rc-helpers" <<'HELPERS'
+	cat >"$project/vendor/w4os/w4os-engine/lib/rc-helpers" <<'HELPERS'
 read_rc() {
 	local file
 	for file in "$1/.env" "${OPENSIM_RC:-$HOME/.opensimrc}"; do

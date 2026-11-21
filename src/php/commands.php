@@ -4,30 +4,30 @@ declare(strict_types=1);
 
 namespace OpenSimCli;
 
-use OpenSim\Archives\ArchiveRunner;
-use OpenSim\Archives\BackupService;
-use OpenSim\Archives\DatabaseDump;
-use OpenSim\Archives\OarBackup;
-use OpenSim\Archives\Rotation;
-use OpenSim\Config\GridConfig;
-use OpenSim\Console\InstanceConsoleService;
-use OpenSim\Data\Connections;
-use OpenSim\Models\Avatar;
-use OpenSim\Models\Estate;
-use OpenSim\Models\Grid;
-use OpenSim\Network\Ports;
-use OpenSim\Provisioning\DatabaseService;
-use OpenSim\Provisioning\GridOptions;
-use OpenSim\Provisioning\GridRegistry;
-use OpenSim\Provisioning\LocationFinder;
-use OpenSim\Provisioning\NullUi;
-use OpenSim\Provisioning\Places;
-use OpenSim\Provisioning\Slug;
-use OpenSim\Provisioning\Web\HelpersConfig;
-use OpenSim\Provisioning\Web\Services;
-use OpenSim\Provisioning\Web\SitePages;
-use OpenSim\Provisioning\Web\Snippets;
-use OpenSim\Runtime\Environment;
+use W4OS\Engine\Archives\ArchiveRunner;
+use W4OS\Engine\Archives\BackupService;
+use W4OS\Engine\Archives\DatabaseDump;
+use W4OS\Engine\Archives\OarBackup;
+use W4OS\Engine\Archives\Rotation;
+use W4OS\Engine\Config\GridConfig;
+use W4OS\Engine\Console\InstanceConsoleService;
+use W4OS\Engine\Data\Connections;
+use W4OS\Engine\Models\Avatar;
+use W4OS\Engine\Models\Estate;
+use W4OS\Engine\Models\Grid;
+use W4OS\Engine\Network\Ports;
+use W4OS\Engine\Provisioning\DatabaseService;
+use W4OS\Engine\Provisioning\GridOptions;
+use W4OS\Engine\Provisioning\GridRegistry;
+use W4OS\Engine\Provisioning\LocationFinder;
+use W4OS\Engine\Provisioning\NullUi;
+use W4OS\Engine\Provisioning\Places;
+use W4OS\Engine\Provisioning\Slug;
+use W4OS\Engine\Provisioning\Web\HelpersConfig;
+use W4OS\Engine\Provisioning\Web\Services;
+use W4OS\Engine\Provisioning\Web\SitePages;
+use W4OS\Engine\Provisioning\Web\Snippets;
+use W4OS\Engine\Runtime\Environment;
 
 /** The local commands that use the engine's services and models. */
 final class Commands
@@ -50,24 +50,24 @@ final class Commands
                 case 'pack':
                     $dir = rtrim($source, '/');
                     $target ??= preg_replace('/-src$/', '', $dir) . '.oar';
-                    \OpenSim\Archives\Oar::pack($dir, $target);
+                    \W4OS\Engine\Archives\Oar::pack($dir, $target);
                     echo "$target\n";
 
                     return 0;
                 case 'info':
-                    foreach (\OpenSim\Archives\Oar::info($source) as $key => $value) {
+                    foreach (\W4OS\Engine\Archives\Oar::info($source) as $key => $value) {
                         printf("%-16s %s\n", $key, is_array($value) ? implode('x', $value) : (is_bool($value) ? ($value ? 'yes' : 'no') : (string) ($value ?? '')));
                     }
 
                     return 0;
                 case 'check':
-                    $problems = \OpenSim\Archives\Oar::check($source);
+                    $problems = \W4OS\Engine\Archives\Oar::check($source);
                     echo $problems === [] ? "ok\n" : implode("\n", $problems) . "\n";
 
                     return $problems === [] ? 0 : 1;
                 default:
                     $target ??= preg_replace('/\.oar$/', '', $source) . '-src';
-                    \OpenSim\Archives\Oar::unpack($source, $target);
+                    \W4OS\Engine\Archives\Oar::unpack($source, $target);
                     echo "$target\n";
 
                     return 0;
@@ -170,7 +170,7 @@ final class Commands
      */
     public static function apiKey(Environment $environment, array $args): int
     {
-        $keys = \OpenSim\Security\ApiKeys::for($environment);
+        $keys = \W4OS\Engine\Security\ApiKeys::for($environment);
         $action = $args[0] ?? '';
         $what = trim(implode(' ', array_slice($args, 1)));
         if ($action === 'create' && $what !== '') {
@@ -494,13 +494,13 @@ final class Commands
             $file = (string) (realpath($options['simulator']) ?: $options['simulator']);
             if (!is_readable($file)) return self::error('backup', "cannot read $file", 2);
             try {
-                $raw = \OpenSim\Config\ConfigReader::load($file, [], false, true);
-                $backup = \OpenSim\Archives\SourceBackup::prepare(
+                $raw = \W4OS\Engine\Config\ConfigReader::load($file, [], false, true);
+                $backup = \W4OS\Engine\Archives\SourceBackup::prepare(
                     $environment,
                     $file,
                     $refs[0] ?? 'source',
-                    \OpenSim\Provisioning\Import\SimulatorImporter::name($raw, $file),
-                    \OpenSim\Provisioning\Import\SimulatorImporter::regionFiles($raw, $file),
+                    \W4OS\Engine\Provisioning\Import\SimulatorImporter::name($raw, $file),
+                    \W4OS\Engine\Provisioning\Import\SimulatorImporter::regionFiles($raw, $file),
                 );
                 fwrite(STDOUT, $backup->write() . "\n");
                 return 0;
@@ -550,12 +550,12 @@ final class Commands
         if ($engine !== null && isset($args[0]) && !str_starts_with($args[0], '-')) {
             $name = (string) array_shift($args);
             $line = implode(' ', ($args[0] ?? '') === '--' ? array_slice($args, 1) : $args);
-            $instance = \OpenSim\OpenSim::instance($engine, $name);
+            $instance = \W4OS\Engine\OpenSim::instance($engine, $name);
             if ($instance === null || $line === '') {
                 return self::error('rest', $instance === null ? "no instance called $name" : 'usage: opensim rest INSTANCE -- COMMAND');
             }
             $console = $instance->console();
-            if (!$console instanceof \OpenSim\Console\RestConsole) {
+            if (!$console instanceof \W4OS\Engine\Console\RestConsole) {
                 return self::error('rest', "$name has no remote console: opensim console $name");
             }
             $lines = $console->lines([$line]);
@@ -563,7 +563,7 @@ final class Commands
                 return self::error('rest', "$name does not answer on its remote console: is it running?");
             }
             foreach ($lines as $text) {
-                echo \OpenSim\Text\Secrets::mask((string) $text), "\n";
+                echo \W4OS\Engine\Text\Secrets::mask((string) $text), "\n";
             }
 
             return 0;

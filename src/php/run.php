@@ -19,13 +19,13 @@ declare(strict_types=1);
 ini_set('display_errors', 'stderr');
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED);
 
-use OpenSim\Console\RestConsole;
-use OpenSim\Exceptions\InstanceFailed;
-use OpenSim\OpenSim;
-use OpenSim\Provisioning\UiInterface;
-use OpenSim\Runtime\DotnetInstaller;
-use OpenSim\Runtime\PendingReporterInterface;
-use OpenSim\Runtime\Status;
+use W4OS\Engine\Console\RestConsole;
+use W4OS\Engine\Exceptions\InstanceFailed;
+use W4OS\Engine\OpenSim;
+use W4OS\Engine\Provisioning\UiInterface;
+use W4OS\Engine\Runtime\DotnetInstaller;
+use W4OS\Engine\Runtime\PendingReporterInterface;
+use W4OS\Engine\Runtime\Status;
 use OpenSimCli\Commands;
 
 foreach ([__DIR__ . '/../../vendor/autoload.php', __DIR__ . '/../../../../autoload.php'] as $autoload) {
@@ -206,7 +206,7 @@ $args = array_slice($argv, 1);
 $command = array_shift($args) ?? '';
 // The user the instances run as, empty when the install has none (the commands then run as whoever calls them)
 if ($command === 'system-user') {
-    echo \OpenSim\Config\Layout::resolve()->systemUser(), "\n";
+    echo \W4OS\Engine\Config\Layout::resolve()->systemUser(), "\n";
     exit(0);
 }
 $simulators = in_array('--simulators', $args, true) || in_array('--sims', $args, true);

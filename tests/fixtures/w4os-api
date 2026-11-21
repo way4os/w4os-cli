@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A stand-in for opensim-api that replays canned replies: the n-th call gets the n-th file of $ENGINE_REPLIES (1.json, 2.json...), and the
+# A stand-in for w4os-api that replays canned replies: the n-th call gets the n-th file of $ENGINE_REPLIES (1.json, 2.json...), and the
 # requests it gets are logged, one JSON document a line, in $ENGINE_LOG; its arguments, one call a line, in $ENGINE_CALLS when it is set.
 dir=${ENGINE_REPLIES:?}
 [[ -n "${ENGINE_CALLS:-}" ]] && printf '%s\n' "$*" >>"$ENGINE_CALLS"

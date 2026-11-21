@@ -1,6 +1,6 @@
 # What the commands share: bash-tools, the engine and the rc file. Sourced by the commands, not run.
 #
-# The rules and the work are the engine's (opensim-api): this tool shows the questions, gives the answers to the engine and shows what
+# The rules and the work are the engine's (w4os-api): this tool shows the questions, gives the answers to the engine and shows what
 # it says. bash-tools and the engine are dependencies (composer, or the packages that link them in vendor/magicoli), found in vendor/
 # of this project; OPENSIM_API names another engine, which is how the tests use a stand-in.
 
@@ -20,7 +20,7 @@ unset _helpers
 [[ "${DEBUG:-}" != yes ]] || export DEBUG
 [[ "${QUIET:-}" != yes ]] || export QUIET
 
-OPENSIM_API=${OPENSIM_API:-$CLI_ROOT/vendor/magicoli/opensim-engine/bin/opensim-api}
+OPENSIM_API=${OPENSIM_API:-$CLI_ROOT/vendor/w4os/w4os-engine/bin/w4os-api}
 [[ -x "$OPENSIM_API" ]] || die "The engine is not installed (composer install in $CLI_ROOT)"
 require jq
 
@@ -33,8 +33,8 @@ fi
 # The version of the command line: the package that installed it, else its git version in a clone, else the one being worked on
 cli_version() {
 	local version=
-	if [[ "$CLI_ROOT" == /usr/share/opensim-cli* ]] && command -v dpkg-query >/dev/null 2>&1; then
-		version=$(dpkg-query -W -f='${Version}' opensim-cli 2>/dev/null) || version=
+	if [[ "$CLI_ROOT" == /usr/share/w4os-cli* ]] && command -v dpkg-query >/dev/null 2>&1; then
+		version=$(dpkg-query -W -f='${Version}' w4os-cli 2>/dev/null) || version=
 	fi
 	[[ -n "$version" || ! -e "$CLI_ROOT/.git" ]] || version=$(git -C "$CLI_ROOT" describe --tags --always --dirty 2>/dev/null) || version=
 	[[ -n "$version" || ! -f "$CLI_ROOT/.version" ]] || version="$(<"$CLI_ROOT/.version") (development)"

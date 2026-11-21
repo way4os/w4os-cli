@@ -63,7 +63,7 @@ if ! GIT_CEILING_DIRECTORIES="$WORK" DIRTY=1 ./dev/build.sh >"$WORK/build.log" 2
 	exit 1
 fi
 
-cli_deb=$(find dist -maxdepth 1 -type f -name 'opensim-cli_*.deb' -size +0c -print -quit)
+cli_deb=$(find dist -maxdepth 1 -type f -name 'w4os-cli_*.deb' -size +0c -print -quit)
 cli_zip=$(find dist -maxdepth 1 -type f -name '*.zip' -size +0c -print -quit)
 [[ -n "$cli_deb" && -n "$cli_zip" ]] || {
 	cat "$WORK/build.log"
@@ -71,7 +71,7 @@ cli_zip=$(find dist -maxdepth 1 -type f -name '*.zip' -size +0c -print -quit)
 	exit 1
 }
 cp "$cli_deb" "$DEPLOY_STAGE/debs/"
-cp "$cli_zip" "$ARTIFACT_STAGE/opensim-cli.zip"
+cp "$cli_zip" "$ARTIFACT_STAGE/w4os-cli.zip"
 cp "$OPENSIM_ROOT/kickstart.sh" "$DEPLOY_STAGE/kickstart.sh"
 
 [[ $(find "$DEPLOY_STAGE/debs" -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d ' ') == 1 ]]

@@ -9,7 +9,7 @@
 #   The development branch (the test builds, --testing): https://w4os.org/kickstart-dev.sh
 #
 #   Or from a clone of the repository:
-#     git clone https://github.com/GuduleLapointe/opensim-cli.git && cd opensim-cli && ./kickstart.sh
+#     git clone https://github.com/way4os/w4os-cli.git && cd w4os-cli && ./kickstart.sh
 #     ./kickstart.sh --remote root@server --setup
 #     ./kickstart.sh --podman
 #
@@ -151,7 +151,7 @@ for repository in "${APT_REPOSITORIES[@]}"; do
 		exit 1
 	fi
 done
-# What the tools need on a machine that does not have the packages (a clone): the dependencies of the package opensim-cli
+# What the tools need on a machine that does not have the packages (a clone): the dependencies of the package w4os-cli
 PHP_PACKAGES=(php-cli php-curl php-intl php-mbstring php-mysql php-xml)
 # opensim-kit: the command line, the engine, the website of a grid (w4os-site, with the helpers), the latest core and its essential
 # modules, a database server
@@ -349,8 +349,8 @@ run_podman_install() {
 		source_dir=$(cd -- "$(dirname -- "$source_script")" && pwd)
 		if [[ -x "$source_dir/vendor/bin/container-tools" ]]; then
 			CONTAINER_TOOLS_CLI_SELECTED=$source_dir/vendor/bin/container-tools
-		elif [[ -x /usr/share/opensim-cli/vendor/bin/container-tools ]]; then
-			CONTAINER_TOOLS_CLI_SELECTED=/usr/share/opensim-cli/vendor/bin/container-tools
+		elif [[ -x /usr/share/w4os-cli/vendor/bin/container-tools ]]; then
+			CONTAINER_TOOLS_CLI_SELECTED=/usr/share/w4os-cli/vendor/bin/container-tools
 		elif command -v container-tools >/dev/null 2>&1; then
 			CONTAINER_TOOLS_CLI_SELECTED=$(command -v container-tools)
 		else
@@ -445,8 +445,8 @@ bootstrap_podman_manager() {
 	else
 		configure_package_sources || return $?
 		# The controller needs the engine and CLI, without a local SQL server or OpenSimulator core.
-		install_packages --no-install-recommends opensim-cli container-tools || return $?
-		SETUP_CLI_SELECTED=/usr/share/opensim-cli/bin/opensim
+		install_packages --no-install-recommends w4os-cli container-tools || return $?
+		SETUP_CLI_SELECTED=/usr/share/w4os-cli/bin/opensim
 	fi
 }
 
@@ -551,7 +551,7 @@ database_server_installed() {
 }
 
 apt_accessible_local_repository() {
-	local source=$1 mirror_root=/var/cache/opensim-cli/local-repositories mirror_key mirror
+	local source=$1 mirror_root=/var/cache/w4os-cli/local-repositories mirror_key mirror
 	local -a packages
 	if command -v runuser >/dev/null 2>&1 && as_root runuser -u _apt -- test -r "$source/Packages.gz"; then
 		printf '%s\n' "$source"
@@ -1079,7 +1079,7 @@ phase_opensim() {
 # The command line and the engine alone, without what they recommend: no core, no database server, no website
 phase_tools() {
 	configure_package_sources || return $?
-	install_packages --no-install-recommends opensim-cli || die "could not install the tools"
+	install_packages --no-install-recommends w4os-cli || die "could not install the tools"
 	say "Ready: the opensim command and the engine."
 	say "The accounts of a list into a grid installed otherwise: opensim import --accounts FILE --robust /path/to/Robust.HG.ini"
 }

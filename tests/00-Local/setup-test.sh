@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# opensim setup, with a stand-in for the engine (tests/fixtures/opensim-api) that replays screens: the loop draws a screen, sends it back
+# opensim setup, with a stand-in for the engine (tests/fixtures/w4os-api) that replays screens: the loop draws a screen, sends it back
 # filled with the button pressed, and does the action it gets. What the screens say is the engine's business, tested there.
 #
 # Run with: composer test
@@ -23,7 +23,7 @@ function set_up() {
 	export OPENSIM_SYSTEM_USER=
 	unset OPENSIM_CONF OPENSIM_RC OPENSIM_DB_HOST OPENSIM_DB_USER OPENSIM_DB_PASS OPENSIM_DB_ADMIN_USER OPENSIM_DB_ADMIN_PASS
 	mkdir -p "$WORK/etc"
-	cat >"$WORK/.opensim.conf" <<-INI
+	cat >"$WORK/.w4os.conf" <<-INI
 		[Defaults]
 		EtcRoot = $WORK/etc
 		SystemUser =
@@ -31,9 +31,9 @@ function set_up() {
 	local fixtures
 	fixtures="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/fixtures"
 	mkdir -p "$WORK/engine/bin" "$WORK/engine/lib"
-	ln -s "$fixtures/opensim-api" "$WORK/engine/bin/opensim-api"
-	cp "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../vendor/magicoli/opensim-engine/lib" && pwd)/rc-helpers" "$WORK/engine/lib/rc-helpers"
-	export OPENSIM_API="$WORK/engine/bin/opensim-api"
+	ln -s "$fixtures/w4os-api" "$WORK/engine/bin/w4os-api"
+	cp "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../vendor/w4os/w4os-engine/lib" && pwd)/rc-helpers" "$WORK/engine/lib/rc-helpers"
+	export OPENSIM_API="$WORK/engine/bin/w4os-api"
 	export ENGINE_REPLIES="$WORK/replies" ENGINE_LOG="$WORK/requests"
 	mkdir -p "$ENGINE_REPLIES"
 }

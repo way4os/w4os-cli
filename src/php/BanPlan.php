@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace OpenSimCli;
 
-use OpenSim\Config\GridConfig;
-use OpenSim\Exceptions\ChannelUnavailable;
-use OpenSim\Models\Avatar;
-use OpenSim\Models\Estate;
+use W4OS\Engine\Config\GridConfig;
+use W4OS\Engine\Exceptions\ChannelUnavailable;
+use W4OS\Engine\Models\Avatar;
+use W4OS\Engine\Models\Estate;
 
 /** Builds reviewable SQL and user reports without changing grid databases. */
 final class BanPlan

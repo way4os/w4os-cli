@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# opensim import, with a stand-in for the engine (tests/fixtures/opensim-api): what is asked of the engine, and what its answer shows.
+# opensim import, with a stand-in for the engine (tests/fixtures/w4os-api): what is asked of the engine, and what its answer shows.
 # What an import does is the engine's business, tested there.
 #
 # Run with: composer test
@@ -15,7 +15,7 @@ function set_up() {
 	# What the caller's environment says of the databases is not the test's
 	unset OPENSIM_CONF OPENSIM_RC OPENSIM_DB_ADMIN_USER OPENSIM_DB_ADMIN_PASS OPENSIM_DB_HOST OPENSIM_DB_PORT OPENSIM_DB_NAME OPENSIM_DB_USER OPENSIM_DB_PASS
 	mkdir -p "$WORK/etc"
-	cat >"$WORK/.opensim.conf" <<-INI
+	cat >"$WORK/.w4os.conf" <<-INI
 		[Defaults]
 		EtcRoot = $WORK/etc
 		SystemUser =
@@ -23,9 +23,9 @@ function set_up() {
 	local fixtures
 	fixtures="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/fixtures"
 	mkdir -p "$WORK/engine/bin" "$WORK/engine/lib" "$WORK/replies"
-	ln -s "$fixtures/opensim-api" "$WORK/engine/bin/opensim-api"
-	cp "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../vendor/magicoli/opensim-engine/lib" && pwd)/rc-helpers" "$WORK/engine/lib/rc-helpers"
-	export OPENSIM_API="$WORK/engine/bin/opensim-api" ENGINE_REPLIES="$WORK/replies" ENGINE_LOG="$WORK/requests"
+	ln -s "$fixtures/w4os-api" "$WORK/engine/bin/w4os-api"
+	cp "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../vendor/w4os/w4os-engine/lib" && pwd)/rc-helpers" "$WORK/engine/lib/rc-helpers"
+	export OPENSIM_API="$WORK/engine/bin/w4os-api" ENGINE_REPLIES="$WORK/replies" ENGINE_LOG="$WORK/requests"
 	printf '[Network]\nhttp_listener_port = 9250\n' >"$WORK/redoutable.ini"
 }
 
@@ -267,7 +267,7 @@ function test_restores_an_archive_by_its_id_with_apply_and_says_why_the_engine_r
 
 
 function test_accounts_are_sent_from_the_list_of_the_caller_and_the_result_kept_for_them_only() {
-	local api="$WORK/opensim-api" list="$WORK/list.csv"
+	local api="$WORK/w4os-api" list="$WORK/list.csv"
 	printf 'first,last\nJohn,Roe\n' >"$list"
 	cat >"$api" <<-'API'
 	#!/usr/bin/env bash
@@ -296,7 +296,7 @@ function test_accounts_are_sent_from_the_list_of_the_caller_and_the_result_kept_
 }
 
 function test_a_grid_of_another_install_is_migrated_planned_applied_switched() {
-	local api="$WORK/opensim-api" robust="$WORK/old/bin/Robust.HG.ini" sim="$WORK/old/bin/OpenSim.ini"
+	local api="$WORK/w4os-api" robust="$WORK/old/bin/Robust.HG.ini" sim="$WORK/old/bin/OpenSim.ini"
 	mkdir -p "$WORK/old/bin"
 	printf '[GridInfoService]\ngridnick = oldgrid\n' >"$robust"
 	printf '[Network]\nhttp_listener_port = 9100\n' >"$sim"
@@ -324,7 +324,7 @@ function test_a_grid_of_another_install_is_migrated_planned_applied_switched() {
 }
 
 function test_accounts_go_to_a_grid_this_install_does_not_manage_by_its_robust_config() {
-	local api="$WORK/opensim-api" list="$WORK/list.csv" robust="$WORK/elsewhere/Robust.HG.ini"
+	local api="$WORK/w4os-api" list="$WORK/list.csv" robust="$WORK/elsewhere/Robust.HG.ini"
 	mkdir -p "$WORK/elsewhere"
 	printf '[GridInfoService]\ngridnick = faraway\n' >"$robust"
 	printf 'John,Roe\n' >"$list"
@@ -343,21 +343,21 @@ function test_accounts_go_to_a_grid_this_install_does_not_manage_by_its_robust_c
 }
 
 function test_an_existing_install_is_registered_in_place_or_forgotten() {
-	local api="$WORK/opensim-api" robust="$WORK/old/bin/Robust.HG.ini" sim="$WORK/old/bin/OpenSim.ini"
+	local api="$WORK/w4os-api" robust="$WORK/old/bin/Robust.HG.ini" sim="$WORK/old/bin/OpenSim.ini"
 	mkdir -p "$WORK/old/bin"
 	printf '[GridInfoService]\ngridnick = oldgrid\n' >"$robust"
 	printf '[Network]\nhttp_listener_port = 9100\n' >"$sim"
 	cat >"$api" <<-'API'
 	#!/usr/bin/env bash
 	cat >"$WORK/request.json"
-	jq -c '.data.attributes as $a | {data: {type: "imports", attributes: {kind: "robust", mode: $a.mode, inPlace: true, forget: ($a.forget // false), applied: ($a.mode == "apply"), grid: "oldgrid", config: "/etc/opensim/opensim.conf", section: {RobustIni: $a.file, CoreDirectory: "/old", Simulators: "welcome:/old/bin/OpenSim.ini"}, reminders: [{detail: "The grid is registered in place, disabled"}]}}}' "$WORK/request.json"
+	jq -c '.data.attributes as $a | {data: {type: "imports", attributes: {kind: "robust", mode: $a.mode, inPlace: true, forget: ($a.forget // false), applied: ($a.mode == "apply"), grid: "oldgrid", config: "/etc/w4os/w4os.conf", section: {RobustIni: $a.file, CoreDirectory: "/old", Simulators: "welcome:/old/bin/OpenSim.ini"}, reminders: [{detail: "The grid is registered in place, disabled"}]}}}' "$WORK/request.json"
 	API
 	chmod +x "$api"
 	export WORK
 
 	local plan
 	plan=$(OPENSIM_API="$api" "$OPENSIM" import --robust "$robust" --in-place --simulator "$sim" --name welcome 2>&1)
-	assert_contains "Grid oldgrid in place: [Grid oldgrid] of /etc/opensim/opensim.conf" "$plan"
+	assert_contains "Grid oldgrid in place: [Grid oldgrid] of /etc/w4os/w4os.conf" "$plan"
 	assert_contains "RobustIni = $(realpath "$robust")" "$plan"
 	assert_contains "Nothing was written" "$plan"
 	assert_equals "true false welcome" "$(jq -r '.data.attributes | "\(.inPlace) \(.forget) \(.simulators[0].name)"' "$WORK/request.json")"

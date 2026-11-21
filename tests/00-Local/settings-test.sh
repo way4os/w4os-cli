@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# opensim settings and opensim posts, with a stand-in for the engine (tests/fixtures/opensim-api): what is asked of the engine, and what
+# opensim settings and opensim posts, with a stand-in for the engine (tests/fixtures/w4os-api): what is asked of the engine, and what
 # its answer shows. What the settings and the posts are is the engine's business, tested there.
 #
 # Run with: composer test
@@ -18,7 +18,7 @@ function set_up() {
 	export HOME="$WORK" OPENSIM_SYSTEM_USER=
 	unset OPENSIM_CONF OPENSIM_RC
 	mkdir -p "$WORK/etc"
-	cat >"$WORK/.opensim.conf" <<-INI
+	cat >"$WORK/.w4os.conf" <<-INI
 		[Defaults]
 		EtcRoot = $WORK/etc
 		SystemUser =
@@ -26,9 +26,9 @@ function set_up() {
 	local fixtures
 	fixtures="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/fixtures"
 	mkdir -p "$WORK/engine/bin" "$WORK/engine/lib" "$WORK/replies"
-	ln -s "$fixtures/opensim-api" "$WORK/engine/bin/opensim-api"
-	cp "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../vendor/magicoli/opensim-engine/lib" && pwd)/rc-helpers" "$WORK/engine/lib/rc-helpers"
-	export OPENSIM_API="$WORK/engine/bin/opensim-api" ENGINE_REPLIES="$WORK/replies" ENGINE_LOG="$WORK/requests" ENGINE_CALLS="$WORK/calls"
+	ln -s "$fixtures/w4os-api" "$WORK/engine/bin/w4os-api"
+	cp "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../vendor/w4os/w4os-engine/lib" && pwd)/rc-helpers" "$WORK/engine/lib/rc-helpers"
+	export OPENSIM_API="$WORK/engine/bin/w4os-api" ENGINE_REPLIES="$WORK/replies" ENGINE_LOG="$WORK/requests" ENGINE_CALLS="$WORK/calls"
 }
 
 function tear_down() {

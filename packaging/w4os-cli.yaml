@@ -1,0 +1,98 @@
+# The command line to set up and manage OpenSimulator, built by dev/build.sh (or apt-package) from build/w4os-cli,
+# prepared by packaging/build. ${VERSION} comes from build-tools.
+# The files in /usr/share/w4os-cli, the command opensim in /usr/bin; the projects of the family it needs are their own
+# packages (bash-tools, w4os-engine, opensim-rest-php), linked into its vendor folder.
+name: w4os-cli
+arch: all
+platform: linux
+version: ${VERSION}
+version_schema: semver
+section: utils
+priority: optional
+maintainer: Gudule Lapointe <gudule@speculoos.world>
+description: |-
+    Command line to set up and manage OpenSimulator
+    The opensim command: setup of a grid, a standalone or a simulator, status,
+    start, stop, restart, console and the installation of the .NET runtime.
+    The rules and the work are the engine's.
+homepage: https://github.com/way4os/w4os-cli
+license: AGPL-3.0-or-later
+
+depends:
+    - bash
+    - bash-tools
+    - bsdextrautils | bsdmainutils
+    - curl
+    - default-mysql-client | virtual-mysql-client
+    - jq
+    # Every w4os-engine has what the CLI calls (the API command w4os-api)
+    - w4os-engine
+    - opensim-rest-php
+    - php-cli (>= 2:8.2)
+    - php-curl
+    - php-intl
+    - php-mbstring
+    - php-mysql
+    - php-xml
+    - sudo
+
+# opensim-tools, the approach before this one: the same command, the same services, never both. A server that has it keeps it, with
+# the packages of its generation; a newer one asks for this package, which removes it
+conflicts:
+    - opensim-tools
+replaces:
+    - opensim-tools
+    # The name of before w4os, an empty package now (opensim-cli.yaml): this one takes over its command and its services
+    - opensim-cli (<< ${DEB_VERSION})
+
+# What some commands need (a light install of the tools, --no-install-recommends, has the rest): the questions of the setup at a
+# terminal (dialog), the instances in containers (podman-compose)
+recommends:
+    - default-mysql-server | virtual-mysql-server
+    - dialog
+    - podman-compose
+    - uuid-runtime
+suggests:
+    - opensim
+
+contents:
+    - src: build/w4os-cli
+      dst: /usr/share/w4os-cli
+      type: tree
+    - src: /usr/share/bash-tools
+      dst: /usr/share/w4os-cli/vendor/magicoli/bash-tools
+      type: symlink
+    - src: /usr/share/w4os-engine
+      dst: /usr/share/w4os-cli/vendor/w4os/w4os-engine
+      type: symlink
+    - src: /usr/share/opensim-rest-php
+      dst: /usr/share/w4os-cli/vendor/magicoli/opensim-rest-php
+      type: symlink
+    - src: /usr/share/w4os-cli/bin/opensim
+      dst: /usr/bin/opensim
+      type: symlink
+    - src: share/bash-completion/opensim
+      dst: /usr/share/bash-completion/completions/opensim
+    - src: packaging/w4os-cli.copyright
+      dst: /usr/share/doc/w4os-cli/copyright
+      file_info:
+          mode: 0644
+    - src: packaging/opensim.service
+      dst: /usr/lib/systemd/system/opensim.service
+    - src: packaging/opensim-backup.service
+      dst: /usr/lib/systemd/system/opensim-backup.service
+    - src: packaging/opensim-backup.timer
+      dst: /usr/lib/systemd/system/opensim-backup.timer
+    - src: packaging/opensim-backup-oar.service
+      dst: /usr/lib/systemd/system/opensim-backup-oar.service
+    - src: packaging/opensim-backup-oar.timer
+      dst: /usr/lib/systemd/system/opensim-backup-oar.timer
+
+deb:
+    breaks:
+        - opensim-cli (<< ${DEB_VERSION})
+
+scripts:
+    postinstall: packaging/w4os-cli.postinst
+    preremove: packaging/w4os-cli.prerm
+    postremove: packaging/w4os-cli.postrm

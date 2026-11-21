@@ -1,8 +1,8 @@
-# OpenSim CLI
+# w4os CLI
 
-![Stable](https://img.shields.io/github/release/GuduleLapointe/opensim-cli?label=stable&color=green&include_prerelease) ![GitHub Tag](https://img.shields.io/github/tag/GuduleLapointe/opensim-cli?label=latest&include_prereleases) ![GitHub commits since latest release](https://img.shields.io/github/commits-since/GuduleLapointe/opensim-cli/latest?label=dev) ![PHP](https://img.shields.io/badge/PHP-8.2+-7884bf) ![Bash](https://img.shields.io/badge/bash-5+) [![License](https://img.shields.io/badge/license-AGPL--3.0-552b55)](LICENSE) ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/GuduleLapointe/opensim-cli/total) [![Donate](https://img.shields.io/badge/-Donate-yellow)](https://magiiic.org/donate/)
+![Stable](https://img.shields.io/github/release/way4os/w4os-cli?label=stable&color=green&include_prerelease) ![GitHub Tag](https://img.shields.io/github/tag/way4os/w4os-cli?label=latest&include_prereleases) ![GitHub commits since latest release](https://img.shields.io/github/commits-since/way4os/w4os-cli/latest?label=dev) ![PHP](https://img.shields.io/badge/PHP-8.2+-7884bf) ![Bash](https://img.shields.io/badge/bash-5+) [![License](https://img.shields.io/badge/license-AGPL--3.0-552b55)](LICENSE) ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/way4os/w4os-cli/total) [![Donate](https://img.shields.io/badge/-Donate-yellow)](https://magiiic.org/donate/)
 
-The command line to set up and manage OpenSimulator, in bash. It asks the questions and shows the results; the rules and the work are the [OpenSim engine](https://github.com/GuduleLapointe/opensim-engine)'s. It needs nothing else of the OpenSim ecosystem: not the core, not the helpers, not the modules.
+The command line to set up and manage OpenSimulator, in bash. It asks the questions and shows the results; the rules and the work are the [w4os engine](https://github.com/way4os/w4os-engine)'s. It needs nothing else of the OpenSim ecosystem: not the core, not the helpers, not the modules.
 
 **Under construction.** The quick setup asks what to set up and a few answers, checks them with the engine and shows the setup they stand for. Besides it: status, ports, start, stop, restart, console and install-dotnet. `dev/build.sh` makes the Debian package and the zip into `dist/`. The package installs the bash completion (`share/bash-completion/opensim`).
 
@@ -31,7 +31,7 @@ sudo ./kickstart-dev.sh --testing --tools
 
 The same in one line, for those who know the pipe form: `curl -fsSL https://w4os.org/kickstart-dev.sh | sudo bash -s -- --testing --tools`.
 
-See our [wiki](https://github.com/GuduleLapointe/opensim-cli/wiki) for detailed instructions.
+See our [wiki](https://github.com/way4os/w4os-cli/wiki) for detailed instructions.
 
 To run the installer on an SSH server, download it locally first, then run `./kickstart.sh --remote root@server --setup`.
 
@@ -119,7 +119,7 @@ opensim import --robust /opt/opensim/bin/Robust.HG.ini --simulator /opt/opensim/
 opensim import --robust /opt/opensim/bin/Robust.HG.ini --switch
 ```
 
-`opensim import --robust FILE --in-place [--simulator FILE...] [--name NAME] [--nick NICK] [--apply]` runs the grid of another install where it is, not migrated: only its section of the config of the suite (`[Grid <nick>]` of `/etc/opensim/opensim.conf`: its Robust config, its core, its simulators) is written, disabled; the install is never changed, and the suite runs it from its own files as any of its grids (`opensim enable`, `opensim start`), the settings of its helpers kept in that section. `--forget --apply` removes the section: the install is as it was.
+`opensim import --robust FILE --in-place [--simulator FILE...] [--name NAME] [--nick NICK] [--apply]` runs the grid of another install where it is, not migrated: only its section of the config of the suite (`[Grid <nick>]` of `/etc/w4os/w4os.conf`: its Robust config, its core, its simulators) is written, disabled; the install is never changed, and the suite runs it from its own files as any of its grids (`opensim enable`, `opensim start`), the settings of its helpers kept in that section. `--forget --apply` removes the section: the install is as it was.
 
 ```bash
 opensim import --robust /opt/opensim/bin/Robust.HG.ini --in-place --simulator /opt/opensim/bin/OpenSim.ini --name welcome --apply
@@ -222,4 +222,4 @@ Without a terminal (a script) the questions are plain lines, a number edits an a
 
 ## User permissions
 
-The files of the grids belong to the user the instances run as (`SystemUser` of `opensim.conf`). When it is not you, every command runs as that user with `sudo -u`, checked before the first question: you need to be allowed to.
+The files of the grids belong to the user the instances run as (`SystemUser` of `w4os.conf`). When it is not you, every command runs as that user with `sudo -u`, checked before the first question: you need to be allowed to.

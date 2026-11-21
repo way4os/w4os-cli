@@ -53,13 +53,13 @@ RUN curl -fsSL https://apt.magiiic.com/magiiic-packaging.asc \
     | gpg --dearmor -o /usr/share/keyrings/magiiic-packaging.gpg \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
-        opensim-cli \
+        w4os-cli \
     && opensim install-dotnet \
-    && /usr/share/opensim-cli/kickstart.sh
+    && /usr/share/w4os-cli/kickstart.sh
     # \
     # && mkdir -p /etc/opensim ${OPENSIM_VAR_ROOT} /var/log/opensim \
     # && chown opensim:opensim /etc/opensim ${OPENSIM_VAR_ROOT} /var/log/opensim
-    # && /usr/share/opensim-cli/kickstart.sh
+    # && /usr/share/w4os-cli/kickstart.sh
 
 RUN rm -rf /pkgs /var/lib/apt/lists/*
 

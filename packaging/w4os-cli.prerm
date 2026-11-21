@@ -1,5 +1,5 @@
 #!/bin/sh
-# prerm of opensim-cli: stops the service and the instances on removal, while the command is still there to shut them down.
+# prerm of w4os-cli: stops the service and the instances on removal, while the command is still there to shut them down.
 # Upgrades leave them running.
 set -e
 

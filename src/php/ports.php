@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-use OpenSim\OpenSim;
-use OpenSim\Runtime\Environment;
+use W4OS\Engine\OpenSim;
+use W4OS\Engine\Runtime\Environment;
 
 /** Render the engine's configured listeners as a table, publish options or UFW rules. */
 function showPorts(Environment $environment, array $arguments): int

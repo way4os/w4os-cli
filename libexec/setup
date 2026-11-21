@@ -129,7 +129,7 @@ if [[ -n "$apply_request" ]]; then
 fi
 if [[ "$adoption_required" == true ]]; then
 	reply=$(engine POST /setups/quick --data=- <<<'{"data":{"type":"setups","attributes":{}}}' 2>"$errors") || fail_engine "$reply"
-	jq -e '.data.attributes.capabilities | arrays | index("existing_region") != null' <<<"$reply" >/dev/null || die "The engine does not support existing-region setup; update opensim-engine"
+	jq -e '.data.attributes.capabilities | arrays | index("existing_region") != null' <<<"$reply" >/dev/null || die "The engine does not support existing-region setup; update w4os-engine"
 fi
 
 while :; do
@@ -152,7 +152,7 @@ while :; do
 	screen=$(jq -c '.data.attributes' 2>/dev/null <<<"$reply") && [[ "$(jq -r '.action // empty' <<<"$screen")" != "" ]] ||
 		fail_engine "$reply"
 	if [[ "$setup_mode" == prepare && "$(jq -r '.mode // empty' <<<"$screen")" != prepare ]]; then
-		die "The engine does not support setup preparation; update opensim-engine"
+		die "The engine does not support setup preparation; update w4os-engine"
 	fi
 	if [[ "$(jq -r '.action + ":" + (.kind // "")' <<<"$screen")" == screen:menu && -n "$setup_prefill_type" ]]; then
 		state=$(jq -r '.state' <<<"$screen")

@@ -3,4 +3,4 @@
 	url = https://github.com/TypedDevs/bashunit.git
 [submodule "docs"]
 	path = docs
-	url = https://github.com/GuduleLapointe/opensim-cli.wiki.git
+	url = https://github.com/way4os/w4os-cli.wiki.git

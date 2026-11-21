@@ -7,7 +7,7 @@ function set_up() {
 	export HOME="$WORK" OPENSIM_SYSTEM_USER=
 	unset OPENSIM_CONF OPENSIM_API
 	mkdir -p "$WORK/etc/robust.d" "$WORK/etc/opensim.d" "$WORK/regions"
-	cat >"$WORK/.opensim.conf" <<-INI
+	cat >"$WORK/.w4os.conf" <<-INI
 		[Defaults]
 		EtcRoot = $WORK/etc
 		SystemUser =

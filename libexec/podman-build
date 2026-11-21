@@ -19,7 +19,7 @@ trap "rm -rf $TMP $TMP.*" EXIT
 BASEDIR=$(cd $(dirname $0)/.. && pwd)
 say BASEDIR $BASEDIR
 SHAREDIR=$(cd $BASEDIR/share 2>/dev/null ||
-	cd /usr/share/opensim-cli/share 2>/dev/null && pwd) ||
+	cd /usr/share/w4os-cli/share 2>/dev/null && pwd) ||
 	exit 2
 log SHAREDIR $SHAREDIR
 log Images $SHAREDIR/podman/images
@@ -40,7 +40,7 @@ remote=${CONTAINER_CONNECTION:+ssh ${CONTAINER_CONNECTION}}
 $remote opensim --layout --format=env >$TMP.layout
 . $TMP.layout
 [ -z ${OPENSIM_SYSTEM_UID:-} ] &&
-	log "opensim-cli must be installed and up to date on ${CONTAINER_CONNECTION:-local host}" &&
+	log "w4os-cli must be installed and up to date on ${CONTAINER_CONNECTION:-local host}" &&
 	exit 1
 
 dry_run=

@@ -1,5 +1,5 @@
 #!/bin/sh
-# postinst of opensim-cli: the service that starts the enabled instances at boot, enabled on first install, the administrator's
+# postinst of w4os-cli: the service that starts the enabled instances at boot, enabled on first install, the administrator's
 # choice kept after. It is never restarted here: that would stop the running grids.
 set -e
 

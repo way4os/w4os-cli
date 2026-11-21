@@ -2,6 +2,6 @@
 # composer name, Debian package
 magicoli/bash-tools bash-tools
 magicoli/build-tools build-tools
-magicoli/opensim-engine opensim-engine
+w4os/w4os-engine w4os-engine
 magicoli/opensim-rest-php opensim-rest-php
 magicoli/container-tools container-tools

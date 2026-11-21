@@ -68,10 +68,10 @@ set -- "$@" ${command_args[@]+"${command_args[@]}"}
 # The version of the command line; with -v, of everything that matters on this machine (the engine tells the rest)
 if [[ " $* " == *" --version "* || " $* " == *" -V "* ]]; then
 	if [[ "${DEBUG:-}" == yes ]]; then
-		printf '%-24s %s\n' opensim-cli "$(cli_version)"
+		printf '%-24s %s\n' w4os-cli "$(cli_version)"
 		"$OPENSIM_API" --version -v
 	else
-		printf 'opensim-cli %s\n' "$(cli_version)"
+		printf 'w4os-cli %s\n' "$(cli_version)"
 	fi
 	exit 0
 fi
