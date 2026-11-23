@@ -48,7 +48,7 @@ engine() {
 
 # The accounts of the install in w4os.conf (SystemUser, WebUser, WebGroup), one a line
 install_accounts() {
-	sed -nE 's/^[[:space:]]*(SystemUser|WebUser|WebGroup)[[:space:]]*=[[:space:]]*"?([^";[:space:]]*).*/\1=\2/p' "${OPENSIM_CONF:-/etc/w4os/w4os.conf}" 2>/dev/null | sort
+	sed -nE 's/^[[:space:]]*(SystemUser|WebUser|WebGroup)[[:space:]]*=[[:space:]]*"?([^";[:space:]]*).*/\1=\2/p' "${OPENSIM_CONF:-/etc/w4os/w4os.conf}" 2>/dev/null | sort -u
 }
 
 # The accounts of the install changed since BEFORE (install_accounts; an import of an install that exists takes its own): its folders
@@ -58,7 +58,7 @@ follow_accounts() { # accounts before
 	local now user
 	now=$(install_accounts)
 	[[ "$now" != "$1" ]] || return 0
-	user=$(sed -n 's/^SystemUser=//p' <<<"$now")
+	user=$(sed -n 's/^SystemUser=//p' <<<"$now" | head -1)
 	as_root php "$(dirname "$(realpath "$OPENSIM_API")")/opensim-layout.php" || die "could not make the service run as $user"
 	say "The service runs as $user from its next start (sudo systemctl restart opensim, once the grids may stop)"
 }
