@@ -199,6 +199,16 @@ function test_takes_over_a_region_the_grid_has_with_what_it_is_loaded_with() {
 	assert_same "{\"name\":\"Old Garden\",\"existing\":true,\"dump\":\"$(realpath "$WORK")/old.sql.gz\"}" "$(jq -c '.data.attributes.setup.simulators[0].regions[0]' "$ENGINE_LOG")"
 }
 
+function test_says_what_is_wrong_with_a_plan() {
+	engine_says "$(jq -c '.data.attributes.problems = {"simulators.0.regions.0.name": "A simulator of this machine has this region already: take it out of that one first."}' <<<"$FILES")"
+
+	local said
+	said=$("$OPENSIM" region add demo alpha --name "Old Garden" --existing 2>&1)
+
+	assert_contains "Problems, to settle before it can be written:" "$said"
+	assert_contains "  simulators.0.regions.0.name: A simulator of this machine has this region already: take it out of that one first." "$said"
+}
+
 function test_a_file_to_load_a_region_with_is_one_the_caller_reads() {
 	engine_says "$FILES"
 
