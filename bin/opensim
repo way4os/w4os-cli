@@ -163,14 +163,23 @@ import)
 	status=0
 	# A migration run by root (sudo) moves the folders of the data of an install another account owns: then what it wrote is given
 	# to the accounts of the suite (the system layout of the engine)
-	robust= inplace=
+	robust= inplace= apply= switch=
+	written=()
 	for argument in "$@"; do
 		[[ "$argument" != --robust* ]] || robust=yes
 		[[ "$argument" != --in-place && "$argument" != --forget ]] || inplace=yes
+		[[ "$argument" != --apply ]] || apply=yes
+		# The grid started by the account of the suite, never root: the switch is done after, as that account
+		if [[ "$argument" == --switch ]]; then switch=yes; else written+=("$argument"); fi
 	done
-	if [[ $(id -u) -eq 0 && -n "$robust" && -z "$inplace" ]]; then
-		"$libexec/import" "$@" || status=$?
+	if [[ $(id -u) -eq 0 && -n "$robust" && -z "$inplace" && -n "$apply" ]]; then
+		"$libexec/import" "${written[@]}" || status=$?
 		php "$(dirname "$(realpath "$OPENSIM_API")")/opensim-layout.php" >/dev/null || error "could not give what the import wrote to the account of the suite"
+		if ((status == 0)) && [[ -n "$switch" ]]; then
+			switched=()
+			for argument in "${written[@]}"; do [[ "$argument" == --apply || "$argument" == --copy-data ]] || switched+=("$argument"); done
+			as_system_user "$libexec/import" "${switched[@]}" --switch || status=$?
+		fi
 	else
 		as_system_user "$libexec/import" "$@" || status=$?
 	fi

@@ -1154,7 +1154,7 @@ legacy_after_install() {
 	mapfile -t simulators < <(legacy_configs simulator)
 	if [[ "$LEGACY_MODE" == migrate ]]; then
 		say "To bring the grids of $root into the layout of the kit (its config and databases kept, its data folders moved: --copy-data copies them):"
-		for robust in "${robusts[@]}"; do say "  sudo opensim import --robust $robust$(printf ' --simulator %s' "${simulators[@]}") --apply --switch"; done
+		for robust in "${robusts[@]}"; do say "  sudo opensim import --robust $robust$(((${#simulators[@]})) && printf ' --simulator %s' "${simulators[@]}") --apply --switch"; done
 		return 0
 	fi
 	if ((${#robusts[@]} != 1)); then
