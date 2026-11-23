@@ -5,7 +5,7 @@ set -e
 here=$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")
 libexec=$(cd "$here/../libexec" && pwd)
 
-COMMANDOPTS=setup,import,region,simulator,settings,address,posts,status,ports,start,stop,restart,console,screen,enable,disable,web,next,ban,save,load,backup,restore,oar,api,api-key,rest,install-dotnet
+COMMANDOPTS=service,setup,import,region,simulator,settings,address,posts,status,ports,start,stop,restart,console,screen,enable,disable,web,next,ban,save,load,backup,restore,oar,api,api-key,rest,install-dotnet
 HELP=$(
 	cat <<USAGE
 

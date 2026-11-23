@@ -5,16 +5,21 @@ After=network-online.target mariadb.service mysql.service
 Wants=network-online.target
 
 [Service]
-# opensim start launches the enabled instances in screen sessions and returns: not Type=simple, which would see the service end
-# and stop the grids
-Type=oneshot
-RemainAfterExit=yes
+# The main process is the launch master: it listens on /run/opensim/launch.sock, and what it starts, whoever asks (a shell, the
+# engine API, the start at boot), is the service's and stops with it. It is ready once it listens
+Type=notify
+NotifyAccess=all
 User=opensim
 Group=opensim
 WorkingDirectory=~
-ExecStart=/usr/bin/opensim start
+RuntimeDirectory=opensim
+RuntimeDirectoryMode=0750
+ExecStart=/usr/bin/opensim service
+# The enabled instances, Robust first, each once the one before is up: one that does not start leaves the others running
+ExecStartPost=-/usr/bin/opensim start
+# The instances stopped in order, the simulators before their Robust, each within a minute, before the master ends
 ExecStop=/usr/bin/opensim stop now
-# Instances stop one after the other, each within a minute
+TimeoutStartSec=30min
 TimeoutStopSec=15min
 
 [Install]

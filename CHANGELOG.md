@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- fix (service): opensim.service runs the launch master, starts on install, and stops every instance in order
 - fix (setup files): once written, the report says what started and what was loaded, and no empty Then:
 - fix (setup files): the plan of region add, simulator add and import says its problems
 - new (regions): setup, simulator add and region add take --oar FILE or --dump FILE, what the region is loaded with

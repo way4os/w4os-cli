@@ -1,6 +1,6 @@
 #!/bin/sh
-# postinst of w4os-cli: the service that starts the enabled instances at boot, enabled on first install, the administrator's
-# choice kept after. It is never restarted here: that would stop the running grids.
+# postinst of w4os-cli: the service of the instances, enabled on first install, the administrator's choice kept after, and started
+# when it is enabled and does not run. It is never restarted here: that would stop the running grids.
 set -e
 
 if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ]; then
@@ -14,6 +14,17 @@ if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-decon
     fi
     if [ -d /run/systemd/system ]; then
         systemctl --system daemon-reload >/dev/null || true
+        if systemctl --quiet is-enabled opensim.service 2>/dev/null; then
+            if systemctl --quiet is-active opensim.service; then
+                # A service of before the launch master runs on, the grids with it, until it is restarted
+                [ -S /run/opensim/launch.sock ] ||
+                    echo "w4os-cli: opensim.service runs without its launch master: the instances started now are not the service's. Restart it once the grids may stop: sudo systemctl restart opensim" >&2
+            else
+                systemctl reset-failed opensim.service >/dev/null 2>&1 || true
+                deb-systemd-invoke start opensim.service ||
+                    echo "w4os-cli: opensim.service did not start: systemctl status opensim" >&2
+            fi
+        fi
     fi
 fi
 

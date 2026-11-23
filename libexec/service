@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# opensim service: the main process of opensim.service, its launch master in the foreground (ExecStart of the unit). What it starts,
+# asked by opensim start from a shell, the engine API or the start at boot, is the service's, and stops with it.
+
+USAGE="opensim service"
+HELP="Runs the launch master of opensim.service in the foreground: it listens on /run/opensim/launch.sock and starts the instances it is asked to, as children of the service. Run by systemd (systemctl start opensim), not by hand."
+
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+exec php "$CLI_ROOT/vendor/w4os/w4os-engine/bin/w4os-launch-master.php"
