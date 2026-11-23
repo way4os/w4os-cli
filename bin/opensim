@@ -161,6 +161,11 @@ import)
 	as_system_user "$libexec/import" "$@"
 	;;
 
+region | simulator)
+	# What a region is loaded with is a file of the caller's: given to the account of the instances
+	as_system_user_with_files "--oar --dump" "$libexec/$COMMAND" "$@"
+	;;
+
 oar)
 	# The archives are the caller's files
 	"$libexec/$COMMAND" "$@"

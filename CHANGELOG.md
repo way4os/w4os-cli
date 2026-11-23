@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- new (regions): setup, simulator add and region add take --oar FILE or --dump FILE, what the region is loaded with
 - new (regions): setup, simulator add and region add take --existing, a region the grid has already taken over
 - doc: the installer is fetched from the repository (raw.githubusercontent.com/way4os/w4os-cli/master/kickstart.sh), no site alias in the docs
 - fix (kickstart): the APT sources are updated where they stand, commented or not, and added at the end only when missing: the order and the comments of the user stay

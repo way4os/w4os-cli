@@ -136,6 +136,43 @@ import_accounts() {
 	return "$status"
 }
 
+# Run a command as the system user with the files of some options (--oar FILE, --dump FILE) it can read: their own path when it
+# reads them, else a copy in a folder of its own (in /var/tmp: an archive can be large), removed once the command is over
+as_system_user_with_files() { # "OPTION..." COMMAND [ARGUMENTS...]
+	local options=" $1 " status=0 index file copies= option
+	shift
+	local -a arguments=("$@")
+	for ((index = 1; index < ${#arguments[@]}; index++)); do
+		option=${arguments[index]%%=*}
+		[[ "$options" == *" $option "* ]] || continue
+		if [[ "${arguments[index]}" == *=* ]]; then
+			file=${arguments[index]#*=}
+		else
+			((index + 1 < ${#arguments[@]})) || die "$option requires a file"
+			file=${arguments[index + 1]}
+		fi
+		[[ -r "$file" ]] || die "cannot read $file"
+		file=$(realpath "$file")
+		if ! as_system_user test -r "$file"; then
+			[[ -n "$copies" ]] || copies=$(as_system_user mktemp -d /var/tmp/opensim-files.XXXXXXXX) || die "could not make a folder for $file"
+			as_system_user sh -c 'umask 077; cat > "$1"' copy "$copies/$(basename "$file")" <"$file" || {
+				as_system_user rm -rf -- "$copies" || true
+				die "could not give $file to the account $system_user"
+			}
+			file=$copies/$(basename "$file")
+		fi
+		if [[ "${arguments[index]}" == *=* ]]; then
+			arguments[index]=$option=$file
+		else
+			arguments[index + 1]=$file
+			((index += 1))
+		fi
+	done
+	as_system_user "${arguments[@]}" || status=$?
+	[[ -z "$copies" ]] || as_system_user rm -rf -- "$copies" || true
+	return "$status"
+}
+
 # Read private setup inputs as their caller and pass them to the service account without changing their permissions.
 run_setup() {
 	local -a arguments=("$@") inputs=() indexes=()
@@ -160,19 +197,30 @@ run_setup() {
 	done
 	for ((index = 0; index < ${#arguments[@]}; index++)); do
 		case "${arguments[index]}" in
-			--config | --region-config)
+			--config | --region-config | --oar | --dump)
 				option=${arguments[index]}
 				((index + 1 < ${#arguments[@]})) || die "$option requires a file"
 				input_file=${arguments[index+1]} ;;
-			--config=* | --region-config=*) input_file=${arguments[index]#*=} ;;
+			--config=* | --region-config=* | --oar=* | --dump=*) input_file=${arguments[index]#*=} ;;
 			*) continue ;;
 		esac
 		[[ -r "$input_file" ]] || die "cannot read setup input: $input_file"
+		# An archive or a dump the account reads is given as it is: it can be large
+		case "${arguments[index]}" in
+			--oar | --dump | --oar=* | --dump=*)
+				if as_system_user test -r "$(realpath "$input_file")"; then
+					case "${arguments[index]}" in
+						*=*) arguments[index]=${arguments[index]%%=*}=$(realpath "$input_file") ;;
+						*) arguments[index+1]=$(realpath "$input_file"); ((index += 1)) ;;
+					esac
+					continue
+				fi ;;
+		esac
 		inputs+=("$input_file"); indexes+=("$index")
 		[[ "${arguments[index]}" == *=* ]] || ((index += 1))
 	done
 	if ((${#inputs[@]})); then
-		input_dir=$(as_system_user mktemp -d /tmp/opensim-setup.XXXXXXXX) || die "could not create private setup inputs"
+		input_dir=$(as_system_user mktemp -d /var/tmp/opensim-setup.XXXXXXXX) || die "could not create private setup inputs"
 	fi
 	for ((position = 0; position < ${#inputs[@]}; position++)); do
 		index=${indexes[position]}
@@ -206,7 +254,7 @@ setup_file_report() { # reply
 		"Grid \(.grid)",
 		(.steps[] |
 			(if .kind == "simulator" then "Simulator \(.simulator) (\(.slug)): \(.config), http \(.ports.http), database \(.database.name) @ \(.database.host)" + (if .estate then ", estate \(.estate.name)" + (if .estate.owner then " (\(.estate.owner))" else "" end) else "" end) else "Region of \(.slug):" end),
-			(if .region then "  \(.region.name) at \(.region.location), \(.region.size) m, port \(.region.port)" + (if (.region.roles | length) > 0 then ", " + (.region.roles | join(", ")) else "" end) + (if .region.existing then ", taken over from the grid (UUID \(.region.uuid))" else "" end) + ": \(.region.file)" else empty end)),
+			(if .region then "  \(.region.name) at \(.region.location), \(.region.size) m, port \(.region.port)" + (if (.region.roles | length) > 0 then ", " + (.region.roles | join(", ")) else "" end) + (if .region.existing then ", taken over from the grid (UUID \(.region.uuid))" else "" end) + (if .region.oar then ", loaded with \(.region.oar)" elif .region.dump then ", its database made from \(.region.dump)" else "" end) + ": \(.region.file)" else empty end)),
 		(if .applied then "Written:" else "Would write:" end),
 		(.writes[] | "  \(.)"),
 		"",
