@@ -2,12 +2,13 @@
 # opensim setup: the engine gives the screens (it is the scenario), this draws the one it gets, sends it back filled with the button that
 # was pressed, and does the action it answers: another screen, the same one with what is wrong, quit with a message, abort with an error.
 
-USAGE="opensim setup [-hqv] [--config FILE] [--prepare FILE] [--apply FILE] [--region-config FILE] [--existing] [--oar FILE | --dump FILE]"
+USAGE="opensim setup [-hqv] [--config FILE] [--prepare FILE] [--apply FILE] [--region-config FILE] [--existing] [--oar FILE | --dump FILE] [--show-passwords]"
 HELP="Shows the setup questions and applies the confirmed settings.
   --config FILE   prefill answers from a JSON configuration
   --prepare FILE  save answers privately without creating the installation
   --apply FILE    apply a prepared configuration without further questions
   --region-config FILE  adopt an existing Region.ini in a simulator setup
+  --show-passwords  show the passwords of the database accounts in the review (masked by default; Show passwords there too)
   --existing      take over the region the grid has of the name given (restored, or moved from another server): its UUID,
                   place, size and owner kept; refused while the simulator that runs it elsewhere answers
   --oar FILE      load this archive of the region (OAR) into the first region once it runs
@@ -40,6 +41,7 @@ while (($#)); do
 			;;
 		--region-config=*) region_config=${1#*=}; [[ -n "$region_config" ]] || die "opensim setup --region-config requires an INI file"; shift ;;
 		--existing) region_content=$(jq -c '. + {existing: "yes"}' <<<"$region_content"); shift ;;
+		--show-passwords) region_content=$(jq -c '. + {show_passwords: true}' <<<"$region_content"); shift ;;
 		--oar | --dump)
 			(($# > 1)) && [[ "$2" != -* ]] || die "opensim setup $1 requires a file"
 			[[ -r "$2" ]] || die "cannot read $2"
@@ -154,7 +156,7 @@ fi
 
 while :; do
 	request=$(jq -c --rawfile state <(printf '%s' "$state") --arg button "$button" --arg mode "$setup_mode" --slurpfile prefill <(printf '%s' "$setup_prefill") --argjson occupied_ports "${setup_occupied_ports:-null}" \
-		'{data: {type: "steps", attributes: ({state: $state, button: $button, answers: (. + ($prefill[0] | {existing_region,hostname,oar,dump} | with_entries(select(.value != null)))), mode: $mode} + (if $occupied_ports == null then {} else {occupied_ports: $occupied_ports} end))}}' <<<"$answers")
+		'{data: {type: "steps", attributes: ({state: $state, button: $button, answers: (. + ($prefill[0] | {existing_region,hostname,oar,dump,show_passwords} | with_entries(select(.value != null)))), mode: $mode} + (if $occupied_ports == null then {} else {occupied_ports: $occupied_ports} end))}}' <<<"$answers")
 	[[ -z "$apply_request" ]] || request=$apply_request
 	# What the engine tells while it works (lines starting with "opensim: ") is shown as it comes. Its answer goes to a file and its
 	# error output to another that is read while it runs: the instances it starts keep both open, a pipe would never end
@@ -176,7 +178,7 @@ while :; do
 	fi
 	if [[ "$(jq -r '.action + ":" + (.kind // "")' <<<"$screen")" == screen:menu && -n "$setup_prefill_type" ]]; then
 		state=$(jq -r '.state' <<<"$screen")
-		answers=$(jq -c '{type,existing_region,hostname,login_uri,oar,dump} | with_entries(select(.value != null))' <<<"$setup_prefill")
+		answers=$(jq -c '{type,existing_region,hostname,login_uri,oar,dump,show_passwords} | with_entries(select(.value != null))' <<<"$setup_prefill")
 		setup_prefill_type=
 		continue
 	fi

@@ -27,7 +27,7 @@ function set_up() {
 				printf '%s\n' "${args[start + 3 + k * 9 + 3]}" >&"$fd"
 			done
 		fi
-		exit 0
+		exit "${DIALOG_EXIT:-0}"
 	DIALOG
 	chmod +x "$WORK/bin/dialog"
 	: >"$WORK/dialogrc"
@@ -71,4 +71,26 @@ function test_a_menu_without_a_text_is_answered() {
 
 	assert_same "0" "$status"
 	assert_same "--menu" "$(cat "$DIALOG_LOG")"
+}
+
+function test_a_review_with_a_button_of_its_own_says_when_it_is_pressed() {
+	FE_EXTRA="Show passwords"
+	export DIALOG_EXIT=3
+
+	local status=0
+	ui_review "Review" "" $'database\x1fDatabase account\x1fopensim@localhost: ********' || status=$?
+
+	assert_same 3 "$status"
+	assert_contains "--extra-button --extra-label Show passwords" "$(cat "$WORK/args")"
+}
+
+function test_a_review_in_plain_text_shows_the_passwords_when_s_is_answered() {
+	exec 7<<<"s"
+	FE_EXTRA="Show passwords" OPENSIM_SETUP_UI=plain FE_INPUT_FD=7 FE_UI=
+
+	local status=0
+	ui_review "Review" "" $'database\x1fDatabase account\x1fopensim@localhost: ********' 2>/dev/null || status=$?
+	exec 7<&-
+
+	assert_same 3 "$status"
 }
