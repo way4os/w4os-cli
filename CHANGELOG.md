@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- fix (import): a switch names each instance it did not start and why, and fails
 - fix (kickstart): --in-place --restart stops a Robust by the file it runs (REST console, no screen) and checks the grid runs
 - fix (web): web GRID api uses the port of the grid, ports lists it as local, never published nor opened
 - new (import): --copy-data; a migration moves the data folders of the old install, named in the plan, run as root when needed

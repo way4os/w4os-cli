@@ -463,3 +463,23 @@ function test_names_the_data_folders_a_migration_moves_or_copies_with_copy_data(
 	assert_contains "Data copied into this install" "$out"
 	assert_equals "true" "$(jq -r '.data.attributes.copyData' "$WORK/request.json")"
 }
+
+function test_a_switch_that_starts_nothing_says_why_each_did_not_start_and_fails() {
+	local api="$WORK/w4os-api" robust="$WORK/old/bin/Robust.HG.ini"
+	mkdir -p "$WORK/old/bin"
+	printf '[GridInfoService]\ngridnick = oldgrid\n' >"$robust"
+	cat >"$api" <<-'API'
+	#!/usr/bin/env bash
+	cat >"$WORK/request.json"
+	jq -c '.data.attributes as $a | {data: {type: "imports", attributes: {kind: "robust", mode: "plan", applied: false, switched: true, started: [], failed: {oldgrid: "oldgrid failed to start: the process exited immediately", "oldgrid.welcome": "not started: the Robust of oldgrid did not start"}, grid: "oldgrid", name: "Old Grid", source: $a.file, problems: {}}}}' "$WORK/request.json"
+	API
+	chmod +x "$api"
+	export WORK
+	local out status=0
+	out=$(OPENSIM_API="$api" "$OPENSIM" import --robust "$robust" --switch 2>&1) || status=$?
+	assert_contains "NOT all started" "$out"
+	assert_contains "Not started: oldgrid: oldgrid failed to start" "$out"
+	assert_contains "Not started: oldgrid.welcome: not started: the Robust" "$out"
+	assert_not_contains "Started:" "$out"
+	assert_not_equals 0 "$status"
+}

@@ -153,8 +153,9 @@ if [[ -n "$robust" && -z "$accounts" ]]; then
 		.data.attributes |
 		# A switch alone (written before): what it did, not the plan of the writing
 		if .switched and (.applied | not) then
-			"Grid \(.name) (\(.grid)), from \(.source): switched, enabled and started here",
-			"Started: \(.started | join(", "))"
+			"Grid \(.name) (\(.grid)), from \(.source): switched, enabled" + (if ((.failed // {}) | length) > 0 then ", NOT all started" else " and started here" end),
+			(if (.started | length) > 0 then "Started: \(.started | join(", "))" else empty end),
+			((.failed // {}) | to_entries[] | "Not started: \(.key): \(.value)")
 		else
 		"Grid \(.name) (\(.grid)), from \(.source)",
 		"Config:   \(.config)",
@@ -173,9 +174,10 @@ if [[ -n "$robust" && -z "$accounts" ]]; then
 		((.writes // [])[] | "  \(.)"),
 		(if .applied then "Report:   \(.report)" elif .switched then empty else "Nothing was written: add --apply to write it." end),
 		((.accounts // {}) | to_entries[] | "Account:  \(.key) \(if .value.from == "" then "(none)" else .value.from end) -> \(.value.to) (the owner of the old install, whose data stays where it is)"),
-		(if .switched then "Started: \(.started | join(", "))" else (.applied as $applied | (.reminders // [])[] | select(type != "object" or .code != "install-account" or ($applied | not)) | "- \(said)") end)
+		(if .switched then (if (.started | length) > 0 then "Started: \(.started | join(", "))" else empty end), ((.failed // {}) | to_entries[] | "Not started: \(.key): \(.value)") else (.applied as $applied | (.reminders // [])[] | select(type != "object" or .code != "install-account" or ($applied | not)) | "- \(said)") end)
 		end' <<<"$reply"
-	jq -e '(.data.attributes.problems // {}) | length == 0' <<<"$reply" >/dev/null
+	# Nothing to write, or an instance the switch did not start: an error
+	jq -e '((.data.attributes.problems // {}) | length == 0) and ((.data.attributes.failed // {}) | length == 0)' <<<"$reply" >/dev/null
 	exit
 fi
 # The accounts of a list (- : from the standard input, as the command line sends the file of its caller): what is done on the error
