@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- update (kickstart): `charm stable` is always the source of the releases; `--testing` adds charm-tests, `--unstable-core` adds the beta releases (charm unstable); one script, no kickstart-dev.sh
 - new (address): the plan shows the addresses the databases keep, each column with its rows
 - new (status): a running Robust that cannot read its database is marked [no database], and counted
 - new (address): opensim address GRID --host HOST --port PORT --site URL changes the address of a grid in every file of it, through the engine (POST /grids/{grid}/address): each line that would change first, --apply writes them and says what to restart

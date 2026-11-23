@@ -18,18 +18,16 @@ sudo ./kickstart.sh --setup
 
 See `./kickstart.sh --help` for other options:
 
-- `--testing` installs the test builds (charm-tests) on top of the releases, for whoever tries what comes next; `--unstable-core` adds the development version of OpenSimulator.
+- `--testing` adds the test builds (charm-tests) to the releases, for whoever tries what comes next; `--unstable-core` adds the beta releases and the development version of OpenSimulator.
 - `--tools` installs only the command line and the engine, light (no OpenSimulator, no database server, no website), to work on a grid installed otherwise, for instance to import the accounts of a list into it.
 
-The installer of the test builds is the one of the development branch, `kickstart-dev.sh` (the released one knows `--testing` from the next release). For instance, the tools alone from the test builds:
+The release source (`charm stable`) is always there, whatever the options. For instance, the tools alone from the test builds:
 
 ```bash
-curl -fsSL -O https://w4os.org/kickstart-dev.sh
-chmod +x kickstart-dev.sh
-sudo ./kickstart-dev.sh --testing --tools
+curl -fsSL -O https://w4os.org/kickstart.sh
+chmod +x kickstart.sh
+sudo ./kickstart.sh --testing --tools
 ```
-
-The same in one line, for those who know the pipe form: `curl -fsSL https://w4os.org/kickstart-dev.sh | sudo bash -s -- --testing --tools`.
 
 See our [wiki](https://github.com/way4os/w4os-cli/wiki) for detailed instructions.
 

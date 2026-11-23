@@ -6,7 +6,6 @@
 #     curl -fsSL -O https://w4os.org/kickstart.sh
 #     chmod +x kickstart.sh && sudo ./kickstart.sh --setup
 #   or in one line: curl -fsSL https://w4os.org/kickstart.sh | sudo bash -s -- --setup
-#   The development branch (the test builds, --testing): https://w4os.org/kickstart-dev.sh
 #
 #   Or from a clone of the repository:
 #     git clone https://github.com/way4os/w4os-cli.git && cd w4os-cli && ./kickstart.sh
@@ -19,8 +18,9 @@
 #
 # Setup is not started unless requested with --setup or RUN_SETUP=yes.
 # Options:  -y, --yes             do not ask before installing
-#           --testing             the test builds (charm-tests), on top of the releases
-#           --unstable-core       also the development version of OpenSimulator (opensim-unstable)
+#           --testing             also the test builds (charm-tests), on top of the releases
+#           --unstable-core       also the beta releases (charm unstable) and the development version of OpenSimulator
+#                                 (opensim-unstable)
 #           --tools               only the command line and the engine, light (no core, no database, no website): to work on
 #                                 a grid installed otherwise (opensim import --accounts FILE --robust ROBUST_INI)
 #           --cleanup             remove an existing OpenSim installation first (asks for confirmation)
@@ -137,11 +137,12 @@ if [[ -n "${APT_SOURCE:-}" ]]; then
 	APT_REPOSITORIES+=("$APT_SOURCE")
 	if [[ -n "${APT_SOURCE_TESTS:-}" ]]; then APT_REPOSITORIES+=("$APT_SOURCE_TESTS"); fi
 else
+	# The releases are always there; the other channels come on top of them
 	if [[ "$OPENSIM_KIT_APT_DIST" == charm-tests ]]; then
-		APT_REPOSITORIES+=("deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable unstable")
+		APT_REPOSITORIES+=("deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable${UNSTABLE_CORE:+ unstable}")
 		APT_REPOSITORIES+=("deb [trusted=yes] https://apt.magiiic.com charm-tests $OPENSIM_KIT_APT_COMPONENT")
 	else
-		APT_REPOSITORIES+=("deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com $OPENSIM_KIT_APT_DIST $OPENSIM_KIT_APT_COMPONENT")
+		APT_REPOSITORIES+=("deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com $OPENSIM_KIT_APT_DIST $OPENSIM_KIT_APT_COMPONENT${UNSTABLE_CORE:+ unstable}")
 	fi
 fi
 for repository in "${APT_REPOSITORIES[@]}"; do

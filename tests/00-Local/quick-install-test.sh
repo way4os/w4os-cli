@@ -176,19 +176,26 @@ function test_default_apt_repository_is_charm_stable() {
 	assert_equals 'deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable' "${APT_REPOSITORIES[0]}"
 }
 
-function test_testing_adds_the_test_builds_on_top_of_the_releases_and_no_development_core() {
+function test_testing_adds_the_test_builds_on_top_of_the_releases_and_unstable_core_adds_the_betas() {
 	local APT_SOURCE= APT_SOURCE_TESTS=
 	QUICK_INSTALL_LIBRARY_LOADED=no
 	quick_install_load_library || return
 	OPENSIM_KIT_APT_DIST=charm-tests OPENSIM_KIT_APT_COMPONENT= UNSTABLE_CORE=
 	plan_packages
-	assert_equals 'deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable unstable' "${APT_REPOSITORIES[0]}"
+	assert_equals 'deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable' "${APT_REPOSITORIES[0]}"
 	assert_equals 'deb [trusted=yes] https://apt.magiiic.com charm-tests dev' "${APT_REPOSITORIES[1]}"
 	assert_not_contains 'opensim-unstable' "${OPENSIM_PACKAGES[*]}"
 
 	UNSTABLE_CORE=yes
 	plan_packages
+	assert_equals 'deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable unstable' "${APT_REPOSITORIES[0]}"
+	assert_equals 'deb [trusted=yes] https://apt.magiiic.com charm-tests dev' "${APT_REPOSITORIES[1]}"
 	assert_contains 'opensim-unstable' "${OPENSIM_PACKAGES[*]}"
+
+	OPENSIM_KIT_APT_DIST=charm OPENSIM_KIT_APT_COMPONENT=
+	plan_packages
+	assert_equals 1 "${#APT_REPOSITORIES[@]}"
+	assert_equals 'deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable unstable' "${APT_REPOSITORIES[0]}"
 }
 
 function test_tools_install_the_command_line_alone_without_what_it_recommends() {
