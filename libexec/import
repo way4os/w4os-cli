@@ -8,7 +8,7 @@ USAGE="opensim import FILE [--apply]
        opensim import --grid-settings FILE GRID [--apply]
        opensim import --accounts FILE GRID|--robust ROBUST_INI [--format csv|json|yaml] [--keep-going] [--result FILE] [--apply]
        opensim import --robust FILE [--nick NICK] [--core DIR] [--simulator FILE...] [--apply] [--switch]
-       opensim import --robust FILE --in-place [--nick NICK] [--simulator FILE...] [--name NAME] [--apply] | --forget [--apply]"
+       opensim import --robust FILE --in-place [--nick NICK] [--core DIR] [--simulator FILE...] [--name NAME] [--apply] | --forget [--apply]"
 HELP="Applies a setup file (JSON or YAML: the simulators of a grid of this machine, their regions with name, location, size, roles) to the grid it names, or brings a simulator of another install (its OpenSim.ini, or its file of opensim.d, and the regions it names) into the grid GRID of this machine. Its database is kept as it is (the same one, nothing is copied), its regions are copied with their UUID and their place, its ports and its own settings are kept. Without --apply, says what would be written and where, and writes nothing.
   FILE              a setup file: its simulators are made, or given its regions when the grid has them
   --simulator FILE  the config of a simulator of another install; several, planned together and checked between them (ports,
@@ -113,8 +113,8 @@ if [[ -n "$robust" && -z "$accounts" ]] && [[ "$inplace" == true || "$forget" ==
 		[[ -r "$file" ]] || die "cannot read $file"
 		paths+=("$(realpath "$file")")
 	done
-	request=$(jq -cn --arg file "$(realpath "$robust")" --arg nick "$nick" --arg name "$name" --arg mode "$mode" --argjson forget "$forget" \
-		'{data: {type: "imports", attributes: ({kind: "robust", file: $file, mode: $mode, inPlace: true, forget: $forget, simulators: ($ARGS.positional | map({file: .} + (if $name != "" then {name: $name} else {} end)))} + (if $nick != "" then {nick: $nick} else {} end))}}' \
+	request=$(jq -cn --arg file "$(realpath "$robust")" --arg nick "$nick" --arg core "$core" --arg name "$name" --arg mode "$mode" --argjson forget "$forget" \
+		'{data: {type: "imports", attributes: ({kind: "robust", file: $file, mode: $mode, inPlace: true, forget: $forget, simulators: ($ARGS.positional | map({file: .} + (if $name != "" then {name: $name} else {} end)))} + ({nick: $nick, core: $core} | with_entries(select(.value != ""))))}}' \
 		--args ${paths[@]+"${paths[@]}"})
 	reply=$(engine POST /setups/imports --data=- <<<"$request") || true
 	jq -e '.data.attributes' <<<"$reply" >/dev/null 2>&1 ||

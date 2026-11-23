@@ -397,6 +397,10 @@ function test_an_existing_install_is_registered_in_place_or_forgotten() {
 	assert_contains "Nothing was written" "$plan"
 	assert_equals "true false welcome" "$(jq -r '.data.attributes | "\(.inPlace) \(.forget) \(.simulators[0].name)"' "$WORK/request.json")"
 
+	# The core and the nick asked go to the engine
+	OPENSIM_API="$api" "$OPENSIM" import --robust "$robust" --in-place --core "$WORK/old" --nick way >/dev/null 2>&1
+	assert_equals "$WORK/old way" "$(jq -r '.data.attributes | "\(.core) \(.nick)"' "$WORK/request.json")"
+
 	local forgotten
 	forgotten=$(OPENSIM_API="$api" "$OPENSIM" import --robust "$robust" --forget --apply 2>&1)
 	assert_equals "true apply" "$(jq -r '.data.attributes | "\(.forget) \(.mode)"' "$WORK/request.json")"
