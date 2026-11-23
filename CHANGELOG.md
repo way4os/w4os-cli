@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- fix (kickstart): the SQL accounts shown before anything changes (exists, made, left alone; where each password comes from, masked), --show-passwords
 - new (kickstart): beside an install of before the kit, --in-place or --migrate is asked; its own start set aside, its grid registered in place, --restart
 - fix (import): --core goes with --in-place too
 - fix (kickstart): an SQL account of the name on any host is left as it is, never shadowed by one for localhost

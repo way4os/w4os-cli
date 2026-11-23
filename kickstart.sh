@@ -28,6 +28,7 @@
 #           --migrate             beside an install of before the kit: its own start set aside, its grids to bring into the
 #                                 layout of the kit (the commands are given)
 #           --restart             with --in-place: stop its running instances and start them again under the service
+#           --show-passwords      show the passwords of the SQL accounts in the plan (masked by default)
 #           --setup               run `opensim setup` after the full or OpenSim install
 #           --dependencies        install quick-install's own dependencies
 #           --mariadb | --mysql   install/configure the requested SQL server
@@ -176,6 +177,7 @@ plan_packages
 APT_SOURCE_DIR=${APT_SOURCE_DIR:-}
 ASSUME_YES=${ASSUME_YES:-}
 RUN_SETUP=${RUN_SETUP:-}
+SHOW_PASSWORDS=${SHOW_PASSWORDS:-}
 LEGACY_MODE=${LEGACY_MODE:-}
 LEGACY_RESTART=${LEGACY_RESTART:-}
 # An install of before the kit (opensim-debian): its folder, and the cron that starts its instances
@@ -226,8 +228,9 @@ die() {
 ask() {
 	[[ -n "$ASSUME_YES" ]] && return 0
 	[[ -r /dev/tty ]] || return 0
-	local answer
-	read -r -p "$1 [Y/n] " answer </dev/tty
+	local answer=
+	# A terminal that cannot be opened (no controlling one: ssh without a tty, cron) is nobody to answer
+	read -r -p "$1 [Y/n] " answer </dev/tty 2>/dev/null || return 0
 	[[ ! $answer =~ ^[Nn] ]]
 }
 
@@ -849,6 +852,35 @@ start_sql_server() {
 	return 1
 }
 
+# Where the password of an SQL account comes from, by its variable: the rc file of the kit, the environment, or none (made here)
+password_source() { # variable
+	if [[ -z "${!1:-}" ]]; then
+		echo generated
+	elif [[ -f "$OPENSIM_RC_PATH" ]] && grep -q "^export $1=" "$OPENSIM_RC_PATH"; then
+		echo "from $OPENSIM_RC_PATH"
+	else
+		echo "given (environment)"
+	fi
+}
+
+# One account of the plan: its name and hosts, whether it exists, what is done with it, where its password comes from (masked
+# unless --show-passwords)
+account_line() { # name exists role source password
+	local hosts shown='********'
+	[[ -z "$SHOW_PASSWORDS" ]] || shown=$5
+	hosts=$(sql_account_hosts "$1" | paste -sd, -)
+	if [[ "$2" == 1 ]]; then
+		say "  $1@$hosts ($3): exists, used as it is, never changed; password $4: $shown"
+	else
+		say "  $1@localhost ($3): new, made now; password $4: $shown"
+	fi
+}
+
+# Whether an SQL account logs in with a password, on the server of this machine
+sql_login() { # name password
+	MYSQL_PWD=$2 "$sql_client" -u "$1" -h localhost -Nse 'SELECT 1' >/dev/null 2>&1
+}
+
 # The hosts an SQL account of this name has, one a line, none when there is no such account (on any host)
 sql_account_hosts() { # name
 	as_root "$sql_client" -Nse "SELECT Host FROM mysql.user WHERE User='$1'" 2>/dev/null
@@ -914,8 +946,25 @@ phase_database() {
 			say "The SQL account opensim exists already, on $(sql_account_hosts opensim | paste -sd, -) (the one of an existing grid?): it is left as it is, the kit uses $OPENSIM_DB_USER"
 		fi
 	fi
+	local admin_source app_source
+	admin_source=$(password_source OPENSIM_DB_ADMIN_PASS)
+	app_source=$(password_source OPENSIM_DB_PASS)
 	OPENSIM_DB_ADMIN_PASS=${OPENSIM_DB_ADMIN_PASS:-$(openssl rand -hex 32)}
 	OPENSIM_DB_PASS=${OPENSIM_DB_PASS:-$(openssl rand -hex 32)}
+	# Each account, and what is done with it, said before anything is changed
+	say "The SQL accounts the kit uses, on the server of this machine:"
+	account_line "$OPENSIM_DB_ADMIN_USER" "$admin_exists" "administrator, all the rights" "$admin_source" "$OPENSIM_DB_ADMIN_PASS"
+	account_line "$OPENSIM_DB_USER" "$app_exists" "the instances of the kit" "$app_source" "$OPENSIM_DB_PASS"
+	local other
+	for other in opensim opensim_admin; do
+		[[ "$other" == "$OPENSIM_DB_USER" || "$other" == "$OPENSIM_DB_ADMIN_USER" ]] && continue
+		[[ -z "$(sql_account_hosts "$other")" ]] || say "  $other@$(sql_account_hosts "$other" | paste -sd, -): exists, another install's: left as it is, never changed nor shadowed"
+	done
+	[[ -n "$SHOW_PASSWORDS" ]] || say "  (the passwords are masked: --show-passwords shows them)"
+	# An account that exists is used only with its own password: never changed to fit the one given
+	((admin_exists == 0)) || sql_login "$OPENSIM_DB_ADMIN_USER" "$OPENSIM_DB_ADMIN_PASS" || die "SQL account $OPENSIM_DB_ADMIN_USER exists, and its password ($admin_source) is refused: give its own (OPENSIM_DB_ADMIN_PASS), it is never changed"
+	((app_exists == 0)) || sql_login "$OPENSIM_DB_USER" "$OPENSIM_DB_PASS" || die "SQL account $OPENSIM_DB_USER exists, and its password ($app_source) is refused: give its own (OPENSIM_DB_PASS), it is never changed"
+	ask "Use these SQL accounts?" || die "nothing changed in the SQL server"
 	if [[ $admin_exists != 1 || $app_exists != 1 ]]; then
 		local admin_password_sql=${OPENSIM_DB_ADMIN_PASS//\'/\'\'} app_password_sql=${OPENSIM_DB_PASS//\'/\'\'}
 		{
@@ -1405,6 +1454,10 @@ while (($#)); do
 		;;
 	--restart)
 		LEGACY_RESTART=yes
+		PODMAN_INSTALL_ARGS+=("$argument")
+		;;
+	--show-passwords)
+		SHOW_PASSWORDS=yes
 		PODMAN_INSTALL_ARGS+=("$argument")
 		;;
 	--setup)

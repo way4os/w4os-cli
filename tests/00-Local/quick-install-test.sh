@@ -589,3 +589,58 @@ function test_no_install_of_before_the_kit_changes_nothing() {
 	assert_same "" "$(legacy_install)"
 	legacy_gate
 }
+
+function test_the_sql_accounts_are_shown_before_anything_is_changed_their_passwords_masked() {
+	quick_install_load_library || return
+	local sql=$WORK/accounts.sql
+	configure_package_sources() { return 0; }
+	database_server_installed() { return 0; }
+	start_sql_server() { return 0; }
+	save_database_credentials() { return 0; }
+	uname() { printf 'Linux\n'; }
+	as_root() { "$@"; }
+	mariadb() {
+		if [[ "${1:-}" == -Nse ]]; then
+			[[ "$2" != *"User='opensim'"* ]] || printf '%%\n'
+			return 0
+		fi
+		cat >"$sql"
+	}
+	unset OPENSIM_DB_USER OPENSIM_DB_PASS OPENSIM_DB_ADMIN_USER OPENSIM_DB_ADMIN_PASS
+	OPENSIM_RC_PATH=$WORK/no-rc SHOW_PASSWORDS=
+
+	local said shown
+	said=$(phase_database)
+	shown=$(SHOW_PASSWORDS=yes OPENSIM_DB_PASS=visible-secret OPENSIM_DB_USER=kit_user phase_database)
+
+	assert_contains "opensim_admin@localhost (administrator, all the rights): new, made now; password generated: ********" "$said"
+	assert_contains "opensim_w4os@localhost (the instances of the kit): new, made now; password generated: ********" "$said"
+	assert_contains "opensim@%: exists, another install's: left as it is, never changed nor shadowed" "$said"
+	assert_contains "--show-passwords shows them" "$said"
+	assert_contains "kit_user@localhost (the instances of the kit): new, made now; password given (environment): visible-secret" "$shown"
+}
+
+function test_an_existing_sql_account_is_used_only_with_its_own_password() {
+	quick_install_load_library || return
+	configure_package_sources() { return 0; }
+	database_server_installed() { return 0; }
+	start_sql_server() { return 0; }
+	save_database_credentials() { return 0; }
+	uname() { printf 'Linux\n'; }
+	as_root() { "$@"; }
+	# The account opensim exists; its own password is grid-secret
+	mariadb() {
+		if [[ "${1:-}" == -Nse ]]; then [[ "$2" != *"User='opensim'"* ]] || printf '%%\n'; return 0; fi
+		if [[ "${1:-}" == -u ]]; then [[ "${MYSQL_PWD:-}" == grid-secret ]]; return; fi
+		cat >/dev/null
+	}
+	unset OPENSIM_DB_ADMIN_USER OPENSIM_DB_ADMIN_PASS
+	OPENSIM_RC_PATH=$WORK/no-rc PGM=kickstart.sh OPENSIM_DB_USER=opensim
+
+	local refused status=0
+	refused=$(OPENSIM_DB_PASS=wrong phase_database 2>&1) || status=$?
+
+	assert_same 1 "$status"
+	assert_contains "SQL account opensim exists, and its password (given (environment)) is refused" "$refused"
+	assert_successful_code "$(OPENSIM_DB_PASS=grid-secret phase_database >/dev/null 2>&1; echo $?)"
+}
