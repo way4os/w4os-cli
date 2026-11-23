@@ -3,9 +3,9 @@
 # OpenSim Install script: installs OpenSim and optionally starts `opensim setup`.
 #
 #   From the web (Debian or Ubuntu): download it, then run it with its options
-#     curl -fsSL -O https://w4os.org/kickstart.sh
+#     curl -fsSL -O https://raw.githubusercontent.com/way4os/w4os-cli/master/kickstart.sh
 #     chmod +x kickstart.sh && sudo ./kickstart.sh --setup
-#   or in one line: curl -fsSL https://w4os.org/kickstart.sh | sudo bash -s -- --setup
+#   or in one line: curl -fsSL https://raw.githubusercontent.com/way4os/w4os-cli/master/kickstart.sh | sudo bash -s -- --setup
 #
 #   Or from a clone of the repository:
 #     git clone https://github.com/way4os/w4os-cli.git && cd w4os-cli && ./kickstart.sh

@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- doc: the installer is fetched from the repository (raw.githubusercontent.com/way4os/w4os-cli/master/kickstart.sh), no site alias in the docs
 - fix (kickstart): the APT sources are updated where they stand, commented or not, and added at the end only when missing: the order and the comments of the user stay
 - update (kickstart): `charm stable` is always the source of the releases; `--unstable` adds the beta releases (charm unstable), `--testing` adds charm-tests and `--unstable`; one script, no kickstart-dev.sh
 - new (address): the plan shows the addresses the databases keep, each column with its rows

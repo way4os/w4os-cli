@@ -11,7 +11,7 @@ The command line to set up and manage OpenSimulator, in bash. It asks the questi
 This will install OpenSimulator, OpenSim Engine and all required packages from official apt repository.
 
 ```bash
-curl -fsSL -O https://w4os.org/kickstart.sh
+curl -fsSL -O https://raw.githubusercontent.com/way4os/w4os-cli/master/kickstart.sh
 chmod +x kickstart.sh
 sudo ./kickstart.sh --setup
 ```
@@ -24,7 +24,7 @@ See `./kickstart.sh --help` for other options:
 The release source (`charm stable`) is always there, whatever the options. For instance, the tools alone from the test builds:
 
 ```bash
-curl -fsSL -O https://w4os.org/kickstart.sh
+curl -fsSL -O https://raw.githubusercontent.com/way4os/w4os-cli/master/kickstart.sh
 chmod +x kickstart.sh
 sudo ./kickstart.sh --testing --tools
 ```
