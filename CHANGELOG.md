@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- fix (import): a switch names the instances still starting, not answering yet, and fails
 - fix (status): a module installed but not configured (Gloebit without its key) is said, with the simulators it is off for
 - fix (import): sudo opensim import --robust plans as root, as the apply moves its data
 - fix (kickstart): --restart finds the old instances by their -inifile, quoted, relative or a link, resolved

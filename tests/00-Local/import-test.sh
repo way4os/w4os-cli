@@ -471,7 +471,7 @@ function test_a_switch_that_starts_nothing_says_why_each_did_not_start_and_fails
 	cat >"$api" <<-'API'
 	#!/usr/bin/env bash
 	cat >"$WORK/request.json"
-	jq -c '.data.attributes as $a | {data: {type: "imports", attributes: {kind: "robust", mode: "plan", applied: false, switched: true, started: [], failed: {oldgrid: "oldgrid failed to start: the process exited immediately", "oldgrid.welcome": "not started: the Robust of oldgrid did not start"}, grid: "oldgrid", name: "Old Grid", source: $a.file, problems: {}}}}' "$WORK/request.json"
+	jq -c '.data.attributes as $a | {data: {type: "imports", attributes: {kind: "robust", mode: "plan", applied: false, switched: true, started: [], starting: ["oldgrid.second"], failed: {oldgrid: "oldgrid failed to start: the process exited immediately", "oldgrid.welcome": "not started: the Robust of oldgrid did not start"}, grid: "oldgrid", name: "Old Grid", source: $a.file, problems: {}}}}' "$WORK/request.json"
 	API
 	chmod +x "$api"
 	export WORK
@@ -480,6 +480,7 @@ function test_a_switch_that_starts_nothing_says_why_each_did_not_start_and_fails
 	assert_contains "NOT all started" "$out"
 	assert_contains "Not started: oldgrid: oldgrid failed to start" "$out"
 	assert_contains "Not started: oldgrid.welcome: not started: the Robust" "$out"
+	assert_contains "Still starting, not answering yet: oldgrid.second" "$out"
 	assert_not_contains "Started:" "$out"
 	assert_not_equals 0 "$status"
 }
