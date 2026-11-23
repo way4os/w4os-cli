@@ -117,7 +117,16 @@ opensim import --robust /opt/opensim/bin/Robust.HG.ini --simulator /opt/opensim/
 opensim import --robust /opt/opensim/bin/Robust.HG.ini --switch
 ```
 
-`opensim import --robust FILE --in-place [--simulator FILE...] [--name NAME] [--nick NICK] [--apply]` runs the grid of another install where it is, not migrated: only its section of the config of the suite (`[Grid <nick>]` of `/etc/w4os/w4os.conf`: its Robust config, its core, its simulators) is written, disabled; the install is never changed, and the suite runs it from its own files as any of its grids (`opensim enable`, `opensim start`), the settings of its helpers kept in that section. `--forget --apply` removes the section: the install is as it was.
+`opensim import --robust FILE --in-place [--simulator FILE...] [--name NAME] [--nick NICK] [--core DIR] [--apply]` runs the grid of another install where it is, not migrated: only its section of the config of the suite (`[Grid <nick>]` of `/etc/w4os/w4os.conf`: its Robust config, its core, its simulators) is written, disabled; the install is never changed, and the suite runs it from its own files as any of its grids (`opensim enable`, which enables its simulators with it, `opensim start`), the settings of its helpers kept in that section. Its nick is the one of its config in small letters, its core the one its config names (`[Launch] BinDir`), unless `--nick` and `--core` say otherwise. Its instances run as the account of the service: the import says which of its folders that account cannot write, and the command that gives them. `--forget --apply` removes the section: the install is as it was.
+
+Before its grid runs here, its own start stops: kickstart does it (below), or by hand its hourly cron (`/etc/cron.hourly/opensim`), and its running instances (a Robust with a remote console has no screen: `kill -TERM` its process).
+
+On a server that has an install of before the kit (`/opt/opensim`), kickstart asks for the choice and never installs beside it silently: `--in-place` sets its own start aside (its cron renamed `*.w4os-disabled`, a name the cron skips; rename it back to undo), installs the kit and registers its grid in place (one Robust, with its simulators: else it gives the commands), and with `--restart` stops its instances and starts them again under the service; `--migrate` sets its own start aside and gives the commands of the import into the layout of the kit.
+
+```bash
+sudo ./kickstart.sh --testing --in-place
+sudo ./kickstart.sh --testing --in-place --restart
+```
 
 ```bash
 opensim import --robust /opt/opensim/bin/Robust.HG.ini --in-place --simulator /opt/opensim/bin/OpenSim.ini --name welcome --apply

@@ -23,6 +23,11 @@
 #           --tools               only the command line and the engine, light (no core, no database, no website): to work on
 #                                 a grid installed otherwise (opensim import --accounts FILE --robust ROBUST_INI)
 #           --cleanup             remove an existing OpenSim installation first (asks for confirmation)
+#           --in-place            beside an install of before the kit (/opt/opensim): run its grids where they are, under the
+#                                 service of the kit; its own start (its cron) set aside, reversibly
+#           --migrate             beside an install of before the kit: its own start set aside, its grids to bring into the
+#                                 layout of the kit (the commands are given)
+#           --restart             with --in-place: stop its running instances and start them again under the service
 #           --setup               run `opensim setup` after the full or OpenSim install
 #           --dependencies        install quick-install's own dependencies
 #           --mariadb | --mysql   install/configure the requested SQL server
@@ -171,6 +176,11 @@ plan_packages
 APT_SOURCE_DIR=${APT_SOURCE_DIR:-}
 ASSUME_YES=${ASSUME_YES:-}
 RUN_SETUP=${RUN_SETUP:-}
+LEGACY_MODE=${LEGACY_MODE:-}
+LEGACY_RESTART=${LEGACY_RESTART:-}
+# An install of before the kit (opensim-debian): its folder, and the cron that starts its instances
+LEGACY_ROOT=${LEGACY_ROOT:-/opt/opensim}
+LEGACY_CRON=${LEGACY_CRON:-/etc/cron.hourly/opensim}
 DPKG_CONFIGURED=no
 APT_UPDATED=no
 PACKAGE_SOURCES_READY=no
@@ -922,6 +932,7 @@ phase_database() {
 end_installation() {
 	local basedir opensim_path setup_config=${OPENSIM_SETUP_CONFIG_FILE:-$SETUP_CONFIG_FILE} setup_config_path= setup_command setup_option=--config
 	local -a setup_arguments=(setup)
+	[[ -z "$LEGACY_MODE" || $(uname -s) != Linux ]] || legacy_after_install
 
 	if [ -n "${clone:-}" ]; then
 		basedir=$clone
@@ -1030,6 +1041,100 @@ phase_dotnet() {
 	rm -f "$install_script"
 	as_root ln -sf /usr/local/share/dotnet/dotnet /usr/local/bin/dotnet || die "could not link dotnet into /usr/local/bin"
 	dotnet_runtime_installed || die "no .NET 8 or newer runtime is available after installation"
+}
+
+# The install of before the kit on this machine (opensim-debian, in /opt/opensim): its folder, nothing when there is none
+legacy_install() {
+	if [[ -f "$LEGACY_ROOT/lib/os-helpers" ]] || { [[ -f "$LEGACY_CRON" ]] && grep -q "$LEGACY_ROOT" "$LEGACY_CRON" 2>/dev/null; }; then
+		printf '%s\n' "$LEGACY_ROOT"
+	fi
+}
+
+# What starts the instances of the install of before the kit by itself: its hourly cron, and a unit of its own named opensim
+# (which would hide the one of the kit)
+legacy_starters() {
+	[[ ! -f "$LEGACY_CRON" ]] || printf '%s\n' "$LEGACY_CRON"
+	local unit
+	for unit in ${LEGACY_UNITS:-/etc/systemd/system/opensim.service /etc/init.d/opensim}; do
+		[[ -f "$unit" && ! -L "$unit" ]] && ! grep -q "opensim service" "$unit" 2>/dev/null && printf '%s\n' "$unit"
+	done
+	return 0
+}
+
+# Before anything is installed, beside an install of before the kit: the choice is asked for (--in-place or --migrate), and its
+# own start is set aside, renamed *.w4os-disabled (a cron of run-parts skips a name with a dot), so that it never starts what the
+# kit runs, nor reads its /etc/opensim
+legacy_gate() {
+	local root starter
+	root=$(legacy_install)
+	[[ -n "$root" ]] || return 0
+	if [[ -z "$LEGACY_MODE" ]]; then
+		say "This machine has an install of before the kit, in $root: the kit never runs beside it without your choice."
+		say "  --in-place  its grids run where they are, under the service of the kit (opensim import --in-place), its own start set aside"
+		say "  --migrate   its own start set aside, its grids to bring into the layout of the kit (opensim import), the old install kept"
+		die "choose one: run kickstart.sh again with --in-place (or --migrate)"
+	fi
+	while IFS= read -r starter; do
+		[[ -n "$starter" ]] || continue
+		as_root mv -- "$starter" "$starter.w4os-disabled" || die "could not set aside $starter"
+		say "Set aside: $starter is now $starter.w4os-disabled (rename it back to run the install of before the kit again)"
+	done < <(legacy_starters)
+	[[ ! -d /run/systemd/system ]] || as_root systemctl daemon-reload || true
+}
+
+# The configs of the install of before the kit: its Robusts, its simulators (one a line, by kind)
+legacy_configs() { # robust|simulator
+	local folder=robust.d
+	[[ "$1" == robust ]] || folder=opensim.d
+	find "$(legacy_install)/etc/$folder" -maxdepth 1 -name "*.ini" 2>/dev/null | sort
+}
+
+# Once the kit is installed, beside an install of before it: its grid registered in place (one Robust here: with its
+# simulators), else the commands to do it; with --restart, its instances stopped (SIGTERM: a Robust with a REST console has no
+# screen) and started again under the service
+legacy_after_install() {
+	local root robust file pid cli
+	local -a robusts=() simulators=() import=()
+	root=$(legacy_install)
+	[[ -n "$root" ]] || return 0
+	# The command of the kit, never the one of the install of before it that /usr/bin may still hold
+	cli=${clone:+$clone/bin/opensim}
+	[[ -n "$cli" ]] || cli=/usr/share/w4os-cli/bin/opensim
+	[[ -x "$cli" ]] || cli=opensim
+	mapfile -t robusts < <(legacy_configs robust)
+	mapfile -t simulators < <(legacy_configs simulator)
+	if [[ "$LEGACY_MODE" == migrate ]]; then
+		say "To bring the grids of $root into the layout of the kit (the old install is kept as it is):"
+		for robust in "${robusts[@]}"; do say "  opensim import --robust $robust$(printf ' --simulator %s' "${simulators[@]}") --apply --switch"; done
+		return 0
+	fi
+	if ((${#robusts[@]} != 1)); then
+		say "The grids of $root are run in place once registered, one for each Robust, with its simulators:"
+		for robust in "${robusts[@]}"; do say "  opensim import --robust $robust --in-place --simulator SIMULATOR.ini... --apply && opensim enable NICK"; done
+		return 0
+	fi
+	import=(import --robust "${robusts[0]}" --in-place)
+	for file in "${simulators[@]}"; do import+=(--simulator "$file"); done
+	"$cli" "${import[@]}" --apply || die "could not register the grid of $root in place"
+	"$cli" enable "$(legacy_nick "${robusts[0]}")" || die "could not enable the grid of $root"
+	if [[ "$LEGACY_RESTART" != yes ]]; then
+		say "Its instances still run as they were started. Once the grid may stop: $0 --in-place --restart (or stop them, then sudo systemctl restart opensim)"
+		return 0
+	fi
+	# The simulators first, then the Robust: each asked to end (SIGTERM), a minute each at most
+	for file in "${simulators[@]}" "${robusts[@]}"; do
+		for pid in $(pgrep -f -- "-inifile=$file" || true); do
+			as_root kill -TERM "$pid" 2>/dev/null || continue
+			for _ in $(seq 1 60); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+		done
+	done
+	[[ ! -d /run/systemd/system ]] || as_root systemctl restart opensim || die "could not start opensim.service: systemctl status opensim"
+	say "The grid of $root runs under the service of the kit (opensim status)"
+}
+
+# The nick the kit gives a grid in place: the gridnick of its Robust config, in the small letters of a nick
+legacy_nick() { # robust config
+	sed -nE 's/^[[:space:]]*gridnick[[:space:]]*=[[:space:]]*"?([^";]*)"?.*/\1/p' "$1" | head -1 | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-'
 }
 
 # The web server configs that use files of the folders a cleanup removes, one a line: "link PATH" (a link to one of them, in the
@@ -1293,6 +1398,15 @@ while (($#)); do
 		RUN_CLEANUP=yes
 		PODMAN_INSTALL_ARGS+=("$argument")
 		;;
+	--in-place | --migrate)
+		[[ -z "$LEGACY_MODE" || "$LEGACY_MODE" == "${argument#--}" ]] || die "choose --in-place or --migrate, not both"
+		LEGACY_MODE=${argument#--}
+		PODMAN_INSTALL_ARGS+=("$argument")
+		;;
+	--restart)
+		LEGACY_RESTART=yes
+		PODMAN_INSTALL_ARGS+=("$argument")
+		;;
 	--setup)
 		RUN_SETUP=yes
 		PODMAN_INSTALL_ARGS+=("$argument")
@@ -1386,6 +1500,8 @@ if [[ "$RUN_CLEANUP" == yes ]]; then
 	[[ $(uname -s) == Linux ]] || die "cleanup is available on Debian and Ubuntu only"
 	phase_cleanup
 fi
+# An install of before the kit: never beside it silently (both would read /etc/opensim and start the same grids)
+[[ $(uname -s) != Linux || "$RUN_CLEANUP" == yes ]] || legacy_gate
 
 case "$INSTALL_PHASE" in
 all)

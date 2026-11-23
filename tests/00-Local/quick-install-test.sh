@@ -533,3 +533,59 @@ function test_an_account_name_asked_for_that_exists_needs_its_password() {
 	assert_same 1 "$status"
 	assert_contains "SQL account grid_user already exists; set OPENSIM_DB_PASS" "$said"
 }
+
+# An install of before the kit in a temporary folder: its helpers, its cron, a unit of its own, a Robust and a simulator
+function legacy_fixture() {
+	LEGACY_ROOT=$WORK/opt/opensim LEGACY_CRON=$WORK/cron.hourly/opensim LEGACY_UNITS="$WORK/systemd/opensim.service"
+	mkdir -p "$LEGACY_ROOT/lib" "$LEGACY_ROOT/etc/robust.d" "$LEGACY_ROOT/etc/opensim.d" "$WORK/cron.hourly" "$WORK/systemd"
+	: >"$LEGACY_ROOT/lib/os-helpers"
+	printf '#!/bin/sh\n%s/bin/opensim start\n' "$LEGACY_ROOT" >"$LEGACY_CRON"
+	printf '[Service]\nExecStart=%s/bin/opensim start\n' "$LEGACY_ROOT" >"$WORK/systemd/opensim.service"
+	printf '[GridInfoService]\n    gridnick = "W4osDemoGrid"\n' >"$LEGACY_ROOT/etc/robust.d/W4osDemoGrid.ini"
+	: >"$LEGACY_ROOT/etc/opensim.d/w4osdemogrid_welcome.ini"
+	PGM=kickstart.sh LEGACY_RESTART= clone=
+}
+
+function test_beside_an_install_of_before_the_kit_nothing_happens_without_a_choice() {
+	quick_install_load_library || return
+	legacy_fixture
+	LEGACY_MODE=
+
+	local said status=0
+	said=$(legacy_gate 2>&1) || status=$?
+
+	assert_same 1 "$status"
+	assert_contains "install of before the kit, in $LEGACY_ROOT" "$said"
+	assert_contains "--in-place" "$said"
+	assert_file_exists "$LEGACY_CRON"
+}
+
+function test_in_place_sets_its_own_start_aside_and_registers_its_grid() {
+	quick_install_load_library || return
+	legacy_fixture
+	LEGACY_MODE=in-place
+	as_root() { "$@"; }
+	local calls=$WORK/opensim-calls
+	clone=$WORK/kit
+	mkdir -p "$clone/bin"
+	printf '#!/bin/sh\necho "$*" >>%s\n' "$calls" >"$clone/bin/opensim"
+	chmod +x "$clone/bin/opensim"
+
+	local said
+	said=$(legacy_gate && legacy_after_install)
+
+	assert_file_not_exists "$LEGACY_CRON"
+	assert_file_exists "$LEGACY_CRON.w4os-disabled"
+	assert_file_exists "$WORK/systemd/opensim.service.w4os-disabled"
+	assert_contains "Set aside: $LEGACY_CRON is now $LEGACY_CRON.w4os-disabled" "$said"
+	assert_same "$(printf 'import --robust %s --in-place --simulator %s --apply\nenable w4osdemogrid' "$LEGACY_ROOT/etc/robust.d/W4osDemoGrid.ini" "$LEGACY_ROOT/etc/opensim.d/w4osdemogrid_welcome.ini")" "$(cat "$calls")"
+	assert_contains "--in-place --restart" "$said"
+}
+
+function test_no_install_of_before_the_kit_changes_nothing() {
+	quick_install_load_library || return
+	LEGACY_ROOT=$WORK/none LEGACY_CRON=$WORK/none/cron LEGACY_MODE=
+
+	assert_same "" "$(legacy_install)"
+	legacy_gate
+}
