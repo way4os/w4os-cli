@@ -59,7 +59,7 @@ _opensim()
   cur=${COMP_WORDS[COMP_CWORD]}
   prev=${COMP_WORDS[COMP_CWORD-1]}
   if [ "$COMP_CWORD" = 1 ]; then
-    COMPREPLY=( $(compgen -W "setup import region simulator settings address posts status ports start stop restart console screen enable disable web next ban save load backup restore oar api api-key rest install-dotnet --version" -- "$cur") )
+    COMPREPLY=( $(compgen -W "service setup import region simulator settings address posts status ports start stop restart console screen enable disable web next ban save load backup restore oar api api-key rest install-dotnet --version" -- "$cur") )
     return
   fi
   if _opensim_wants_file "$prev"; then
