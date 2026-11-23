@@ -11,7 +11,7 @@ The command line to set up and manage OpenSimulator, in bash. It asks the questi
 This will install OpenSimulator, OpenSim Engine and all required packages from official apt repository.
 
 ```bash
-curl -fsSL -O https://raw.githubusercontent.com/way4os/w4os-cli/master/kickstart.sh
+curl -fsSL -O https://raw.githubusercontent.com/way4os/w4os-cli/charm-dev/kickstart.sh
 chmod +x kickstart.sh
 sudo ./kickstart.sh --setup
 ```
@@ -24,7 +24,7 @@ See `./kickstart.sh --help` for other options:
 The release source (`charm stable`) is always there, whatever the options. For instance, the tools alone from the test builds:
 
 ```bash
-curl -fsSL -O https://raw.githubusercontent.com/way4os/w4os-cli/master/kickstart.sh
+curl -fsSL -O https://raw.githubusercontent.com/way4os/w4os-cli/charm-dev/kickstart.sh
 chmod +x kickstart.sh
 sudo ./kickstart.sh --testing --tools
 ```
@@ -48,8 +48,7 @@ Containers (Podman, Docker) are not supported yet: [CONTAINERS.md](CONTAINERS.md
 Fully tested on:
 
 - Ubuntu 24.04 and 26.04
-- Debian 13
-- Debian 12: the grid packages (engine, helpers, simulators) only. The website of a grid (w4os-site, Grav) needs PHP 8.3 or newer, which Debian 12 does not have: on Debian 12, kickstart says so and installs the grid without its website. The website needs Debian 13, or Ubuntu 24.04 or newer, with the PHP of the distribution.
+- Debian 12 and 13 (the website of a grid on Debian 12 is being worked on: Grav needs PHP 8.3)
 - macOS 13.7.8 and later
 
 ## Features
@@ -177,7 +176,7 @@ opensim simulator add speculoos moved --region "Welcome" --existing --oar Welcom
 
 ### Builds
 
-- [x] apt .deb package (tested on debian 13, ubuntu 24.04 and 26.04, and debian 12 without the website; should work on other debian variants)
+- [x] apt .deb package (tested on debian 12 and 13, ubuntu 24.04 and 26.04, should work on other debian variants)
 - [x] zip (universal)
 - [ ] homebrew
 

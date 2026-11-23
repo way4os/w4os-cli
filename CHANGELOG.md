@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- doc: the installer from charm-dev until the release; Debian 12 and 13, Ubuntu 24.04 and 26.04, the Debian 12 website worked on
 - fix (kickstart): on Debian 12 (PHP 8.2) it says the website needs PHP 8.3 and installs the grid without it
 - fix (kickstart): a package gone from the repository while it installs (404) is installed once more after apt-get update
 - fix (kickstart): --cleanup takes out the web server links and imports of what it removes, before they stop the server

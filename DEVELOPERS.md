@@ -78,6 +78,7 @@ v1.2.3 Main change if applicable
 - Omit small patches and fixes, focus on essential features
 - Make sure to update all relevant files (.version, README.md, composer.json... ) and update CHANGELOG.md with the exact same description
 - Replace `dev-dev` requires with released constraints (e.g. `^1.0`) and run `composer update` so that `composer.lock` no longer points to local paths, otherwise the release cannot be installed on another machine. Switch back to `dev-dev` after the release
+- Switch the kickstart URLs of README.md and the wiki (docs/Installation.md) from `charm-dev` back to `master`, the branch the release lands on
 - after commit, add a tag named with the bare version number ("1.2.3"), with the exact same message as the commit (starting with "v1.2.3")
 
 ## Documentation
