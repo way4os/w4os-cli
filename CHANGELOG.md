@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- fix (kickstart): Debian 12 gets the website of a grid like the other systems (Grav 1.7 on PHP 8.2)
 - fix (tests): a check keeps the brace glob flag out of the PHP code, which musl and Alpine lack
 - fix (import): an install taken in place or migrated keeps its owner and web account; the service is made to run as them
 - fix (status): a simulator that runs and does not answer is marked [not answering], counted in the summary

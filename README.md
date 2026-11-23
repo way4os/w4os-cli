@@ -48,7 +48,8 @@ Containers (Podman, Docker) are not supported yet: [CONTAINERS.md](CONTAINERS.md
 Fully tested on:
 
 - Ubuntu 24.04 and 26.04
-- Debian 12 and 13 (the website of a grid on Debian 12 is being worked on: Grav needs PHP 8.3)
+- Debian 12 and 13 (on Debian 12, the website of a grid runs Grav 1.7 on PHP 8.2, supported until 31 December 2026: see the
+  [w4os plugin's README](https://github.com/way4os/grav-plugin-w4os#requirements))
 - macOS 13.7.8 and later
 
 ## Features

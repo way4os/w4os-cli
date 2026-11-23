@@ -1302,40 +1302,9 @@ phase_cleanup() {
 	done
 }
 
-# Whether the PHP of the distribution is older than what the website of a grid needs (w4os-site: Grav, PHP 8.3): Debian 12
-site_php_too_old() {
-	local version
-	version=$(LC_ALL=C apt-cache policy php-cli 2>/dev/null | awk '$1 == "Candidate:" { print $2 }')
-	[[ -n "$version" && "$version" != "(none)" ]] || return 1
-	dpkg --compare-versions "$version" lt 2:8.3
-}
-
-# The packages of the kit without its website: the core, its modules, the command line and the engine, and the helpers the
-# website carries otherwise
-kit_without_site() {
-	local package
-	for package in "${OPENSIM_PACKAGES[@]}"; do
-		[[ "$package" == opensim-kit ]] || printf '%s\n' "$package"
-	done
-	apt-cache depends opensim-kit 2>/dev/null | sed -nE 's/^[[:space:]]*\|?Depends: ([a-z0-9.+-]+)$/\1/p' | grep -E '^(opensim|w4os-)' | grep -vx w4os-site || true
-	printf '%s\n' w4os-helpers
-}
-
-# What the full install installs: the kit, or on a system whose PHP the website cannot run on, the grid without it (said first)
+# What the full install installs: the kit, its website with it on every supported system
 install_opensim_packages() {
-	local -a packages
 	apt_update || return $?
-	if site_php_too_old; then
-		say "The website of a grid (w4os-site) needs PHP 8.3 or newer, and this system has PHP $(LC_ALL=C apt-cache policy php-cli | awk '$1 == "Candidate:" { print $2 }' | sed -E 's/^[0-9]+://; s/[+~-].*//') (Debian 12)."
-		say "The grid packages work here (the engine, the helpers, the simulators); the website needs Debian 13, or Ubuntu 24.04 or newer."
-		ask "Install the grid without its website?" || die "nothing installed"
-		mapfile -t packages < <(kit_without_site)
-		install_packages "${packages[@]}" || return $?
-		# What the kit does once installed: the modules that start without a config enabled, unless the admin set them
-		[[ ! -f /etc/w4os/w4os.conf ]] || as_root php /usr/share/w4os-engine/bin/opensim-profiles.php --conf /etc/w4os/w4os.conf --default-modules "opensimsearch gloebit" ||
-			say "Could not enable the modules in /etc/w4os/w4os.conf"
-		return 0
-	fi
 	install_packages "${OPENSIM_PACKAGES[@]}"
 }
 
