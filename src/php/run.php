@@ -157,6 +157,8 @@ function render(Status $status): string
     $rows = [['INSTANCE', 'TYPE', 'PID', 'USER', '%CPU', '%MEM', 'RSS']];
     // A Robust that runs but cannot read its database answers nothing that needs it: it is up, not working
     $withoutDatabase = $status->withoutDatabase();
+    // A simulator whose process runs but does not answer is hung, or still loading: it is up, not working
+    $unresponsive = $status->unresponsive();
     foreach ($status->instances as $item) {
         $p = $item->process();
         $rows[] =
@@ -169,7 +171,8 @@ function render(Status $status): string
                     $p->user,
                     sprintf('%.1f', $p->cpu),
                     sprintf('%.1f', $p->memory),
-                    (string) $p->rss . (in_array($item->name(), $withoutDatabase, true) ? '  [no database]' : ''),
+                    (string) $p->rss . (in_array($item->name(), $withoutDatabase, true) ? '  [no database]' : '')
+                        . (in_array($item->name(), $unresponsive, true) ? '  [not answering]' : ''),
                 ];
     }
     $widths = [];
@@ -188,7 +191,8 @@ function render(Status $status): string
     }
     $t = $status->totals();
     $line = $status->up() . ' up' . ($status->down() > 0 ? ', ' . $status->down() . ' down' : '')
-        . ($withoutDatabase === [] ? '' : ', ' . count($withoutDatabase) . ' without its database (' . implode(', ', $withoutDatabase) . ')');
+        . ($withoutDatabase === [] ? '' : ', ' . count($withoutDatabase) . ' without its database (' . implode(', ', $withoutDatabase) . ')')
+        . ($unresponsive === [] ? '' : ', ' . count($unresponsive) . ' not answering (' . implode(', ', $unresponsive) . ')');
 
     return $text . sprintf("%s - cpu %.1f%% - mem %.1f%% - rss %d\n", $line, $t['cpu'], $t['memory'], $t['rss']);
 }

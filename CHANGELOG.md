@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- fix (status): a simulator that runs and does not answer is marked [not answering], counted in the summary
 - new (setup): Show passwords in the review (a button in dialog, s in plain text), opensim setup --show-passwords
 - fix (kickstart): the SQL accounts shown before anything changes (exists, made, left alone; where each password comes from, masked), --show-passwords
 - new (kickstart): beside an install of before the kit, --in-place or --migrate is asked; its own start set aside, its grid registered in place, --restart
