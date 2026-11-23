@@ -162,7 +162,11 @@ import)
 	accounts=$(install_accounts)
 	status=0
 	as_system_user "$libexec/import" "$@" || status=$?
-	follow_accounts "$accounts"
+	# A switch has started the grid: under the account of the service, which it ends by restarting
+	restart=
+	for argument in "$@"; do [[ "$argument" != --switch ]] || restart=restart; done
+	((status == 0)) || restart=
+	follow_accounts "$accounts" $restart
 	exit "$status"
 	;;
 

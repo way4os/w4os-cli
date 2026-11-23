@@ -54,12 +54,17 @@ install_accounts() {
 # The accounts of the install changed since BEFORE (install_accounts; an import of an install that exists takes its own): its folders
 # and the units of the suite made to follow them, as root (the system layout of the engine), by the caller, not the account of the
 # instances
-follow_accounts() { # accounts before
+follow_accounts() { # accounts before, [restart: the instances just started are made the service's account's]
 	local now user
 	now=$(install_accounts)
 	[[ "$now" != "$1" ]] || return 0
 	user=$(sed -n 's/^SystemUser=//p' <<<"$now" | head -1)
 	as_root php "$(dirname "$(realpath "$OPENSIM_API")")/opensim-layout.php" || die "could not make the service run as $user"
+	if [[ "${2:-}" == restart && -d /run/systemd/system ]]; then
+		say "Restarting opensim.service: its instances run as $user from now on"
+		as_root systemctl restart opensim || die "could not restart opensim.service: systemctl status opensim"
+		return 0
+	fi
 	say "The service runs as $user from its next start (sudo systemctl restart opensim, once the grids may stop)"
 }
 
