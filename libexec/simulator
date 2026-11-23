@@ -2,14 +2,14 @@
 # opensim simulator add: a simulator made in a grid of this machine with its first region, through the engine (a setup file of one
 # simulator).
 
-USAGE="opensim simulator add GRID NAME --region NAME [--location X,Y] [--size METERS] [--roles ROLE,...] [--http-port PORT] [--owner 'First Last'] [--estate NAME] [--db-admin USER] [--apply]"
-HELP="Makes the simulator NAME in the grid GRID, with its first region. Its database is the one of the environment (OPENSIM_DB_HOST, OPENSIM_DB_USER, OPENSIM_DB_PASS), made when it is missing, by an administrator of the database server (--db-admin USER or OPENSIM_DB_ADMIN_USER, its password from OPENSIM_DB_ADMIN_PASS or asked, never on the command line); its regions join the estate --estate, made when none has that name (by default the estate of --owner, '<Owner> Estate', else the one of the grid), owned by --owner (an account of the grid). What is not given is proposed by the engine: its ports, the nearest free place. Without --apply, says what would be written and where, and writes nothing. Nothing is started: opensim start, once it is written."
+USAGE="opensim simulator add GRID NAME --region NAME [--existing] [--location X,Y] [--size METERS] [--roles ROLE,...] [--http-port PORT] [--owner 'First Last'] [--estate NAME] [--db-admin USER] [--apply]"
+HELP="Makes the simulator NAME in the grid GRID, with its first region. Its database is the one of the environment (OPENSIM_DB_HOST, OPENSIM_DB_USER, OPENSIM_DB_PASS), made when it is missing, by an administrator of the database server (--db-admin USER or OPENSIM_DB_ADMIN_USER, its password from OPENSIM_DB_ADMIN_PASS or asked, never on the command line); its regions join the estate --estate, made when none has that name (by default the estate of --owner, '<Owner> Estate', else the one of the grid), owned by --owner (an account of the grid). What is not given is proposed by the engine: its ports, the nearest free place. --existing takes over the region of that name the grid has already (restored, or moved from another server): its UUID, place, size and owner (the owner of the estate, unless --owner) are the ones the grid keeps, and it is refused while the simulator that runs it elsewhere answers. Without --apply, says what would be written and where, and writes nothing. Nothing is started: opensim start, once it is written."
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 
 [[ "${1:-}" == add ]] || die "usage: $USAGE"
 shift
-words=() region= location= size= roles= http_port= owner= estate= db_admin=${OPENSIM_DB_ADMIN_USER:-} mode=plan
+words=() region= location= size= roles= http_port= owner= estate= existing= db_admin=${OPENSIM_DB_ADMIN_USER:-} mode=plan
 while (($#)); do
 	case "$1" in
 	--region | --location | --size | --roles | --http-port | --owner | --estate | --db-admin)
@@ -18,6 +18,7 @@ while (($#)); do
 		printf -v "${key//-/_}" '%s' "$2"
 		shift 2
 		;;
+	--existing) existing=yes; shift ;;
 	--apply) mode=apply; shift ;;
 	-*) die "unknown option $1 (usage: $USAGE)" ;;
 	*) words+=("$1"); shift ;;
@@ -31,7 +32,7 @@ if [[ -n "$db_admin" && -z "$db_admin_password" && -r /dev/tty ]]; then
 	echo >/dev/tty
 fi
 
-setup=$(jq -cn --arg grid "${words[0]}" --arg simulator "${words[1]}" --arg region "$region" --arg location "$location" --arg size "$size" --arg roles "$roles" --arg http_port "$http_port" --arg owner "$owner" --arg estate "$estate" \
+setup=$(jq -cn --arg grid "${words[0]}" --arg simulator "${words[1]}" --arg region "$region" --arg location "$location" --arg size "$size" --arg roles "$roles" --arg http_port "$http_port" --arg owner "$owner" --arg estate "$estate" --arg existing "$existing" \
 	--arg host "${OPENSIM_DB_HOST:-}" --arg user "${OPENSIM_DB_USER:-}" --arg password "${OPENSIM_DB_PASS:-}" \
 	--arg admin_user "$db_admin" --arg admin_password "$db_admin_password" \
 	'{grid: {nick: $grid}, simulators: [{name: $simulator}
@@ -39,6 +40,7 @@ setup=$(jq -cn --arg grid "${words[0]}" --arg simulator "${words[1]}" --arg regi
 		+ (if $owner != "" or $estate != "" then {estate: ({owner: $owner, name: $estate} | with_entries(select(.value != "")))} else {} end)
 		+ {database: ({host: $host, user: $user, password: $password, admin_user: $admin_user, admin_password: $admin_password} | with_entries(select(.value != "")))}
 		+ {regions: [{name: $region}
+			+ (if $existing != "" then {existing: true} else {} end)
 			+ (if $location != "" then {location: $location} else {} end)
 			+ (if $size != "" then {size: ($size | tonumber)} else {} end)
 			+ (if $roles != "" then {roles: ($roles | split(","))} else {} end)]}]}') || die "--size and --http-port are numbers"

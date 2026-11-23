@@ -138,11 +138,12 @@ The grid may be one this install does not manage: `--robust ROBUST_INI` instead 
 opensim import --accounts members.csv --robust /opt/opensim/bin/Robust.HG.ini --apply
 ```
 
-`opensim import FILE [--apply]` applies a setup file (JSON or YAML, the format of the setup files) to the grid of this machine it names: its simulators are made with their regions, or given its regions when the grid has them. `opensim region add GRID SIMULATOR --name NAME [--location X,Y] [--size METERS] [--roles ROLE,...] [--port PORT] [--apply]` gives one region to a simulator, `opensim simulator add GRID NAME --region NAME [--size METERS] [--roles ...] [--http-port PORT] [--owner 'First Last'] [--apply]` makes a simulator with its first region (its database from `OPENSIM_DB_HOST`, `OPENSIM_DB_USER`, `OPENSIM_DB_PASS`, made when missing). What is not given is proposed by the engine (ports, the nearest free place); without `--apply` they say what would be written and where; nothing is started.
+`opensim import FILE [--apply]` applies a setup file (JSON or YAML, the format of the setup files) to the grid of this machine it names: its simulators are made with their regions, or given its regions when the grid has them. `opensim region add GRID SIMULATOR --name NAME [--location X,Y] [--size METERS] [--roles ROLE,...] [--port PORT] [--apply]` gives one region to a simulator, `opensim simulator add GRID NAME --region NAME [--size METERS] [--roles ...] [--http-port PORT] [--owner 'First Last'] [--apply]` makes a simulator with its first region (its database from `OPENSIM_DB_HOST`, `OPENSIM_DB_USER`, `OPENSIM_DB_PASS`, made when missing). What is not given is proposed by the engine (ports, the nearest free place); without `--apply` they say what would be written and where; nothing is started. Both, and `opensim setup`, take `--existing` (the region of that name the grid has already, restored or moved here: its UUID, place, size and owner kept): see [First setup](docs/First-Setup.md#a-region-the-grid-has-already).
 
 ```bash
 opensim region add speculoos welcome --name "Welcome Two" --size 512 --roles FallbackRegion
 opensim simulator add speculoos north --region "North Shore" --owner "Gudule Lapointe" --apply
+opensim simulator add speculoos moved --region "Welcome" --existing --apply
 ```
 
 - [x] import --simulator FILE [--simulator FILE...] GRID [--apply]: several simulators planned together, checked between them
