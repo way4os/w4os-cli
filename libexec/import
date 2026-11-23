@@ -7,7 +7,7 @@ USAGE="opensim import FILE [--apply]
        opensim import --simulator FILE [--simulator FILE...] GRID [--name NAME] [--core DIR] [--apply]
        opensim import --grid-settings FILE GRID [--apply]
        opensim import --accounts FILE GRID|--robust ROBUST_INI [--format csv|json|yaml] [--keep-going] [--result FILE] [--apply]
-       opensim import --robust FILE [--nick NICK] [--core DIR] [--simulator FILE...] [--apply] [--switch]
+       opensim import --robust FILE [--nick NICK] [--core DIR] [--simulator FILE...] [--copy-data] [--apply] [--switch]
        opensim import --robust FILE --in-place [--nick NICK] [--core DIR] [--simulator FILE...] [--name NAME] [--apply] | --forget [--apply]"
 HELP="Applies a setup file (JSON or YAML: the simulators of a grid of this machine, their regions with name, location, size, roles) to the grid it names, or brings a simulator of another install (its OpenSim.ini, or its file of opensim.d, and the regions it names) into the grid GRID of this machine. Its database is kept as it is (the same one, nothing is copied), its regions are copied with their UUID and their place, its ports and its own settings are kept. Without --apply, says what would be written and where, and writes nothing.
   FILE              a setup file: its simulators are made, or given its regions when the grid has them
@@ -27,8 +27,11 @@ HELP="Applies a setup file (JSON or YAML: the simulators of a grid of this machi
                     makes them in a grid this install does not manage, by its Robust config where it is (nothing registered)
   --robust FILE     the Robust config of a grid of another install (Robust.HG.ini, Robust.ini), migrated into this one: the
                     same grid (its database kept as it is, so its accounts and its regions), its config made here with its own
-                    settings kept, the old install never changed; --simulator brings its simulators in the same run, --nick
-                    and --core when they are not the ones of its config and of this install
+                    settings kept; --simulator brings its simulators in the same run, --nick and --core when they are not the
+                    ones of its config and of this install. The folders of its data in the old install (its assets, its map
+                    tiles...) are moved into the layout of this one, each named in the plan (never measured first); run as root
+                    when the old install is another account's
+  --copy-data       copy the folders of its data instead of moving them: the old install is left whole
   --in-place        the grid of another install run where it is, not migrated: only its section of the config of the suite
                     ([Grid <nick>]: its Robust config, its core, its simulators) is written, disabled; the install is never
                     changed; --name names its simulator (one), --forget removes the section
@@ -38,7 +41,7 @@ HELP="Applies a setup file (JSON or YAML: the simulators of a grid of this machi
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 
-files=() grid= name= core= mode=plan scripts=true settings= accounts= format= keep=false robust= nick= switch=false inplace=false forget=false
+files=() grid= name= core= mode=plan scripts=true settings= accounts= format= keep=false robust= nick= switch=false inplace=false forget=false copydata=false
 while (($#)); do
 	case "$1" in
 	--accounts)
@@ -67,6 +70,7 @@ while (($#)); do
 		;;
 	--nick=*) nick=${1#*=}; shift ;;
 	--switch) switch=true; shift ;;
+	--copy-data) copydata=true; shift ;;
 	--in-place) inplace=true; shift ;;
 	--forget) forget=true; shift ;;
 	--simulator)
@@ -138,8 +142,8 @@ if [[ -n "$robust" && -z "$accounts" ]]; then
 		[[ -r "$file" ]] || die "cannot read $file"
 		paths+=("$(realpath "$file")")
 	done
-	request=$(jq -cn --arg file "$(realpath "$robust")" --arg nick "$nick" --arg core "$core" --arg mode "$mode" --argjson switch "$switch" --argjson scripts "$scripts" \
-		'{data: {type: "imports", attributes: ({kind: "robust", file: $file, mode: $mode, switch: $switch, simulators: ($ARGS.positional | map({file: .} + (if $scripts then {} else {scripts: false} end)))} + ({nick: $nick, core: $core} | with_entries(select(.value != ""))))}}' \
+	request=$(jq -cn --arg file "$(realpath "$robust")" --arg nick "$nick" --arg core "$core" --arg mode "$mode" --argjson switch "$switch" --argjson scripts "$scripts" --argjson copydata "$copydata" \
+		'{data: {type: "imports", attributes: ({kind: "robust", file: $file, mode: $mode, switch: $switch, copyData: $copydata, simulators: ($ARGS.positional | map({file: .} + (if $scripts then {} else {scripts: false} end)))} + ({nick: $nick, core: $core} | with_entries(select(.value != ""))))}}' \
 		--args ${paths[@]+"${paths[@]}"})
 	reply=$(engine POST /setups/imports --data=- <<<"$request") || true
 	jq -e '.data.attributes' <<<"$reply" >/dev/null 2>&1 ||
@@ -162,6 +166,7 @@ if [[ -n "$robust" && -z "$accounts" ]]; then
 		(if .backup then "Backup of the source first: \(.backup.file) (databases \(.backup.databases | join(", ")))" else empty end),
 		(if ((.backup.remote // []) | length) > 0 then "  Not in it, of another server (its own backups keep them): \(.backup.remote | join(", "))" else empty end),
 		(if ((.simulators.steps // []) | length) > 0 then "Simulators: " + (.simulators.steps | map("\(.simulator) (\(.slug))") | join(", ")) else empty end),
+		(if ((.data // []) | length) > 0 then "Data " + (if .data[0].mode == "copy" then "copied" else "moved" end) + " into this install (not measured first):", (.data[] | "  \(.from) -> \(.to)" + (if .acrossFilesystems then " (across file systems: the move tool copies it)" else "" end)) else empty end),
 		(if ((.problems // {}) | length) > 0 then "Problems, nothing can be written:", (.problems | to_entries[] | "  \(.key): \(.value)") else empty end),
 		"",
 		(if .applied then "Written:" else "Would write:" end),

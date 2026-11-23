@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- new (import): --copy-data; a migration moves the data folders of the old install, named in the plan, run as root when needed
 - new (region): region remove takes a region out of its stopped simulator, for --existing to give it to another
 - fix (import): a switch alone says what it did, not the plan of the writing done before
 - fix (import): a switch that changes the account of the instances ends with the service restarted, its grid under that account

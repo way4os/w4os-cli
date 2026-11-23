@@ -442,3 +442,24 @@ function test_takes_a_region_out_of_its_simulator_once_applied_and_says_how_to_g
 	assert_contains "Big Garden: taken out of its simulator" "$out"
 	assert_contains "--existing" "$out"
 }
+
+function test_names_the_data_folders_a_migration_moves_or_copies_with_copy_data() {
+	local api="$WORK/w4os-api" robust="$WORK/old/bin/Robust.HG.ini"
+	mkdir -p "$WORK/old/bin"
+	printf '[GridInfoService]\ngridnick = oldgrid\n' >"$robust"
+	cat >"$api" <<-'API'
+	#!/usr/bin/env bash
+	cat >"$WORK/request.json"
+	jq -c '.data.attributes as $a | {data: {type: "imports", attributes: {kind: "robust", mode: "plan", applied: false, switched: false, grid: "oldgrid", name: "Old Grid", source: $a.file, config: "/etc/opensim/grids/oldgrid/Robust.HG.ini", database: {host: "localhost", name: "oldgrid", user: "u"}, ports: {public: 8002, private: 8003}, settings: [], dropped: [], data: [{from: "/opt/opensim/var/data/OldGrid/fsassets/data", to: "/var/lib/opensim/data/oldgrid/fsassets/data", mode: (if $a.copyData then "copy" else "move" end), acrossFilesystems: true}], problems: {}, writes: [], reminders: []}}}' "$WORK/request.json"
+	API
+	chmod +x "$api"
+	export WORK
+	local out
+	out=$(OPENSIM_API="$api" "$OPENSIM" import --robust "$robust" 2>&1)
+	assert_contains "Data moved into this install (not measured first):" "$out"
+	assert_contains "/opt/opensim/var/data/OldGrid/fsassets/data -> /var/lib/opensim/data/oldgrid/fsassets/data (across file systems" "$out"
+	assert_equals "false" "$(jq -r '.data.attributes.copyData' "$WORK/request.json")"
+	out=$(OPENSIM_API="$api" "$OPENSIM" import --robust "$robust" --copy-data 2>&1)
+	assert_contains "Data copied into this install" "$out"
+	assert_equals "true" "$(jq -r '.data.attributes.copyData' "$WORK/request.json")"
+}
