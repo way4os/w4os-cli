@@ -575,104 +575,91 @@ apt_accessible_local_repository() {
 	printf '%s\n' "$mirror"
 }
 
-merge_magiiic_repository_components() {
-	local repository=$1 source_file=$APT_SOURCE_FILE
-	local -a fields components
-	local component existing_components uri_index
-	local -A seen_components=()
-
-	read -r -a fields <<<"$repository"
-	[[ "${fields[0]:-}" == deb || "${fields[0]:-}" == deb-src ]] || {
-		printf '%s\n' "$repository"
-		return
-	}
-	uri_index=$(apt_source_uri_index "$repository") || {
-		printf '%s\n' "$repository"
-		return
-	}
-	if [[ "${fields[$uri_index]:-}" != https://apt.magiiic.com ]]; then
-		printf '%s\n' "$repository"
-		return
-	fi
-	((${#fields[@]} > uri_index + 2)) || {
-		printf '%s\n' "$repository"
-		return
-	}
-
-	components=("${fields[@]:$((uri_index + 2))}")
-	existing_components=$(awk -v distribution="${fields[$((uri_index + 1))]}" '
-		$1 == "deb" {
-			uri_index = 2
-			if ($2 ~ /^\[/) {
-				while (uri_index < NF && $uri_index !~ /\]$/) uri_index++
-				uri_index++
-			}
-			if ($(uri_index) == "https://apt.magiiic.com" && $(uri_index + 1) == distribution) {
-				for (field = uri_index + 2; field <= NF; field++) print $field
-			}
-		}
-	' "$source_file" 2>/dev/null || true)
-	while IFS= read -r component; do
-		[[ -n "$component" ]] && components+=("$component")
-	done <<<"$existing_components"
-
-	local -a unique_components=()
-	for component in "${components[@]}"; do
-		[[ -n "$component" && -z "${seen_components[$component]+x}" ]] || continue
-		seen_components[$component]=1
-		unique_components+=("$component")
-	done
-	printf '%s' "${fields[0]}"
-	for ((component = 1; component < uri_index + 2; component++)); do
-		printf ' %s' "${fields[$component]}"
-	done
-	printf ' %s' "${unique_components[@]}"
-	printf '\n'
-}
-
+# Write the sources file: each wanted repository (APT_REPOSITORIES) updates its own line where it stands, commented or not,
+# with the components it already has plus the wanted ones; a repository not in the file yet is added at the end. Other lines
+# keep their place. Old Magiiic distributions (main, stable, unstable, tests) are dropped.
 write_apt_repositories() {
-	local source_file=$1 temporary_file=$2 repository distribution
-	local desired_distributions=''
-	local -a fields
-	for repository in "${APT_REPOSITORIES[@]}"; do
-		read -r -a fields <<<"$repository"
-		local uri_index
-		uri_index=$(apt_source_uri_index "$repository") || return $?
-		desired_distributions+=" ${fields[$((uri_index + 1))]:-}"
-	done
-	if [[ -r "$source_file" ]]; then
-		awk -v desired_distributions="$desired_distributions" '
-			BEGIN {
-				desired_count = split(desired_distributions, desired, " ")
+	local source_file=$1 temporary_file=$2 wanted_file=$2.wanted
+	printf '%s\n' "${APT_REPOSITORIES[@]}" >"$wanted_file" || return $?
+	local input=/dev/null
+	[[ -r "$source_file" ]] && input=$source_file
+	awk '
+		# Fields of a sources line, commented or not: sets kind, options, uri, dist, comps; returns 0 for any other line
+		function parse(line,    n, f, i, start) {
+			sub(/^[ \t]*(#[ \t]*)*/, "", line)
+			n = split(line, f, /[ \t]+/)
+			if (f[1] != "deb" && f[1] != "deb-src") return 0
+			kind = f[1]; options = ""; start = 2
+			if (f[2] ~ /^\[/) {
+				for (i = 2; i <= n; i++) {
+					options = options (options == "" ? "" : " ") f[i]
+					if (f[i] ~ /\]$/) break
+				}
+				start = i + 1
 			}
-			{
-				if ($1 != "deb" && $1 != "deb-src") {
-					print
-					next
-				}
-				uri_index = 2
-				if ($2 ~ /^\[/) {
-					while (uri_index < NF && $uri_index !~ /\]$/) uri_index++
-					uri_index++
-				}
-				uri = $(uri_index)
-				distribution = $(uri_index + 1)
-				if (uri ~ /^file:/) next
-				if (uri == "https://apt.magiiic.com") {
-					if (distribution == "main" || distribution == "stable" || distribution == "unstable" || distribution == "tests") next
-					for (i = 1; i <= desired_count; i++) {
-						if (distribution == desired[i]) next
-					}
-				}
-				print
+			uri = f[start]; dist = f[start + 1]; comps = ""
+			if (uri !~ /^[a-z+]+:/ || dist == "") return 0
+			for (i = start + 2; i <= n; i++) comps = comps (comps == "" ? "" : " ") f[i]
+			return 1
+		}
+		function merge(have, add,    n, i, m, j, out, seen, parts) {
+			out = ""
+			n = split(have " " add, parts, /[ \t]+/)
+			for (i = 1; i <= n; i++) {
+				if (parts[i] == "" || (parts[i] in seen)) continue
+				seen[parts[i]] = 1
+				out = out (out == "" ? "" : " ") parts[i]
 			}
-		' "$source_file" >"$temporary_file" || return $?
-	else
-		: >"$temporary_file" || return $?
-	fi
-	for repository in "${APT_REPOSITORIES[@]}"; do
-		merge_magiiic_repository_components "$repository" >>"$temporary_file" || return $?
-	done
+			return out
+		}
+		function line_of(k, comps) {
+			return W_kind[k] " " (W_options[k] == "" ? "" : W_options[k] " ") W_uri[k] " " W_dist[k] " " comps
+		}
+		NR == FNR {
+			if (parse($0)) {
+				wanted++
+				W_kind[wanted] = kind; W_options[wanted] = options; W_uri[wanted] = uri; W_dist[wanted] = dist; W_comps[wanted] = comps
+			}
+			next
+		}
+		{
+			total++
+			text[total] = $0
+			isrepo[total] = 0
+			if (!parse($0)) next
+			isrepo[total] = 1
+			commented[total] = ($0 ~ /^[ \t]*#/)
+			R_uri[total] = uri; R_dist[total] = dist; R_comps[total] = comps
+		}
+		END {
+			# The line of each wanted repository: the first active one, else the first commented one
+			for (k = 1; k <= wanted; k++) {
+				target[k] = 0
+				for (pass = 0; pass <= 1 && !target[k]; pass++)
+					for (i = 1; i <= total && !target[k]; i++)
+						if (isrepo[i] && R_uri[i] == W_uri[k] && R_dist[i] == W_dist[k] && commented[i] == pass) target[k] = i
+				merged[k] = W_comps[k]
+				for (i = 1; i <= total; i++)
+					if (isrepo[i] && !commented[i] && R_uri[i] == W_uri[k] && R_dist[i] == W_dist[k]) merged[k] = merge(R_comps[i], merged[k])
+			}
+			for (i = 1; i <= total; i++) {
+				if (!isrepo[i]) { print text[i]; continue }
+				if (R_uri[i] ~ /^file:/ && !commented[i]) continue
+				done = 0
+				for (k = 1; k <= wanted && !done; k++) {
+					if (R_uri[i] != W_uri[k] || R_dist[i] != W_dist[k]) continue
+					done = 1
+					if (target[k] == i) print line_of(k, merged[k])
+					else if (commented[i]) print text[i]
+				}
+				if (done) continue
+				if (R_uri[i] == "https://apt.magiiic.com" && !commented[i] && (R_dist[i] == "main" || R_dist[i] == "stable" || R_dist[i] == "unstable" || R_dist[i] == "tests")) continue
+				print text[i]
+			}
+			for (k = 1; k <= wanted; k++) if (!target[k]) print line_of(k, merged[k])
+		}
+	' "$wanted_file" "$input" >"$temporary_file" || return $?
+	rm -f "$wanted_file"
 	[[ -z "${apt_debs:-}" ]] || printf 'deb [trusted=yes] file:%s ./\n' "$apt_debs" >>"$temporary_file"
 	as_root install -m 644 "$temporary_file" "$source_file"
 }

@@ -168,6 +168,32 @@ SOURCES
 	assert_equals 1 "$(grep -Fc 'https://apt.magiiic.com charm stable unstable' "$APT_SOURCE_FILE")"
 }
 
+function test_sources_are_updated_where_they_stand_and_added_only_when_missing() {
+	quick_install_load_library || return
+	local stable='deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable'
+	local tests='deb [trusted=yes] https://apt.magiiic.com charm-tests dev'
+	printf '%s\n' "$tests" "deb https://archive.ubuntu.com/ubuntu resolute main" "$stable" >"$APT_SOURCE_FILE"
+
+	# What the user ordered stays: the test builds above, unchanged, nothing added
+	APT_REPOSITORIES=("$stable")
+	write_apt_repositories "$APT_SOURCE_FILE" "$TMP.sources"
+	assert_equals "$tests"$'\n'"deb https://archive.ubuntu.com/ubuntu resolute main"$'\n'"$stable" "$(cat "$APT_SOURCE_FILE")"
+
+	# A commented repository stays commented and in place until it is wanted, then it is enabled where it is
+	printf '%s\n' "$stable" "# $tests" "deb https://archive.ubuntu.com/ubuntu resolute main" >"$APT_SOURCE_FILE"
+	write_apt_repositories "$APT_SOURCE_FILE" "$TMP.sources"
+	assert_equals "$stable"$'\n'"# $tests"$'\n'"deb https://archive.ubuntu.com/ubuntu resolute main" "$(cat "$APT_SOURCE_FILE")"
+	APT_REPOSITORIES=("$stable unstable" "$tests")
+	write_apt_repositories "$APT_SOURCE_FILE" "$TMP.sources"
+	assert_equals "$stable unstable"$'\n'"$tests"$'\n'"deb https://archive.ubuntu.com/ubuntu resolute main" "$(cat "$APT_SOURCE_FILE")"
+
+	# A repository missing from the file is added at the end, once
+	printf '%s\n' "deb https://archive.ubuntu.com/ubuntu resolute main" >"$APT_SOURCE_FILE"
+	write_apt_repositories "$APT_SOURCE_FILE" "$TMP.sources"
+	write_apt_repositories "$APT_SOURCE_FILE" "$TMP.sources"
+	assert_equals "deb https://archive.ubuntu.com/ubuntu resolute main"$'\n'"$stable unstable"$'\n'"$tests" "$(cat "$APT_SOURCE_FILE")"
+}
+
 function test_default_apt_repository_is_charm_stable() {
 	local APT_SOURCE= APT_SOURCE_TESTS=
 	QUICK_INSTALL_LIBRARY_LOADED=no
