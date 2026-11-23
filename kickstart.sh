@@ -1172,14 +1172,21 @@ legacy_after_install() {
 		say "Its instances still run as they were started. Once the grid may stop: $0 --in-place --restart (or stop them, then sudo systemctl restart opensim)"
 		return 0
 	fi
-	# The simulators first, then the Robust: each asked to end (SIGTERM), a minute each at most
+	# The simulators first, then the Robust: each asked to end (SIGTERM, a Robust with a REST console has no screen), a minute each at
+	# most; found by the config it runs, by the path given or the one it leads to (a link of robust.d to the file of its grid)
+	local nick path down
 	for file in "${simulators[@]}" "${robusts[@]}"; do
-		for pid in $(pgrep -f -- "-inifile=$file" || true); do
+		for pid in $({ for path in "$file" "$(readlink -f -- "$file")"; do pgrep -f -- "-inifile=$path( |$)" || true; done; } | sort -u); do
 			as_root kill -TERM "$pid" 2>/dev/null || continue
 			for _ in $(seq 1 60); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+			! kill -0 "$pid" 2>/dev/null || die "process $pid ($file) did not stop: stop it, then $0 --in-place --restart again"
 		done
 	done
 	[[ ! -d /run/systemd/system ]] || as_root systemctl restart opensim || die "could not start opensim.service: systemctl status opensim"
+	# Said to run only once each instance of the grid does
+	nick=$(legacy_nick "${robusts[0]}")
+	down=$("$cli" status 2>/dev/null | awk -v nick="$nick" '($1 == nick || index($1, nick ".") == 1) && $3 == "[down]" { print $1 }')
+	[[ -z "$down" ]] || die "the grid of $root does not run under the service, down: $(paste -sd, - <<<"$down") (opensim status, journalctl -u opensim)"
 	say "The grid of $root runs under the service of the kit (opensim status)"
 }
 
