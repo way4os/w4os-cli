@@ -274,7 +274,7 @@ function test_database_passwords_are_quoted_as_sql_literals() {
 	uname() { printf 'Linux\n'; }
 	as_root() { "$@"; }
 	mariadb() {
-		if [[ "${1:-}" == -Nse ]]; then printf '0\n'; else cat >"$sql"; fi
+		if [[ "${1:-}" == -Nse ]]; then return 0; else cat >"$sql"; fi
 	}
 	OPENSIM_DB_ADMIN_USER=example_admin OPENSIM_DB_ADMIN_PASS="ad'min"
 	OPENSIM_DB_USER=example_user OPENSIM_DB_PASS="p'ass\\word"
@@ -485,4 +485,51 @@ function test_a_system_whose_php_the_website_cannot_run_on_gets_the_grid_without
 	assert_not_contains "w4os-site" "$packages"
 	assert_not_contains "opensim-kit" "$packages"
 	assert_contains "mariadb-server" "$packages"
+}
+
+function test_the_sql_account_of_an_existing_grid_is_never_shadowed_by_one_for_localhost() {
+	quick_install_load_library || return
+	local sql=$WORK/accounts.sql
+	configure_package_sources() { return 0; }
+	database_server_installed() { return 0; }
+	start_sql_server() { return 0; }
+	save_database_credentials() { return 0; }
+	uname() { printf 'Linux\n'; }
+	as_root() { "$@"; }
+	# The grid of another install logs in as 'opensim'@'%'
+	mariadb() {
+		if [[ "${1:-}" == -Nse ]]; then
+			[[ "$2" != *"User='opensim'"* ]] || printf '%%\n'
+			return 0
+		fi
+		cat >"$sql"
+	}
+	unset OPENSIM_DB_USER OPENSIM_DB_PASS OPENSIM_DB_ADMIN_USER OPENSIM_DB_ADMIN_PASS
+
+	local said
+	said=$(phase_database; printf 'user=%s\n' "$OPENSIM_DB_USER")
+
+	assert_not_contains "CREATE USER 'opensim'@" "$(cat "$sql")"
+	assert_contains "CREATE USER 'opensim_w4os'@'localhost'" "$(cat "$sql")"
+	assert_contains "user=opensim_w4os" "$said"
+	assert_contains "The SQL account opensim exists already, on %" "$said"
+}
+
+function test_an_account_name_asked_for_that_exists_needs_its_password() {
+	quick_install_load_library || return
+	configure_package_sources() { return 0; }
+	database_server_installed() { return 0; }
+	start_sql_server() { return 0; }
+	save_database_credentials() { return 0; }
+	uname() { printf 'Linux\n'; }
+	as_root() { "$@"; }
+	mariadb() { [[ "${1:-}" == -Nse && "$2" == *"User='grid_user'"* ]] && printf '%%\n'; return 0; }
+	unset OPENSIM_DB_PASS OPENSIM_DB_ADMIN_USER OPENSIM_DB_ADMIN_PASS
+	OPENSIM_DB_USER=grid_user PGM=kickstart.sh
+
+	local said status=0
+	said=$(phase_database 2>&1) || status=$?
+
+	assert_same 1 "$status"
+	assert_contains "SQL account grid_user already exists; set OPENSIM_DB_PASS" "$said"
 }

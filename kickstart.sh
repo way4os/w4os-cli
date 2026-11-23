@@ -839,6 +839,22 @@ start_sql_server() {
 	return 1
 }
 
+# The hosts an SQL account of this name has, one a line, none when there is no such account (on any host)
+sql_account_hosts() { # name
+	as_root "$sql_client" -Nse "SELECT Host FROM mysql.user WHERE User='$1'" 2>/dev/null
+}
+
+# A name of SQL account no host has: the one given followed by _w4os, then _w4os2...
+free_sql_account() { # name
+	local candidate=${1}_w4os number=1
+	while [[ -n "$(sql_account_hosts "$candidate")" ]]; do
+		number=$((number + 1))
+		candidate=${1}_w4os$number
+		((number < 20)) || return 1
+	done
+	printf '%s\n' "$candidate"
+}
+
 phase_database() {
 	[[ $(uname -s) == Linux ]] || die "SQL server installation is available on Debian and Ubuntu"
 	configure_package_sources || return $?
@@ -855,20 +871,41 @@ phase_database() {
 	start_sql_server || die "could not start the SQL server"
 	command -v mysql >/dev/null 2>&1 || command -v mariadb >/dev/null 2>&1 || die "SQL client is unavailable after server installation"
 
-	local had_admin_pass=0 had_app_pass=0
+	local had_admin_pass=0 had_app_pass=0 had_admin_user=0 had_app_user=0
 	[[ -n "${OPENSIM_DB_ADMIN_PASS:-}" ]] && had_admin_pass=1
 	[[ -n "${OPENSIM_DB_PASS:-}" ]] && had_app_pass=1
+	[[ -n "${OPENSIM_DB_ADMIN_USER:-}" ]] && had_admin_user=1
+	[[ -n "${OPENSIM_DB_USER:-}" ]] && had_app_user=1
 	OPENSIM_DB_ADMIN_USER=${OPENSIM_DB_ADMIN_USER:-opensim_admin}
 	OPENSIM_DB_USER=${OPENSIM_DB_USER:-opensim}
 	[[ $OPENSIM_DB_ADMIN_USER =~ ^[a-zA-Z0-9_]+$ && $OPENSIM_DB_USER =~ ^[a-zA-Z0-9_]+$ ]] || die "SQL account names may contain only letters, digits, and underscores"
+	local admin_exists=0 app_exists=0 sql_client
+	sql_client=$(command -v mariadb || command -v mysql)
+	sql_account_hosts "$OPENSIM_DB_ADMIN_USER" >/dev/null || die "cannot access the local SQL server as administrator"
+	# An account of the name on any host is there already: never made again for localhost, where it would take the local
+	# logins of the one of another install (an existing grid on 'opensim'@'%') and break them
+	if [[ -n "$(sql_account_hosts "$OPENSIM_DB_ADMIN_USER")" ]]; then
+		if ((had_admin_pass)); then
+			admin_exists=1
+		elif ((had_admin_user)); then
+			die "SQL account $OPENSIM_DB_ADMIN_USER already exists; set OPENSIM_DB_ADMIN_PASS in ~/.opensimrc to preserve its password"
+		else
+			OPENSIM_DB_ADMIN_USER=$(free_sql_account "$OPENSIM_DB_ADMIN_USER") || die "cannot inspect SQL accounts"
+			say "The SQL account opensim_admin exists already, on $(sql_account_hosts opensim_admin | paste -sd, -): it is left as it is, the kit uses $OPENSIM_DB_ADMIN_USER"
+		fi
+	fi
+	if [[ -n "$(sql_account_hosts "$OPENSIM_DB_USER")" ]]; then
+		if ((had_app_pass)); then
+			app_exists=1
+		elif ((had_app_user)); then
+			die "SQL account $OPENSIM_DB_USER already exists; set OPENSIM_DB_PASS in ~/.opensimrc to preserve its password"
+		else
+			OPENSIM_DB_USER=$(free_sql_account "$OPENSIM_DB_USER") || die "cannot inspect SQL accounts"
+			say "The SQL account opensim exists already, on $(sql_account_hosts opensim | paste -sd, -) (the one of an existing grid?): it is left as it is, the kit uses $OPENSIM_DB_USER"
+		fi
+	fi
 	OPENSIM_DB_ADMIN_PASS=${OPENSIM_DB_ADMIN_PASS:-$(openssl rand -hex 32)}
 	OPENSIM_DB_PASS=${OPENSIM_DB_PASS:-$(openssl rand -hex 32)}
-	local admin_exists app_exists sql_client
-	sql_client=$(command -v mariadb || command -v mysql)
-	admin_exists=$(as_root "$sql_client" -Nse "SELECT COUNT(*) FROM mysql.user WHERE User='$OPENSIM_DB_ADMIN_USER' AND Host='localhost'" 2>/dev/null) || die "cannot access the local SQL server as administrator"
-	app_exists=$(as_root "$sql_client" -Nse "SELECT COUNT(*) FROM mysql.user WHERE User='$OPENSIM_DB_USER' AND Host='localhost'" 2>/dev/null) || die "cannot inspect SQL accounts"
-	[[ $admin_exists != 1 || $had_admin_pass == 1 ]] || die "SQL account $OPENSIM_DB_ADMIN_USER already exists; set OPENSIM_DB_ADMIN_PASS in ~/.opensimrc to preserve its password"
-	[[ $app_exists != 1 || $had_app_pass == 1 ]] || die "SQL account $OPENSIM_DB_USER already exists; set OPENSIM_DB_PASS in ~/.opensimrc to preserve its password"
 	if [[ $admin_exists != 1 || $app_exists != 1 ]]; then
 		local admin_password_sql=${OPENSIM_DB_ADMIN_PASS//\'/\'\'} app_password_sql=${OPENSIM_DB_PASS//\'/\'\'}
 		{

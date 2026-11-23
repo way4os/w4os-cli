@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- fix (kickstart): an SQL account of the name on any host is left as it is, never shadowed by one for localhost
 - doc: the installer from charm-dev until the release; Debian 12 and 13, Ubuntu 24.04 and 26.04, the Debian 12 website worked on
 - fix (kickstart): on Debian 12 (PHP 8.2) it says the website needs PHP 8.3 and installs the grid without it
 - fix (kickstart): a package gone from the repository while it installs (404) is installed once more after apt-get update
