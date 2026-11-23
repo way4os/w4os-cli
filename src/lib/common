@@ -259,7 +259,8 @@ setup_file_report() { # reply
 		(if .applied then "Written:" else "Would write:" end),
 		(.writes[] | "  \(.)"),
 		"",
-		(if .applied then "Then:" else "Nothing was written: add --apply to write it, then:" end),
+		(if .applied then ((.notes // [])[] | "  \(if type == "object" then .detail else . end)") else empty end),
+		(if .applied then (if (.reminders | length) > 0 then "Then:" else empty end) else "Nothing was written: add --apply to write it, then:" end),
 		(.reminders[] | "  \(if type == "object" then .detail else . end)"),
-		((.notes // [])[] | "Note: \(if type == "object" then .detail else . end)")' <<<"$1"
+		(if .applied then empty else ((.notes // [])[] | "Note: \(if type == "object" then .detail else . end)") end)' <<<"$1"
 }
