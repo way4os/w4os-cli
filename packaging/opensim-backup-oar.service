@@ -4,6 +4,8 @@ After=opensim.service
 
 [Service]
 Type=oneshot
+# The default account: the one of the install (SystemUser of /etc/w4os/w4os.conf) is set by w4os-system-user.conf in
+# the folder of drop-ins of this unit, which the engine writes
 User=opensim
 Group=opensim
 WorkingDirectory=~

@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- fix (import): an install taken in place or migrated keeps its owner and web account; the service is made to run as them
 - fix (status): a simulator that runs and does not answer is marked [not answering], counted in the summary
 - new (setup): Show passwords in the review (a button in dialog, s in plain text), opensim setup --show-passwords
 - fix (kickstart): the SQL accounts shown before anything changes (exists, made, left alone; where each password comes from, masked), --show-passwords

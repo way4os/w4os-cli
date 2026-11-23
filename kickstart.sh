@@ -1164,8 +1164,10 @@ legacy_after_install() {
 	fi
 	import=(import --robust "${robusts[0]}" --in-place)
 	for file in "${simulators[@]}"; do import+=(--simulator "$file"); done
-	"$cli" "${import[@]}" --apply || die "could not register the grid of $root in place"
-	"$cli" enable "$(legacy_nick "${robusts[0]}")" || die "could not enable the grid of $root"
+	# Its owner and the account of its site become the ones of the suite (SystemUser, WebUser, WebGroup), the service follows them;
+	# nothing of the install is changed
+	as_root "$cli" "${import[@]}" --apply || die "could not register the grid of $root in place"
+	as_root "$cli" enable "$(legacy_nick "${robusts[0]}")" || die "could not enable the grid of $root"
 	if [[ "$LEGACY_RESTART" != yes ]]; then
 		say "Its instances still run as they were started. Once the grid may stop: $0 --in-place --restart (or stop them, then sudo systemctl restart opensim)"
 		return 0

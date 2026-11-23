@@ -405,4 +405,17 @@ function test_an_existing_install_is_registered_in_place_or_forgotten() {
 	forgotten=$(OPENSIM_API="$api" "$OPENSIM" import --robust "$robust" --forget --apply 2>&1)
 	assert_equals "true apply" "$(jq -r '.data.attributes | "\(.forget) \(.mode)"' "$WORK/request.json")"
 	assert_contains "Forgotten" "$forgotten"
+
+	# The accounts of the install the suite would take, shown with what it has now; the service is told only once applied
+	cat >"$api" <<-'API'
+	#!/usr/bin/env bash
+	cat >"$WORK/request.json"
+	jq -c '{data: {type: "imports", attributes: {kind: "robust", mode: "plan", inPlace: true, applied: false, grid: "oldgrid", config: "/etc/w4os/w4os.conf", section: {}, accounts: {SystemUser: {from: "opensim", to: "durant"}, WebUser: {from: "", to: "dupneu"}}, reminders: [{code: "install-account", detail: "The instances run as durant"}]}}}' "$WORK/request.json"
+	API
+	local accounts
+	accounts=$(OPENSIM_API="$api" "$OPENSIM" import --robust "$robust" --in-place 2>&1)
+	assert_contains "SystemUser: opensim -> durant" "$accounts"
+	assert_contains "WebUser: (none) -> dupneu" "$accounts"
+	assert_contains "- The instances run as durant" "$accounts"
+	assert_not_contains "The service runs as" "$accounts"
 }

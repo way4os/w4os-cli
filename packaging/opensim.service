@@ -9,6 +9,8 @@ Wants=network-online.target
 # engine API, the start at boot), is the service's and stops with it. It is ready once it listens
 Type=notify
 NotifyAccess=all
+# The default account: the one of the install (SystemUser of /etc/w4os/w4os.conf) is set by w4os-system-user.conf in
+# the folder of drop-ins of this unit, which the engine writes
 User=opensim
 Group=opensim
 WorkingDirectory=~
