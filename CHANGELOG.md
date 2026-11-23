@@ -2,7 +2,7 @@
 
 ### Unreleased
 
-- update (kickstart): `charm stable` is always the source of the releases; `--testing` adds charm-tests, `--unstable-core` adds the beta releases (charm unstable); one script, no kickstart-dev.sh
+- update (kickstart): `charm stable` is always the source of the releases; `--unstable` adds the beta releases (charm unstable), `--testing` adds charm-tests and `--unstable`; one script, no kickstart-dev.sh
 - new (address): the plan shows the addresses the databases keep, each column with its rows
 - new (status): a running Robust that cannot read its database is marked [no database], and counted
 - new (address): opensim address GRID --host HOST --port PORT --site URL changes the address of a grid in every file of it, through the engine (POST /grids/{grid}/address): each line that would change first, --apply writes them and says what to restart
@@ -15,7 +15,7 @@
 - update: the bash completion knows every command, the grids, the disabled instances, the options of import, save, load, backup and oar
 - new (settings): `opensim settings --set` says when the grid or the simulators must restart
 - new: `opensim --version`, and with -v the versions of everything that matters on the machine
-- feature (kickstart): `--testing` (the test builds, no development core unless `--unstable-core`), `--tools` (the command line and the engine alone, light); the full install is opensim-kit, with the website of a grid
+- feature (kickstart): `--testing` (the test builds), `--unstable` (the beta versions), `--tools` (the command line and the engine alone, light); the full install is opensim-kit, with the website of a grid
 - change (packaging): dialog and podman-compose are recommended, not required: a light install of the tools (--no-install-recommends)
 - feature (import): `opensim import --accounts FILE --robust ROBUST_INI` makes the accounts in a grid this install does not manage, as the caller
 - feature (import): `opensim import --robust FILE [--simulator FILE...]` migrates the grid of another install, planned, applied disabled, then `--switch` once the old Robust is stopped

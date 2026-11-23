@@ -18,7 +18,7 @@ sudo ./kickstart.sh --setup
 
 See `./kickstart.sh --help` for other options:
 
-- `--testing` adds the test builds (charm-tests) to the releases, for whoever tries what comes next; `--unstable-core` adds the beta releases and the development version of OpenSimulator.
+- `--unstable` includes the unstable (beta) versions of the packages; `--testing` includes the test builds (charm-tests) and `--unstable`, for whoever tries what comes next.
 - `--tools` installs only the command line and the engine, light (no OpenSimulator, no database server, no website), to work on a grid installed otherwise, for instance to import the accounts of a list into it.
 
 The release source (`charm stable`) is always there, whatever the options. For instance, the tools alone from the test builds:

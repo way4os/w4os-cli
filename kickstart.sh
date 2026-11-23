@@ -18,9 +18,8 @@
 #
 # Setup is not started unless requested with --setup or RUN_SETUP=yes.
 # Options:  -y, --yes             do not ask before installing
-#           --testing             also the test builds (charm-tests), on top of the releases
-#           --unstable-core       also the beta releases (charm unstable) and the development version of OpenSimulator
-#                                 (opensim-unstable)
+#           --unstable            include the unstable (beta) versions of the packages
+#           --testing             include the test builds (charm-tests), and --unstable
 #           --tools               only the command line and the engine, light (no core, no database, no website): to work on
 #                                 a grid installed otherwise (opensim import --accounts FILE --robust ROBUST_INI)
 #           --cleanup             remove an existing OpenSim installation first (asks for confirmation)
@@ -39,7 +38,7 @@
 #             APT_SOURCE=...                  complete primary APT source line (default: charm stable)
 #             APT_SOURCE_TESTS=...            optional additional APT source line
 #             OPENSIM_KIT_APT_DIST=...         legacy distribution override (charm-tests: as --testing)
-#             UNSTABLE_CORE=yes                as --unstable-core
+#             UNSTABLE=yes                     as --unstable
 #             OPENSIM_KIT_APT_COMPONENT=...    legacy component override
 #             OPENSIM_CONTAINER_IMAGE=IMAGE    default image for --podman (Ubuntu 26.04)
 
@@ -121,9 +120,11 @@ unset APT_SOURCE_DIR_WAS_SET APT_SOURCE_DIR_FROM_ENV
 MAGIIIC_KEY=https://apt.magiiic.com/magiiic-packaging.asc
 APT_SOURCE_FILE=${APT_SOURCE_FILE:-/etc/apt/sources.list.d/magiiic.list}
 OPENSIM_KIT_APT_DIST=${OPENSIM_KIT_APT_DIST:-charm}
-UNSTABLE_CORE=${UNSTABLE_CORE:-}
+UNSTABLE=${UNSTABLE:-}
 # The sources and the packages, from the distribution and the options (run again once the options are read: --testing)
 plan_packages() {
+# The test builds are on top of the unstable versions
+[[ "$OPENSIM_KIT_APT_DIST" == charm-tests ]] && UNSTABLE=yes
 if [[ -z "${OPENSIM_KIT_APT_COMPONENT:-}" ]]; then
 	if [[ "$OPENSIM_KIT_APT_DIST" == charm-tests ]]; then
 		OPENSIM_KIT_APT_COMPONENT=dev
@@ -139,10 +140,10 @@ if [[ -n "${APT_SOURCE:-}" ]]; then
 else
 	# The releases are always there; the other channels come on top of them
 	if [[ "$OPENSIM_KIT_APT_DIST" == charm-tests ]]; then
-		APT_REPOSITORIES+=("deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable${UNSTABLE_CORE:+ unstable}")
+		APT_REPOSITORIES+=("deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable${UNSTABLE:+ unstable}")
 		APT_REPOSITORIES+=("deb [trusted=yes] https://apt.magiiic.com charm-tests $OPENSIM_KIT_APT_COMPONENT")
 	else
-		APT_REPOSITORIES+=("deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com $OPENSIM_KIT_APT_DIST $OPENSIM_KIT_APT_COMPONENT${UNSTABLE_CORE:+ unstable}")
+		APT_REPOSITORIES+=("deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com $OPENSIM_KIT_APT_DIST $OPENSIM_KIT_APT_COMPONENT${UNSTABLE:+ unstable}")
 	fi
 fi
 for repository in "${APT_REPOSITORIES[@]}"; do
@@ -164,9 +165,6 @@ OPENSIM_PACKAGES=(
 	openssh-server
 	libgdiplus
 )
-if [[ "$UNSTABLE_CORE" == yes ]]; then
-	OPENSIM_PACKAGES+=(opensim-unstable)
-fi
 }
 plan_packages
 
@@ -1156,8 +1154,8 @@ while (($#)); do
 		OPENSIM_KIT_APT_COMPONENT=
 		PODMAN_INSTALL_ARGS+=("$argument")
 		;;
-	--unstable-core)
-		UNSTABLE_CORE=yes
+	--unstable)
+		UNSTABLE=yes
 		PODMAN_INSTALL_ARGS+=("$argument")
 		;;
 	--tools)
@@ -1232,7 +1230,7 @@ all | dependencies | mariadb | mysql | dotnet | opensim | tools) ;;
 *) die "invalid installation phase $INSTALL_PHASE" ;;
 esac
 [[ "$INSTALL_PHASE" == all || "$INSTALL_PHASE" == opensim ]] || [[ -z "$RUN_SETUP" ]] || die "--setup is only valid for the full install or --opensim"
-# The sources and the packages again, with the options read (--testing, --unstable-core)
+# The sources and the packages again, with the options read (--testing, --unstable)
 plan_packages
 [[ "$PODMAN_CONNECTION_SELECTED" == no || "$PODMAN_MODE" == yes ]] || die "--connection requires --podman"
 [[ "$PODMAN_IMAGE_SELECTED" == no || "$PODMAN_MODE" == yes ]] || die "--image requires --podman"
