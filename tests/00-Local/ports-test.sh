@@ -139,3 +139,18 @@ function test_ports_ufw_opens_the_private_and_console_ports_to_the_given_address
 function test_ports_ufw_refuses_an_address_that_is_not_one() {
 	assert_exec "'$OPENSIM' ports --ufw --from not-an-ip" --exit 2
 }
+
+function test_ports_lists_the_engine_api_of_a_grid_as_local_never_published_nor_opened() {
+	mkdir -p "$WORK/etc/grids/example"
+	mv "$WORK/etc/robust.d/example.ini" "$WORK/etc/grids/example/Robust.ini"
+	ln -s "$WORK/etc/grids/example/Robust.ini" "$WORK/etc/robust.d/example.ini"
+	printf '[Grid]\nApiPort = 8005\n' >"$WORK/etc/grids/example/example.conf"
+	local table publish ufw
+	table=$("$OPENSIM" ports 2>&1)
+	publish=$("$OPENSIM" ports --publish 2>&1)
+	ufw=$("$OPENSIM" ports --ufw 2>&1)
+	assert_matches '8005 +tcp +local +engine API of the grid' "$table"
+	assert_not_contains '8005' "$publish"
+	assert_contains '# 8005/tcp' "$ufw"
+	assert_not_contains 'allow 8005' "$ufw"
+}

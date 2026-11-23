@@ -91,7 +91,8 @@ function showPorts(Environment $environment, array $arguments): int
     if ($mode === 'publish') {
         $mappings = [];
         foreach ($rows as $row) {
-            if ($row['use'] === 'off') {
+            // A port of this machine only (127.0.0.1) is never published
+            if ($row['use'] === 'off' || $row['use'] === 'local') {
                 continue;
             }
             $bind = $row['use'] === 'public' ? '' : "$bindAddress:";
@@ -101,6 +102,10 @@ function showPorts(Environment $environment, array $arguments): int
     } elseif ($mode === 'ufw') {
         foreach ($rows as $row) {
             if ($row['use'] === 'off') {
+                continue;
+            }
+            if ($row['use'] === 'local') {
+                echo "# {$row['port']}/{$row['proto']} ({$row['instance']}: {$row['role']}): " . _('127.0.0.1 only, no rule') . "\n";
                 continue;
             }
             if ($row['use'] === 'public') {

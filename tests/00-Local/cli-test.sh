@@ -143,8 +143,14 @@ function test_web_api_prints_the_pool_and_the_local_listener_of_the_engine_api()
 	make_test_grid
 	assert_exec "'$OPENSIM' web tender_tern api caddy --port 8781" --stdout-contains '[w4os-api]'
 	assert_exec "'$OPENSIM' web tender_tern api caddy --port 8781" --stdout-contains 'http://127.0.0.1:8781'
-	assert_exec "'$OPENSIM' web tender_tern api nginx" --stdout-contains 'listen 127.0.0.1:8780;'
-	assert_exec "'$OPENSIM' web tender_tern api nginx" --stdout-contains 'api_url http://127.0.0.1:8780/api'
+	# Without --port, the one of the grid: one of its block, kept in its conf, the same each time
+	local first port
+	first=$("$OPENSIM" web tender_tern api nginx 2>&1)
+	port=$(sed -n 's/^ApiPort = //p' "$WORK/etc/opensim/grids/tender_tern/tender_tern.conf")
+	assert_matches '^80[0-9][0-9]$' "$port"
+	assert_contains "listen 127.0.0.1:$port;" "$first"
+	assert_contains "api_url http://127.0.0.1:$port/api" "$first"
+	assert_exec "'$OPENSIM' web tender_tern api nginx" --stdout-contains "listen 127.0.0.1:$port;"
 	assert_exec "'$OPENSIM' web tender_tern api lighttpd" --exit 2 --stderr-contains 'unknown web server'
 }
 

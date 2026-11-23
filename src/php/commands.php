@@ -266,7 +266,8 @@ final class Commands
         if ($action === 'api') {
             $user = $environment->layout->systemUser() ?: (string) (posix_getpwuid(posix_geteuid())['name'] ?? 'opensim');
             $socket = $options['socket'] !== '' ? $options['socket'] : Snippets::API_SOCKET;
-            $port = $options['port'] !== '' ? (int) $options['port'] : Snippets::API_PORT;
+            // The port of the grid (the one a web server serves already, else one of its block, kept with the grid)
+            $port = $options['port'] !== '' ? (int) $options['port'] : $grid->apiPort();
             $group = $options['web-group'] !== '' ? $options['web-group'] : (($words[0] ?? '') === 'caddy' ? 'caddy' : 'www-data');
             try {
                 $snippet = Snippets::api($words[0] ?? '', $grid->nick(), $options['docroot'], $socket, $port);
