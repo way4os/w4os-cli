@@ -126,9 +126,8 @@ if [[ -n "$robust" && -z "$accounts" ]] && [[ "$inplace" == true || "$forget" ==
 		(if .forget then (if .applied then "Forgotten: the section is removed, the install is as it was." else "Nothing was removed: add --apply to forget it." end)
 		 elif .applied then "Written: the section of the grid" + (if ((.accounts // {}) | length) > 0 then ", and the accounts of the install" else "" end) + "; nothing of the install." else "Nothing was written: add --apply to write it." end),
 		((.accounts // {}) | to_entries[] | "  \(.key): \(if .value.from == "" then "(none)" else .value.from end) -> \(.value.to)"),
-		# Once applied, the service is made to follow the accounts here (follow_accounts)
+		# Once applied, the service is made to follow the accounts by the caller (follow_accounts)
 		(.applied as $applied | (.reminders // [])[] | select(.code != "install-account" or ($applied | not)) | "- \(.detail)")' <<<"$reply"
-	follow_accounts "$reply"
 	exit
 fi
 if [[ -n "$robust" && -z "$accounts" ]]; then
@@ -164,7 +163,6 @@ if [[ -n "$robust" && -z "$accounts" ]]; then
 		(if .applied then "Report:   \(.report)" elif .switched then empty else "Nothing was written: add --apply to write it." end),
 		((.accounts // {}) | to_entries[] | "Account:  \(.key) \(if .value.from == "" then "(none)" else .value.from end) -> \(.value.to) (the owner of the old install, whose data stays where it is)"),
 		(if .switched then "Started: \(.started | join(", "))" else (.applied as $applied | (.reminders // [])[] | select(type != "object" or .code != "install-account" or ($applied | not)) | "- \(said)") end)' <<<"$reply"
-	follow_accounts "$reply"
 	jq -e '(.data.attributes.problems // {}) | length == 0' <<<"$reply" >/dev/null
 	exit
 fi

@@ -158,7 +158,12 @@ import)
 	for argument in "$@"; do
 		[[ "$argument" != --accounts* ]] || { import_accounts "$@"; exit; }
 	done
-	as_system_user "$libexec/import" "$@"
+	# The accounts an import of an install that exists takes: the service made to follow them, as root, by the caller
+	accounts=$(install_accounts)
+	status=0
+	as_system_user "$libexec/import" "$@" || status=$?
+	follow_accounts "$accounts"
+	exit "$status"
 	;;
 
 region | simulator)

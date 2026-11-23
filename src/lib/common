@@ -46,12 +46,21 @@ engine() {
 	"$OPENSIM_API" "$@"
 }
 
-# The accounts of the install changed in w4os.conf (an import of an install that exists takes its own): its folders and the units of
-# the suite made to follow them, as root (the system layout of the engine)
-follow_accounts() { # reply of the engine
-	jq -e '(.data.attributes.applied // false) and ((.data.attributes.accounts // {}) | length > 0)' <<<"$1" >/dev/null 2>&1 || return 0
-	as_root php "$(dirname "$(realpath "$OPENSIM_API")")/opensim-layout.php" || die "could not make the service run as $(jq -r '.data.attributes.accounts.SystemUser.to // "the new account"' <<<"$1")"
-	say "The service runs as $(jq -r '.data.attributes.accounts.SystemUser.to // empty' <<<"$1") from its next start (sudo systemctl restart opensim, once the grids may stop)"
+# The accounts of the install in w4os.conf (SystemUser, WebUser, WebGroup), one a line
+install_accounts() {
+	sed -nE 's/^[[:space:]]*(SystemUser|WebUser|WebGroup)[[:space:]]*=[[:space:]]*"?([^";[:space:]]*).*/\1=\2/p' "${OPENSIM_CONF:-/etc/w4os/w4os.conf}" 2>/dev/null | sort
+}
+
+# The accounts of the install changed since BEFORE (install_accounts; an import of an install that exists takes its own): its folders
+# and the units of the suite made to follow them, as root (the system layout of the engine), by the caller, not the account of the
+# instances
+follow_accounts() { # accounts before
+	local now user
+	now=$(install_accounts)
+	[[ "$now" != "$1" ]] || return 0
+	user=$(sed -n 's/^SystemUser=//p' <<<"$now")
+	as_root php "$(dirname "$(realpath "$OPENSIM_API")")/opensim-layout.php" || die "could not make the service run as $user"
+	say "The service runs as $user from its next start (sudo systemctl restart opensim, once the grids may stop)"
 }
 
 # Act on this machine through the engine (src/php/run.php): run COMMAND [ARGUMENTS]; its status is the one of the command
