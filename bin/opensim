@@ -172,9 +172,10 @@ import)
 		# The grid started by the account of the suite, never root: the switch is done after, as that account
 		if [[ "$argument" == --switch ]]; then switch=yes; else written+=("$argument"); fi
 	done
-	if [[ $(id -u) -eq 0 && -n "$robust" && -z "$inplace" && -n "$apply" ]]; then
+	# Its plan too, as the account that will move its data (the plan writes nothing)
+	if [[ $(id -u) -eq 0 && -n "$robust" && -z "$inplace" ]] && [[ -n "$apply" || -z "$switch" ]]; then
 		"$libexec/import" "${written[@]}" || status=$?
-		php "$(dirname "$(realpath "$OPENSIM_API")")/opensim-layout.php" >/dev/null || error "could not give what the import wrote to the account of the suite"
+		[[ -z "$apply" ]] || php "$(dirname "$(realpath "$OPENSIM_API")")/opensim-layout.php" >/dev/null || error "could not give what the import wrote to the account of the suite"
 		if ((status == 0)) && [[ -n "$switch" ]]; then
 			switched=()
 			for argument in "${written[@]}"; do [[ "$argument" == --apply || "$argument" == --copy-data ]] || switched+=("$argument"); done

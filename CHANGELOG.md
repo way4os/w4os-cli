@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- fix (import): sudo opensim import --robust plans as root, as the apply moves its data
 - fix (kickstart): --restart finds the old instances by their -inifile, quoted, relative or a link, resolved
 - fix (import): a switch names each instance it did not start and why, and fails
 - fix (kickstart): --in-place --restart stops a Robust by the file it runs (REST console, no screen) and checks the grid runs
