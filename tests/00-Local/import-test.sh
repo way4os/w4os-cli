@@ -184,6 +184,31 @@ function test_gives_a_region_to_a_simulator() {
 	assert_same "apply" "$(jq -r '.data.attributes.mode' "$ENGINE_LOG")"
 }
 
+function test_takes_over_a_region_the_grid_has_with_what_it_is_loaded_with() {
+	engine_says "$FILES"
+	printf 'oar' >"$WORK/Old Garden.oar"
+	printf 'dump' >"$WORK/old.sql.gz"
+
+	(cd "$WORK" && "$OPENSIM" region add demo alpha --name "Old Garden" --existing --oar "Old Garden.oar" --apply >/dev/null 2>&1)
+	local region
+	region=$(jq -c '.data.attributes.setup.simulators[0].regions[0]' "$ENGINE_LOG")
+	engine_says "$FILES"
+	"$OPENSIM" simulator add demo Moved --region "Old Garden" --existing --dump "$WORK/old.sql.gz" >/dev/null 2>&1
+
+	assert_same "{\"name\":\"Old Garden\",\"existing\":true,\"oar\":\"$(realpath "$WORK")/Old Garden.oar\"}" "$region"
+	assert_same "{\"name\":\"Old Garden\",\"existing\":true,\"dump\":\"$(realpath "$WORK")/old.sql.gz\"}" "$(jq -c '.data.attributes.setup.simulators[0].regions[0]' "$ENGINE_LOG")"
+}
+
+function test_a_file_to_load_a_region_with_is_one_the_caller_reads() {
+	engine_says "$FILES"
+
+	local said
+	said=$("$OPENSIM" region add demo alpha --name "Old Garden" --oar "$WORK/missing.oar" 2>&1)
+
+	assert_contains "cannot read $WORK/missing.oar" "$said"
+	assert_file_not_exists "$ENGINE_LOG"
+}
+
 function test_gives_the_estate_its_regions_join() {
 	engine_says "$FILES"
 
