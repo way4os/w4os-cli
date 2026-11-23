@@ -333,6 +333,9 @@ function test_clone_install_requests_all_packages_when_cli_and_engine_are_instal
 	}
 	configure_package_sources() { return 0; }
 	install_packages() { printf '%s\n' "$*" >>"$calls"; }
+	apt_update() { return 0; }
+	# A system whose PHP the website runs on
+	site_php_too_old() { return 1; }
 	end_installation() { return 0; }
 	phase_opensim
 	installed="$(cat "$calls")"
@@ -462,4 +465,24 @@ function test_an_install_that_fails_otherwise_is_not_tried_again() {
 
 	assert_same 100 "$status"
 	assert_same "apt-get install -y -qq w4os-nothing" "$(cat "$calls")"
+}
+
+function test_a_system_whose_php_the_website_cannot_run_on_gets_the_grid_without_its_website() {
+	quick_install_load_library || return 0
+	apt-cache() {
+		case "$1" in
+		policy) printf 'php-cli:\n  Installed: (none)\n  Candidate: %s\n' "$PHP_CANDIDATE" ;;
+		depends) printf 'opensim-kit\n  Depends: opensim\n  Depends: opensim-0.9.3.0-opensimsearch\n  Depends: opensim-0.9.3.0-gloebit\n  Depends: w4os-cli\n  Depends: w4os-engine\n  Depends: w4os-site\n |Depends: default-mysql-server\n  Depends: <virtual-mysql-server>\n' ;;
+		esac
+	}
+	local debian12 debian13 packages
+	PHP_CANDIDATE=2:8.2+93 site_php_too_old && debian12=too-old || debian12=fine
+	PHP_CANDIDATE=2:8.4+96 site_php_too_old && debian13=too-old || debian13=fine
+	packages=$(kit_without_site | tr '\n' ' ')
+
+	assert_same "too-old fine" "$debian12 $debian13"
+	assert_contains "opensim opensim-0.9.3.0-opensimsearch opensim-0.9.3.0-gloebit w4os-cli w4os-engine w4os-helpers" "$packages"
+	assert_not_contains "w4os-site" "$packages"
+	assert_not_contains "opensim-kit" "$packages"
+	assert_contains "mariadb-server" "$packages"
 }
