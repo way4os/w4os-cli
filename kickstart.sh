@@ -980,9 +980,55 @@ phase_dotnet() {
 	dotnet_runtime_installed || die "no .NET 8 or newer runtime is available after installation"
 }
 
+# The web server configs that use files of the folders a cleanup removes, one a line: "link PATH" (a link to one of them, in the
+# folders a web server reads) or "line FILE:NUMBER" (an import, Include or include of one of them). Left there, they would stop
+# the web server, and all its sites with it. WEB_CONFIG_DIRS: where the configs are (the tests).
+web_references() { # folder...
+	local file target line number pattern= folder
+	for folder in "$@"; do pattern+="${pattern:+|}$(printf '%s' "$folder" | sed 's|[][\.*^$+?(){}]|\\&|g')"; done
+	[[ -n "$pattern" ]] || return 0
+	while IFS= read -r -d '' file; do
+		if [[ -L "$file" ]]; then
+			target=$(readlink -f -- "$file" 2>/dev/null || readlink -- "$file")
+			[[ "$target" =~ ^($pattern)(/|$) ]] && printf 'link %s\n' "$file"
+			continue
+		fi
+		number=0
+		while IFS= read -r line || [[ -n "$line" ]]; do
+			number=$((number + 1))
+			[[ "$line" =~ ^[[:space:]]*(import|Include|IncludeOptional|include)[[:space:]]+\"?($pattern)(/|\"|;|[[:space:]]|$) ]] && printf 'line %s:%s\n' "$file" "$number"
+		done <"$file"
+	done < <(find ${WEB_CONFIG_DIRS:-/etc/caddy /etc/apache2 /etc/nginx} \( -type f -o -type l \) -print0 2>/dev/null)
+	return 0
+}
+
+# What web_references found, taken out: the links removed, the lines commented
+remove_web_references() { # references (the lines of web_references)
+	local kind place file number
+	while read -r kind place; do
+		case "$kind" in
+		link) as_root rm -f -- "$place" && say "Removed the link $place" ;;
+		line)
+			file=${place%:*} number=${place##*:}
+			as_root sed -i "${number}s/^/# Removed by the OpenSim cleanup: /" "$file" && say "Commented line $number of $file"
+			;;
+		esac
+	done <<<"$1"
+}
+
+# The web servers that run, reloaded once their configs changed
+reload_web_servers() {
+	local service
+	[[ -d /run/systemd/system ]] || return 0
+	for service in caddy apache2 nginx; do
+		systemctl --quiet is-active "$service" 2>/dev/null || continue
+		as_root systemctl reload "$service" || say "Could not reload $service: systemctl status $service"
+	done
+}
+
 phase_cleanup() {
 	local -a packages=() folders=() databases=() duplicate_debs=() groups=() group_debs=()
-	local path sql_client db escaped_db answer prefix package_rows database_rows status package dist_folder archive_folder deb group seen i
+	local path sql_client db escaped_db answer prefix package_rows database_rows status package dist_folder archive_folder deb group seen i web kind place
 
 	package_rows=$(dpkg-query -W -f='${db:Status-Abbrev} ${binary:Package}\n' opensim 'opensim-*' 2>/dev/null) || package_rows=
 	while read -r status package; do
@@ -1019,6 +1065,7 @@ phase_cleanup() {
 			if [[ "$db" == "$prefix"* ]]; then databases+=("$db"); fi
 		done <<<"$database_rows"
 	fi
+	web=$(web_references "${folders[@]}")
 	if ((${#packages[@]} + ${#folders[@]} + ${#databases[@]} + ${#duplicate_debs[@]} == 0)); then
 		say "No existing OpenSim packages, folders, or databases to clean up"
 		return 0
@@ -1028,6 +1075,7 @@ phase_cleanup() {
 	for path in "${folders[@]}"; do say "  folder $path ($(find "$path" -type f 2>/dev/null | wc -l | tr -d ' ') files)"; done
 	for db in "${databases[@]}"; do say "  database $db"; done
 	for deb in "${duplicate_debs[@]}"; do say "  archive duplicate package $deb -> $archive_folder/"; done
+	[[ -z "$web" ]] || while read -r kind place; do say "  web server $kind $place (it uses a file removed here)"; done <<<"$web"
 	if [[ "$ASSUME_YES" != yes ]]; then
 		[[ -r /dev/tty ]] || die "--cleanup needs an interactive confirmation (or pass --yes)"
 		read -r -p 'Proceed with this cleanup? [y/N] ' answer </dev/tty || die 'cleanup cancelled'
@@ -1038,6 +1086,7 @@ phase_cleanup() {
 		for deb in "${duplicate_debs[@]}"; do mv -v -- "$deb" "$archive_folder/" || die "could not archive duplicate package $deb"; done
 	fi
 	if ((${#packages[@]})); then as_root apt-get remove --purge -y "${packages[@]}" || die "could not remove existing OpenSim packages"; fi
+	[[ -z "$web" ]] || { remove_web_references "$web"; reload_web_servers; }
 	if ((${#folders[@]})); then as_root rm -rf -- "${folders[@]}" || die "could not remove existing OpenSim folders"; fi
 	for db in "${databases[@]}"; do
 		escaped_db=${db//\`/\`\`}

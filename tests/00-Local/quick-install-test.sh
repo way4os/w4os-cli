@@ -405,3 +405,25 @@ JSON
 	uname() { printf 'Darwin\n'; }
 	assert_exec '(end_installation)' --stdout-contains 'Installation completed' --stdout-contains 'Grid:       Test Grid' --stdout-contains 'Login URI:  http://grid.example.test:8123' --stdout-contains 'Avatar:     Ada Resident'
 }
+
+function test_cleanup_takes_out_the_web_server_configs_that_use_the_files_it_removes() {
+	quick_install_load_library || return 0
+	local root=$WORK/machine
+	mkdir -p "$root/etc/opensim/grids/vonda/web" "$root/etc/caddy/sites" "$root/etc/apache2/sites-enabled" "$root/other"
+	: >"$root/etc/opensim/grids/vonda/web/vonda.caddyfile"
+	ln -s "$root/etc/opensim/grids/vonda/web/vonda.caddyfile" "$root/etc/caddy/sites/vonda.caddyfile"
+	ln -s "$root/other/site.caddyfile" "$root/etc/caddy/sites/other.caddyfile"
+	printf 'example.org {\n\troot * /srv\n}\nimport %s/etc/opensim/grids/vonda/web/vonda.caddyfile\n' "$root" >"$root/etc/caddy/Caddyfile"
+	printf '<VirtualHost *:80>\n\tInclude %s/other/site.conf\n</VirtualHost>\n' "$root" >"$root/etc/apache2/sites-enabled/site.conf"
+
+	local found
+	found=$(WEB_CONFIG_DIRS="$root/etc/caddy $root/etc/apache2" web_references "$root/etc/opensim" "$root/var/lib/opensim")
+	remove_web_references "$found" >/dev/null
+
+	assert_same "$(printf 'line %s/etc/caddy/Caddyfile:4\nlink %s/etc/caddy/sites/vonda.caddyfile' "$root" "$root")" "$(sort <<<"$found")"
+	assert_file_not_exists "$root/etc/caddy/sites/vonda.caddyfile"
+	assert_contains "# Removed by the OpenSim cleanup: import $root/etc/opensim" "$(cat "$root/etc/caddy/Caddyfile")"
+	# What uses other files stays as it is
+	assert_same "$root/other/site.caddyfile" "$(readlink "$root/etc/caddy/sites/other.caddyfile")"
+	assert_contains "Include $root/other/site.conf" "$(cat "$root/etc/apache2/sites-enabled/site.conf")"
+}
