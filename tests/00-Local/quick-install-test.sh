@@ -625,6 +625,8 @@ function test_an_existing_sql_account_is_used_only_with_its_own_password() {
 
 function test_in_place_restart_stops_the_old_robust_by_the_file_it_runs_and_says_what_does_not_run() {
 	quick_install_load_library || return
+	# The processes are read in /proc: Linux
+	[[ -d /proc/self ]] || return 0
 	legacy_fixture
 	LEGACY_MODE=in-place LEGACY_RESTART=yes
 	as_root() { "$@"; }
@@ -633,8 +635,12 @@ function test_in_place_restart_stops_the_old_robust_by_the_file_it_runs_and_says
 	mkdir -p "$LEGACY_ROOT/etc/grids/W4osDemoGrid"
 	mv "$LEGACY_ROOT/etc/robust.d/W4osDemoGrid.ini" "$LEGACY_ROOT/etc/grids/W4osDemoGrid/Robust.HG.ini"
 	ln -s "$LEGACY_ROOT/etc/grids/W4osDemoGrid/Robust.HG.ini" "$LEGACY_ROOT/etc/robust.d/W4osDemoGrid.ini"
-	bash -c 'exec -a "mono Robust.exe -inifile=$0 -console rest" sleep 300' "$(readlink -f "$LEGACY_ROOT/etc/grids/W4osDemoGrid/Robust.HG.ini")" >/dev/null 2>&1 &
+	# As opensim-debian runs it (a command built then run through eval): the link of robust.d, in quotes that stay in the argument
+	perl -e 'sleep 300' -- "-inifile='$LEGACY_ROOT/etc/robust.d/W4osDemoGrid.ini'" -console rest >/dev/null 2>&1 &
 	local old=$!
+	# A simulator given its config relative to its folder
+	(cd "$LEGACY_ROOT/etc/opensim.d" && exec perl -e 'sleep 300' -- -inifile w4osdemogrid_welcome.ini >/dev/null 2>&1) &
+	local sim=$!
 	clone=$WORK/kit
 	mkdir -p "$clone/bin"
 	# What the suite says of its instances once restarted: its Robust down
@@ -648,8 +654,8 @@ function test_in_place_restart_stops_the_old_robust_by_the_file_it_runs_and_says
 	local said status=0
 	said=$(legacy_gate && legacy_after_install 2>&1) || status=$?
 	local alive=no
-	if kill -0 "$old" 2>/dev/null; then alive=yes; fi
-	kill "$old" 2>/dev/null || true
+	if kill -0 "$old" 2>/dev/null || kill -0 "$sim" 2>/dev/null; then alive=yes; fi
+	kill "$old" "$sim" 2>/dev/null || true
 
 	assert_same no "$alive"
 	assert_same 1 "$status"

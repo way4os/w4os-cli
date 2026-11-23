@@ -1174,9 +1174,9 @@ legacy_after_install() {
 	fi
 	# The simulators first, then the Robust: each asked to end (SIGTERM, a Robust with a REST console has no screen), a minute each at
 	# most; found by the config it runs, by the path given or the one it leads to (a link of robust.d to the file of its grid)
-	local nick path down
+	local nick down
 	for file in "${simulators[@]}" "${robusts[@]}"; do
-		for pid in $({ for path in "$file" "$(readlink -f -- "$file")"; do pgrep -f -- "-inifile=$path( |$)" || true; done; } | sort -u); do
+		for pid in $(legacy_pids "$file"); do
 			as_root kill -TERM "$pid" 2>/dev/null || continue
 			for _ in $(seq 1 60); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
 			! kill -0 "$pid" 2>/dev/null || die "process $pid ($file) did not stop: stop it, then $0 --in-place --restart again"
@@ -1188,6 +1188,34 @@ legacy_after_install() {
 	down=$("$cli" status 2>/dev/null | awk -v nick="$nick" '($1 == nick || index($1, nick ".") == 1) && $3 == "[down]" { print $1 }')
 	[[ -z "$down" ]] || die "the grid of $root does not run under the service, down: $(paste -sd, - <<<"$down") (opensim status, journalctl -u opensim)"
 	say "The grid of $root runs under the service of the kit (opensim status)"
+}
+
+# The processes that run a config, one a line: the -inifile of each process as it was given (its real arguments, the quotes a shell
+# that built the command left in it taken off, relative to the folder of the process), resolved, the same file as the config resolved
+legacy_pids() { # config
+	local target proc arg value previous cwd
+	target=$(readlink -f -- "$1") || return 0
+	for proc in "${PROC_ROOT:-/proc}"/[0-9]*; do
+		[[ -r "$proc/cmdline" ]] || continue
+		value= previous=
+		while IFS= read -r -d '' arg; do
+			if [[ "$arg" == -inifile=* ]]; then
+				value=${arg#-inifile=}
+			elif [[ "$previous" == -inifile ]]; then
+				value=$arg
+			fi
+			previous=$arg
+		done <"$proc/cmdline" 2>/dev/null
+		[[ -n "$value" ]] || continue
+		value=${value#[\'\"]}
+		value=${value%[\'\"]}
+		if [[ "$value" != /* ]]; then
+			cwd=$(readlink -- "$proc/cwd" 2>/dev/null) || continue
+			value=$cwd/$value
+		fi
+		[[ "$(readlink -f -- "$value" 2>/dev/null)" != "$target" ]] || printf '%s\n' "${proc##*/}"
+	done
+	return 0
 }
 
 # The nick the kit gives a grid in place: the gridnick of its Robust config, in the small letters of a nick
