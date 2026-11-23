@@ -535,8 +535,23 @@ install_packages() {
 	recover_dpkg_configuration || return $?
 	apt_update || return $?
 	started=$SECONDS
-	as_root apt-get install -y -qq "$@" || return $?
+	apt_install "$@" || return $?
 	log "apt-get install ($*) completed in $((SECONDS - started))s"
+}
+
+# apt-get install, once more after the package lists are read again when a package it was to fetch is gone (Failed to fetch, a
+# 404: a newer build was published meanwhile, the one the lists named was removed)
+apt_install() {
+	local said status=0
+	said=$(mktemp) || return $?
+	as_root apt-get install -y -qq "$@" 2>&1 | tee "$said" || status=${PIPESTATUS[0]}
+	if ((status != 0)) && grep -qE '^E: Failed to fetch .* 404' "$said"; then
+		say "A package changed in the repository while it was installed: the package lists are read again, and it is installed once more"
+		APT_UPDATED=
+		apt_update && status=0 && { as_root apt-get install -y -qq "$@" || status=$?; }
+	fi
+	rm -f "$said"
+	return "$status"
 }
 
 database_server_installed() {

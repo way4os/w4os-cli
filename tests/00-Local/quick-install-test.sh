@@ -427,3 +427,39 @@ function test_cleanup_takes_out_the_web_server_configs_that_use_the_files_it_rem
 	assert_same "$root/other/site.caddyfile" "$(readlink "$root/etc/caddy/sites/other.caddyfile")"
 	assert_contains "Include $root/other/site.conf" "$(cat "$root/etc/apache2/sites-enabled/site.conf")"
 }
+
+function test_a_package_gone_while_it_is_installed_is_installed_once_more_after_the_lists_are_read_again() {
+	quick_install_load_library || return 0
+	local calls=$WORK/apt-calls
+	as_root() {
+		printf '%s\n' "$*" >>"$calls"
+		if [[ "$*" == "apt-get install"* && $(grep -c '^apt-get install' "$calls") -eq 1 ]]; then
+			echo "E: Failed to fetch https://apt.example.org/pool/w4os-engine_3.0.0~beta.13+459.g58a36c1_all.deb  404  Not Found [IP: 192.0.2.1 443]"
+			return 100
+		fi
+	}
+	APT_UPDATED=yes DEBUG=
+
+	local said status=0
+	said=$(apt_install w4os-cli 2>&1) || status=$?
+
+	assert_same 0 "$status"
+	assert_same "$(printf 'apt-get install -y -qq w4os-cli\napt-get update -qq\napt-get install -y -qq w4os-cli')" "$(cat "$calls")"
+	assert_contains "the package lists are read again" "$said"
+}
+
+function test_an_install_that_fails_otherwise_is_not_tried_again() {
+	quick_install_load_library || return 0
+	local calls=$WORK/apt-calls
+	as_root() {
+		printf '%s\n' "$*" >>"$calls"
+		echo "E: Unable to locate package w4os-nothing"
+		return 100
+	}
+
+	local status=0
+	apt_install w4os-nothing >/dev/null 2>&1 || status=$?
+
+	assert_same 100 "$status"
+	assert_same "apt-get install -y -qq w4os-nothing" "$(cat "$calls")"
+}
