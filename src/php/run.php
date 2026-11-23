@@ -151,8 +151,12 @@ final class StdUi implements UiInterface
     }
 }
 
-/** The table of the instances, then the summary line. */
-function render(Status $status): string
+/**
+ * The table of the instances, then the summary line, then the modules enabled that a simulator does not set up (kept off).
+ *
+ * @param list<string> $modules the modules enabled
+ */
+function render(Status $status, array $modules = []): string
 {
     $rows = [['INSTANCE', 'TYPE', 'PID', 'USER', '%CPU', '%MEM', 'RSS']];
     // A Robust that runs but cannot read its database answers nothing that needs it: it is up, not working
@@ -194,7 +198,13 @@ function render(Status $status): string
         . ($withoutDatabase === [] ? '' : ', ' . count($withoutDatabase) . ' without its database (' . implode(', ', $withoutDatabase) . ')')
         . ($unresponsive === [] ? '' : ', ' . count($unresponsive) . ' not answering (' . implode(', ', $unresponsive) . ')');
 
-    return $text . sprintf("%s - cpu %.1f%% - mem %.1f%% - rss %d\n", $line, $t['cpu'], $t['memory'], $t['rss']);
+    $text .= sprintf("%s - cpu %.1f%% - mem %.1f%% - rss %d\n", $line, $t['cpu'], $t['memory'], $t['rss']);
+    foreach ($status->unconfigured($modules) as $module => $names) {
+        $text .= "$module is installed but not configured, off for: " . implode(', ', $names)
+            . (strtolower($module) === 'gloebit' ? ' (set gloebitKey and gloebitSecret: opensim settings GRID economy)' : '') . "\n";
+    }
+
+    return $text;
 }
 
 /** 1 when an instance failed (one still loading did not), else 0. */
@@ -234,7 +244,7 @@ switch ($command) {
         require __DIR__ . '/ports.php';
         exit(showPorts($engine, $args));
     case 'status':
-        echo render(OpenSim::status($engine));
+        echo render(OpenSim::status($engine), $engine->layout->enabledModules());
         exit(0);
     case 'start':
         exit(outcome(OpenSim::start($words ?: null, $engine, $simulators)));
