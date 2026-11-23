@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+- new (region): region remove takes a region out of its stopped simulator, for --existing to give it to another
+- fix (import): a switch alone says what it did, not the plan of the writing done before
 - fix (import): a switch that changes the account of the instances ends with the service restarted, its grid under that account
 - fix (kickstart): Debian 12 gets the website of a grid like the other systems (Grav 1.7 on PHP 8.2)
 - fix (tests): a check keeps the brace glob flag out of the PHP code, which musl and Alpine lack

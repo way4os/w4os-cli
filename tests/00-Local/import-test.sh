@@ -356,6 +356,10 @@ function test_a_grid_of_another_install_is_migrated_planned_applied_switched() {
 	switched=$(OPENSIM_API="$api" "$OPENSIM" import --robust "$robust" --switch 2>&1)
 	assert_equals "true plan" "$(jq -r '.data.attributes | "\(.switch) \(.mode)"' "$WORK/request.json")"
 	assert_contains "Started: oldgrid, oldgrid.welcome" "$switched"
+	# What the switch did, never the plan of a writing done before
+	assert_contains "switched, enabled and started here" "$switched"
+	assert_not_contains "Would write" "$switched"
+	assert_not_contains "Settings kept" "$switched"
 }
 
 function test_accounts_go_to_a_grid_this_install_does_not_manage_by_its_robust_config() {
@@ -418,4 +422,23 @@ function test_an_existing_install_is_registered_in_place_or_forgotten() {
 	assert_contains "WebUser: (none) -> dupneu" "$accounts"
 	assert_contains "- The instances run as durant" "$accounts"
 	assert_not_contains "The service runs as" "$accounts"
+}
+
+function test_takes_a_region_out_of_its_simulator_once_applied_and_says_how_to_give_it_to_another() {
+	local found='{"data":{"type":"regions","id":"aaaa","attributes":{"name":"Big Garden","simulator":"demo.north","file":"/etc/opensim/grids/demo/sims/demo.north/regions/BigGarden.ini"}}}'
+	local removed='{"meta":{"reminders":[{"code":"region-removed","detail":"Big Garden is out of demo.north. Give it to another simulator with: opensim region add demo SIMULATOR --name '"'"'Big Garden'"'"' --existing"}]}}'
+	engine_says "$found"
+	export ENGINE_CALLS="$WORK/calls"
+
+	out=$("$OPENSIM" region remove demo "Big Garden" 2>&1)
+	assert_contains "Would take Big Garden out of the simulator demo.north" "$out"
+	assert_contains "add --apply" "$out"
+	assert_not_contains "DELETE" "$(cat "$WORK/calls")"
+
+	engine_says "$found"
+	printf '%s' "$removed" >"$ENGINE_REPLIES/2.json"
+	out=$("$OPENSIM" region remove demo "Big Garden" --apply 2>&1)
+	assert_contains "DELETE /grids/demo/regions/Big%20Garden" "$(cat "$WORK/calls")"
+	assert_contains "Big Garden: taken out of its simulator" "$out"
+	assert_contains "--existing" "$out"
 }

@@ -78,7 +78,11 @@ _opensim()
       ;;
     region|simulator)
       if [ "$COMP_CWORD" = 2 ]; then
-        COMPREPLY=( $(compgen -W "add set" -- "$cur") )
+        if [ "${COMP_WORDS[1]}" = region ]; then
+          COMPREPLY=( $(compgen -W "add set remove" -- "$cur") )
+        else
+          COMPREPLY=( $(compgen -W "add set" -- "$cur") )
+        fi
       else
         COMPREPLY=( $(compgen -W "$(_opensim_grids) --apply" -- "$cur") )
       fi

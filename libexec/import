@@ -147,6 +147,11 @@ if [[ -n "$robust" && -z "$accounts" ]]; then
 	jq -r '
 		def said: if type == "object" then .detail else . end;
 		.data.attributes |
+		# A switch alone (written before): what it did, not the plan of the writing
+		if .switched and (.applied | not) then
+			"Grid \(.name) (\(.grid)), from \(.source): switched, enabled and started here",
+			"Started: \(.started | join(", "))"
+		else
 		"Grid \(.name) (\(.grid)), from \(.source)",
 		"Config:   \(.config)",
 		"Database: \(.database.name) @ \(.database.host) (user \(.database.user)), kept as it is",
@@ -162,7 +167,8 @@ if [[ -n "$robust" && -z "$accounts" ]]; then
 		((.writes // [])[] | "  \(.)"),
 		(if .applied then "Report:   \(.report)" elif .switched then empty else "Nothing was written: add --apply to write it." end),
 		((.accounts // {}) | to_entries[] | "Account:  \(.key) \(if .value.from == "" then "(none)" else .value.from end) -> \(.value.to) (the owner of the old install, whose data stays where it is)"),
-		(if .switched then "Started: \(.started | join(", "))" else (.applied as $applied | (.reminders // [])[] | select(type != "object" or .code != "install-account" or ($applied | not)) | "- \(said)") end)' <<<"$reply"
+		(if .switched then "Started: \(.started | join(", "))" else (.applied as $applied | (.reminders // [])[] | select(type != "object" or .code != "install-account" or ($applied | not)) | "- \(said)") end)
+		end' <<<"$reply"
 	jq -e '(.data.attributes.problems // {}) | length == 0' <<<"$reply" >/dev/null
 	exit
 fi
