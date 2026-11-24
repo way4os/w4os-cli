@@ -152,8 +152,8 @@ final class StdUi implements UiInterface
 }
 
 /**
- * The table of the instances, then the summary line, then the instances on a .NET major their core does not target, then the
- * modules enabled that a simulator does not set up (kept off).
+ * The table of the instances, then the summary line, then the Robusts whose grid info the viewers refuse, the instances on a .NET
+ * major their core does not target, and the modules enabled that a simulator does not set up (kept off).
  *
  * @param list<string> $modules the modules enabled
  * @param ?\W4OS\Engine\Runtime\RuntimeProbe $probe tells the .NET major each instance runs on (none: not told)
@@ -201,6 +201,9 @@ function render(Status $status, array $modules = [], ?\W4OS\Engine\Runtime\Runti
         . ($unresponsive === [] ? '' : ', ' . count($unresponsive) . ' not answering (' . implode(', ', $unresponsive) . ')');
 
     $text .= sprintf("%s - cpu %.1f%% - mem %.1f%% - rss %d\n", $line, $t['cpu'], $t['memory'], $t['rss']);
+    foreach ($status->brokenGridInfo() as $name => $defect) {
+        $text .= "$name answers get_grid_info with what the viewers refuse ($defect): a non-ASCII value of its [GridInfoService] (gridname...) is sent in Latin-1 by OpenSim 0.9.3\n";
+    }
     foreach ($probe === null ? [] : $status->wrongRuntimes($probe) as $name => $runtime) {
         $text .= "$name runs on .NET {$runtime['running']}, its core targets .NET {$runtime['target']}: its asset cache keeps nothing (grey skins)."
             . " Fix: sudo opensim install-dotnet {$runtime['target']}, then opensim restart $name\n";

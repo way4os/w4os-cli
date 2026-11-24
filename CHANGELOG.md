@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- new (status): a Robust whose grid info the viewers refuse (not UTF-8, not well-formed XML) is said
 - fix (kickstart): installs the .NET runtime the cores target (8 for 0.9.3), after them, never 10 alone
 - new (status): an instance on a .NET major its core does not target is said, with its fix
 - fix (install-dotnet): without MAJOR, installs the runtime each installed core targets
