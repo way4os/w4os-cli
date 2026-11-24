@@ -7,7 +7,8 @@
 # Every question returns 0 when answered, 1 for Back (:back in plain mode), 2 for Quit (:quit, the end of the input).
 #
 # A form is the fields by the name of the variable that holds the answer (the proposal on the way in, the answer on the way out),
-# with LABEL[name] and, for what is not shown when typed, SECRET[name]=1 (and READONLY[name]=1 for what is only shown):
+# with LABEL[name] and, for what is not shown when typed, SECRET[name]=1 (and READONLY[name]=1 for what is only shown). A field with
+# choices has OPTIONS[name], the lines key, unit separator, label; HELP[name] is a line that tells about a field:
 #
 #   declare -A LABEL=([name]="Grid name" [password]="Password") SECRET=([password]=1)
 #   ui_form "Title" "Text above the form" name password
@@ -121,8 +122,12 @@ ui_menu() {
 		for i in "${!keys[@]}"; do
 			printf '  %d) %s\n' "$((i + 1))" "${labels[$i]}" >&2
 		done
+		local line=1
+		for i in "${!keys[@]}"; do
+			[[ "${keys[$i]}" == "$default" ]] && line=$((i + 1))
+		done
 		while :; do
-			fe_read "$title [1]: " 1 || return 2
+			fe_read "$title [$line]: " "$line" || return 2
 			fe_special || return $?
 			if [[ $FE_ANSWER =~ ^[0-9]+$ ]] && ((FE_ANSWER >= 1 && FE_ANSWER <= ${#keys[@]})); then
 				FE_ANSWER=${keys[FE_ANSWER - 1]}
@@ -148,7 +153,10 @@ ui_form() {
 	shift 2
 	local _u_names=("$@")
 	fe_choose_ui
-	if [[ $FE_UI == dialog ]]; then
+	# Choices cannot be typed in a form of dialog: the fields as a list, each one changed on its own
+	if [[ $FE_UI == dialog ]] && fe_has_choices "${_u_names[@]}"; then
+		ui_form_list "$_u_title" "$_u_text" "${_u_names[@]}"
+	elif [[ $FE_UI == dialog ]]; then
 		for _u_n in "${_u_names[@]}"; do ((${#LABEL[$_u_n]} > _u_w)) && _u_w=${#LABEL[$_u_n]}; done
 		for _u_i in "${!_u_names[@]}"; do
 			_u_n=${_u_names[$_u_i]}
@@ -175,9 +183,9 @@ ui_form_plain() {
 		printf '\n%s\n' "$_u_title" >&2
 		for _u_i in "${!_u_names[@]}"; do
 			_u_n=${_u_names[$_u_i]}
-			_u_shown=${!_u_n}
-			[[ -n "${SECRET[$_u_n]:-}" && -n "$_u_shown" ]] && _u_shown='********'
+			_u_shown=$(fe_shown "$_u_n")
 			printf '  %d) %-26s %s\n' "$((_u_i + 1))" "${LABEL[$_u_n]}" "$_u_shown" >&2
+			[[ -n "${HELP[$_u_n]:-}" ]] && printf '     %s\n' "${HELP[$_u_n]}" >&2
 		done
 		fe_read "Edit [1-${#_u_names[@]}, Enter to continue]: " '' || return 2
 		fe_special || return $?
@@ -186,12 +194,88 @@ ui_form_plain() {
 			_u_n=${_u_names[$((FE_ANSWER - 1))]}
 			_u_status=0
 			[[ -n "${READONLY[$_u_n]:-}" ]] && continue
-			if [[ -n "${SECRET[$_u_n]:-}" ]]; then
+			if [[ -n "${OPTIONS[$_u_n]:-}" ]]; then
+				fe_choice "$_u_n" || (($? == 1)) || return 2
+				continue
+			elif [[ -n "${SECRET[$_u_n]:-}" ]]; then
 				fe_read "${LABEL[$_u_n]}: " '' secret || return 2
 			else
 				fe_read "${LABEL[$_u_n]}: " "${!_u_n}" || return 2
 			fi
 			printf -v "$_u_n" '%s' "$FE_ANSWER"
+		fi
+	done
+}
+
+# fe_has_choices NAME...: whether one of the fields has choices
+fe_has_choices() {
+	local _u_n
+	for _u_n in "$@"; do
+		[[ -n "${OPTIONS[$_u_n]:-}" ]] && return 0
+	done
+	return 1
+}
+
+# fe_shown NAME: the answer of a field as it is shown, the label of its choice when it has choices, stars for a secret
+fe_shown() {
+	local _u_n=$1 _u_key _u_label
+	if [[ -n "${SECRET[$_u_n]:-}" && -n "${!_u_n}" ]]; then
+		printf '********'
+		return
+	fi
+	if [[ -n "${OPTIONS[$_u_n]:-}" ]]; then
+		while IFS=$'\x1f' read -r _u_key _u_label; do
+			[[ "$_u_key" == "${!_u_n}" ]] && printf '%s' "$_u_label" && return
+		done <<<"${OPTIONS[$_u_n]}"
+	fi
+	printf '%s' "${!_u_n}"
+}
+
+# fe_choice NAME: one of the choices of a field, the one it has proposed; 1 for Back (the answer kept)
+fe_choice() {
+	local _u_n=$1 _u_key _u_label _u_items=() _u_choice
+	while IFS=$'\x1f' read -r _u_key _u_label; do
+		_u_items+=("$_u_key" "$_u_label")
+	done <<<"${OPTIONS[$_u_n]}"
+	FE_OK= FE_CANCEL=Back FE_EXTRA= ui_menu _u_choice "${LABEL[$_u_n]}" "${HELP[$_u_n]:-${LABEL[$_u_n]}}" "${!_u_n}" "${_u_items[@]}" || return $?
+	printf -v "$_u_n" '%s' "$_u_choice"
+}
+
+# The form as a list in dialog: Enter changes the field chosen (a menu for its choices, a line to type for the others), its help at the
+# bottom; the button of the screen goes on
+ui_form_list() {
+	local _u_title=$1 _u_text=$2 _u_n _u_i _u_w=0 _u_items=() _u_status _u_current= _u_next=${FE_OK:-OK} _u_back=${FE_CANCEL:-Back}
+	shift 2
+	local _u_names=("$@")
+	for _u_n in "${_u_names[@]}"; do ((${#LABEL[$_u_n]} > _u_w)) && _u_w=${#LABEL[$_u_n]}; done
+	while :; do
+		_u_items=()
+		for _u_i in "${!_u_names[@]}"; do
+			_u_n=${_u_names[$_u_i]}
+			_u_items+=("$((_u_i + 1))" "$(printf '%-*s  %s' "$_u_w" "${LABEL[$_u_n]}" "$(fe_shown "$_u_n")")" "${HELP[$_u_n]:- }")
+		done
+		_u_status=0
+		FE_OK=Change FE_CANCEL=$_u_back FE_EXTRA=$_u_next fe_dialog "$_u_title" --hline "Enter: change, Tab: buttons" --item-help --no-tags \
+			${_u_current:+--default-item "$_u_current"} --menu "${_u_text:- }" "$((${#_u_names[@]} + 8 + $(fe_lines "$_u_text")))" 78 "${#_u_names[@]}" "${_u_items[@]}" || _u_status=$?
+		case $_u_status in
+		0) ;;
+		3) return 0 ;;
+		*) return "$_u_status" ;;
+		esac
+		_u_current=$FE_ANSWER
+		_u_n=${_u_names[$((FE_ANSWER - 1))]}
+		[[ -n "${READONLY[$_u_n]:-}" ]] && continue
+		if [[ -n "${OPTIONS[$_u_n]:-}" ]]; then
+			fe_choice "$_u_n" || (($? == 1)) || return 2
+		else
+			_u_status=0
+			FE_OK= FE_CANCEL=Back FE_EXTRA= fe_dialog "${LABEL[$_u_n]}" $([[ -n "${SECRET[$_u_n]:-}" ]] && echo --insecure --passwordbox || echo --inputbox) \
+				"${HELP[$_u_n]:-${LABEL[$_u_n]}}" 10 72 "${!_u_n}" || _u_status=$?
+			case $_u_status in
+			0) printf -v "$_u_n" '%s' "$FE_ANSWER" ;;
+			1) ;;
+			*) return 2 ;;
+			esac
 		fi
 	done
 }
@@ -304,8 +388,8 @@ ui_screen() {
 		answers=$(jq -cn --arg name "$_u_name" --arg value "$_u_value" '{($name): $value}')
 		;;
 	form)
-		declare -gA LABEL=() SECRET=() READONLY=() ENGINE_NAME=()
-		while IFS=$'\x1f' read -r _u_name _u_label _u_value _u_secret _u_readonly; do
+		declare -gA LABEL=() SECRET=() READONLY=() ENGINE_NAME=() OPTIONS=() HELP=()
+		while IFS=$'\x1f' read -r _u_name _u_label _u_value _u_secret _u_readonly _u_note _u_options; do
 			if [[ -z $_u_value ]]; then
 				case $_u_name in
 				admin_user) _u_value=${OPENSIM_DB_ADMIN_USER:-} ;;
@@ -317,9 +401,11 @@ ui_screen() {
 			LABEL[$_u_var]=$_u_label
 			[[ $_u_secret == true ]] && SECRET[$_u_var]=1
 			[[ $_u_readonly == true ]] && READONLY[$_u_var]=1
+			[[ -n $_u_note ]] && HELP[$_u_var]=$_u_note
+			[[ -n $_u_options ]] && OPTIONS[$_u_var]=$(jq -r 'to_entries[] | "\(.key)\u001f\(.value)"' <<<"$_u_options")
 			printf -v "$_u_var" '%s' "$_u_value"
 			_u_names+=("$_u_var")
-		done < <(jq -r '.fields[] | [.name, .label, .value, .secret, (.readonly // false)] | map(tostring) | join("\u001f")' <<<"$_u_screen")
+		done < <(jq -r '.fields[] | [.name, .label, .value, .secret, (.readonly // false), (.help // ""), (.options // "" | if . == "" then . else tojson end)] | map(tostring) | join("\u001f")' <<<"$_u_screen")
 		ui_form "$_u_title" "$_u_text" "${_u_names[@]}" || _u_status=$?
 		for _u_name in "${_u_names[@]}"; do
 			[[ -n "${READONLY[$_u_name]:-}" ]] && continue

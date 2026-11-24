@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- new (setup): the fields of a form with choices and help, as a list of fields in dialog (the web services screen)
 - new (web): opensim web GRID paths --outside /PREFIX, the addresses of the helpers outside the path of the mini site
 - new (web): opensim web GRID snippet routes the addresses the grid names on its site wherever they are (the paths of an install of before)
 - new (web): opensim web GRID snippet ... --prefix /PATH, the helpers under the path of a block of its own (the mini site under /opensim)
