@@ -87,7 +87,7 @@ function test_layout_rejects_unsupported_format() {
 }
 
 function test_opensim_status_works() {
-	assert_exec "'$OPENSIM' status"
+	assert_exec "'$OPENSIM' status" --stdout-contains '0 up - 0 avatars - cpu'
 }
 
 function test_console_connects_to_a_running_instance() {

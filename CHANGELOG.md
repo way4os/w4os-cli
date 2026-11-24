@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- new (status): the avatars in world, never a NPC: a column by instance that runs, the total in the last line
 - fix (import): says the grid info values made ASCII (OpenSim sends no other), in place and migrated
 - new (status): a Robust whose grid info the viewers refuse (not UTF-8, not well-formed XML) is said
 - fix (kickstart): installs the .NET runtime the cores target (8 for 0.9.3), after them, never 10 alone

@@ -160,11 +160,13 @@ final class StdUi implements UiInterface
  */
 function render(Status $status, array $modules = [], ?\W4OS\Engine\Runtime\RuntimeProbe $probe = null): string
 {
-    $rows = [['INSTANCE', 'TYPE', 'PID', 'USER', '%CPU', '%MEM', 'RSS']];
+    $rows = [['INSTANCE', 'TYPE', 'PID', 'USER', '%CPU', '%MEM', 'RSS', 'AVATARS']];
     // A Robust that runs but cannot read its database answers nothing that needs it: it is up, not working
     $withoutDatabase = $status->withoutDatabase();
     // A simulator whose process runs but does not answer is hung, or still loading: it is up, not working
     $unresponsive = $status->unresponsive();
+    // The avatars in world, never a NPC: unknown where the databases of a grid cannot be read
+    $avatars = $status->avatars(null, $withoutDatabase);
     foreach ($status->instances as $item) {
         $p = $item->process();
         $rows[] =
@@ -177,7 +179,8 @@ function render(Status $status, array $modules = [], ?\W4OS\Engine\Runtime\Runti
                     $p->user,
                     sprintf('%.1f', $p->cpu),
                     sprintf('%.1f', $p->memory),
-                    (string) $p->rss . (in_array($item->name(), $withoutDatabase, true) ? '  [no database]' : '')
+                    (string) $p->rss,
+                    (string) ($avatars['instances'][$item->name()] ?? '?') . (in_array($item->name(), $withoutDatabase, true) ? '  [no database]' : '')
                         . (in_array($item->name(), $unresponsive, true) ? '  [not answering]' : ''),
                 ];
     }
@@ -200,7 +203,14 @@ function render(Status $status, array $modules = [], ?\W4OS\Engine\Runtime\Runti
         . ($withoutDatabase === [] ? '' : ', ' . count($withoutDatabase) . ' without its database (' . implode(', ', $withoutDatabase) . ')')
         . ($unresponsive === [] ? '' : ', ' . count($unresponsive) . ' not answering (' . implode(', ', $unresponsive) . ')');
 
-    $text .= sprintf("%s - cpu %.1f%% - mem %.1f%% - rss %d\n", $line, $t['cpu'], $t['memory'], $t['rss']);
+    $known = array_filter($avatars['grids'], static fn(?int $count): bool => $count !== null);
+    $unknown = array_keys(array_diff_key($avatars['grids'], $known));
+    $count = array_sum($known);
+    $people = $avatars['grids'] !== [] && $known === []
+        ? 'avatars unknown'
+        : $count . ($count === 1 ? ' avatar' : ' avatars') . ($unknown === [] ? '' : ' (unknown for ' . implode(', ', $unknown) . ')');
+
+    $text .= sprintf("%s - %s - cpu %.1f%% - mem %.1f%% - rss %d\n", $line, $people, $t['cpu'], $t['memory'], $t['rss']);
     foreach ($status->brokenGridInfo() as $name => $broken) {
         $text .= "$name answers get_grid_info with what the viewers refuse ({$broken['defect']}): OpenSim's grid info cannot send non-ASCII characters."
             . " Fix: opensim settings $name grid --set gridName=" . escapeshellarg($broken['gridName']) . ", then opensim restart $name\n";
