@@ -161,8 +161,8 @@ for repository in "${APT_REPOSITORIES[@]}"; do
 done
 # What the tools need on a machine that does not have the packages (a clone): the dependencies of the package w4os-cli
 PHP_PACKAGES=(php-cli php-curl php-intl php-mbstring php-mysql php-xml)
-# opensim-kit: the command line, the engine, the website of a grid (w4os-site, with the helpers), the latest core and its essential
-# modules, a database server
+# opensim-kit: the command line, the engine, the website of a grid (w4os-site), its helpers (w4os-helpers, recommended: installed
+# here, as nothing below leaves the recommends out), the latest core and its essential modules, a database server
 OPENSIM_PACKAGES=(
 	opensim-kit
 	libsqlite3-0 mariadb-server
