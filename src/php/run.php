@@ -152,11 +152,13 @@ final class StdUi implements UiInterface
 }
 
 /**
- * The table of the instances, then the summary line, then the modules enabled that a simulator does not set up (kept off).
+ * The table of the instances, then the summary line, then the instances on a .NET major their core does not target, then the
+ * modules enabled that a simulator does not set up (kept off).
  *
  * @param list<string> $modules the modules enabled
+ * @param ?\W4OS\Engine\Runtime\RuntimeProbe $probe tells the .NET major each instance runs on (none: not told)
  */
-function render(Status $status, array $modules = []): string
+function render(Status $status, array $modules = [], ?\W4OS\Engine\Runtime\RuntimeProbe $probe = null): string
 {
     $rows = [['INSTANCE', 'TYPE', 'PID', 'USER', '%CPU', '%MEM', 'RSS']];
     // A Robust that runs but cannot read its database answers nothing that needs it: it is up, not working
@@ -199,6 +201,10 @@ function render(Status $status, array $modules = []): string
         . ($unresponsive === [] ? '' : ', ' . count($unresponsive) . ' not answering (' . implode(', ', $unresponsive) . ')');
 
     $text .= sprintf("%s - cpu %.1f%% - mem %.1f%% - rss %d\n", $line, $t['cpu'], $t['memory'], $t['rss']);
+    foreach ($probe === null ? [] : $status->wrongRuntimes($probe) as $name => $runtime) {
+        $text .= "$name runs on .NET {$runtime['running']}, its core targets .NET {$runtime['target']}: its asset cache keeps nothing (grey skins)."
+            . " Fix: sudo opensim install-dotnet {$runtime['target']}, then opensim restart $name\n";
+    }
     foreach ($status->unconfigured($modules) as $module => $names) {
         $text .= "$module is installed but not configured, off for: " . implode(', ', $names)
             . (strtolower($module) === 'gloebit' ? ' (set gloebitKey and gloebitSecret: opensim settings GRID economy)' : '') . "\n";
@@ -244,7 +250,7 @@ switch ($command) {
         require __DIR__ . '/ports.php';
         exit(showPorts($engine, $args));
     case 'status':
-        echo render(OpenSim::status($engine), $engine->layout->enabledModules());
+        echo render(OpenSim::status($engine), $engine->layout->enabledModules(), $engine->probe);
         exit(0);
     case 'start':
         exit(outcome(OpenSim::start($words ?: null, $engine, $simulators)));
@@ -312,14 +318,22 @@ switch ($command) {
         $session->close();
         exit(0);
     case 'install-dotnet':
-        $major = $words[0] ?? '8';
-        if (count($words) > 1 || !ctype_digit($major)) {
+        if (count($words) > 1 || (isset($words[0]) && !ctype_digit($words[0]))) {
             fwrite(STDERR, "usage: opensim install-dotnet [-y] [MAJOR]\n");
             exit(2);
         }
+        // The major given, else the ones the cores installed target: each core runs on its own, never a newer one
+        $majors = isset($words[0]) ? [(int) $words[0]] : \W4OS\Engine\Runtime\Core::dotnetMajors(\W4OS\Engine\Config\Layout::resolve()->coreRoot());
+        if ($majors === []) {
+            echo "No .NET core installed: nothing to install (opensim install-dotnet MAJOR installs a runtime)\n";
+            exit(0);
+        }
         // Every question gets its default: the command asks nothing
         $installer = new DotnetInstaller(new StdUi());
-        exit($installer->install((int) $major) ? 0 : 1);
+        foreach ($majors as $major) {
+            $installer->install($major) || exit(1);
+        }
+        exit(0);
 }
 fwrite(STDERR, "opensim: unknown command $command\n");
 exit(2);

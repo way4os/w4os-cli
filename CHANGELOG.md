@@ -2,6 +2,9 @@
 
 ### Unreleased
 
+- fix (kickstart): installs the .NET runtime the cores target (8 for 0.9.3), after them, never 10 alone
+- new (status): an instance on a .NET major its core does not target is said, with its fix
+- fix (install-dotnet): without MAJOR, installs the runtime each installed core targets
 - fix (import): a switch names the instances still starting, not answering yet, and fails
 - fix (status): a module installed but not configured (Gloebit without its key) is said, with the simulators it is off for
 - fix (import): sudo opensim import --robust plans as root, as the apply moves its data

@@ -48,13 +48,11 @@ RUN apt-get update \
 
 COPY magiiic.list /etc/apt/sources.list.d/magiiic.list
 
-#dotnet-runtime-10.0
 RUN curl -fsSL https://apt.magiiic.com/magiiic-packaging.asc \
     | gpg --dearmor -o /usr/share/keyrings/magiiic-packaging.gpg \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         w4os-cli \
-    && opensim install-dotnet \
     && /usr/share/w4os-cli/kickstart.sh
     # \
     # && mkdir -p /etc/opensim ${OPENSIM_VAR_ROOT} /var/log/opensim \

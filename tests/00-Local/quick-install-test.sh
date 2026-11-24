@@ -290,31 +290,33 @@ function test_dotnet_phase_requests_libgdiplus_directly_from_apt_when_missing() 
 	apt_update() { return 0; }
 	uname() { printf 'Linux\n'; }
 	ldconfig() { return 1; }
-	dotnet_runtime_package() { printf 'dotnet-runtime-10.0\n'; }
-	local runtime_checks=0 installed_packages
-	dotnet_runtime_installed() {
-		((runtime_checks += 1))
-		((runtime_checks > 1))
-	}
+	dotnet_target_majors() { printf '8\n'; }
+	dotnet_runtime_package() { printf 'dotnet-runtime-%s.0\n' "$1"; }
+	dotnet_runtime_installed() { return 1; }
+	local installed_packages
 	install_packages() { installed_packages="$*"; }
 	phase_dotnet
-	assert_contains 'dotnet-runtime-10.0' "$installed_packages"
+	unset -f recover_dpkg_configuration apt_update uname ldconfig dotnet_target_majors dotnet_runtime_package dotnet_runtime_installed install_packages
+	assert_contains 'dotnet-runtime-8.0' "$installed_packages"
 	assert_contains 'libgdiplus' "$installed_packages"
+}
+
+function test_dotnet_target_majors_are_the_ones_the_cores_target() {
+	quick_install_load_library || return
+	mkdir -p "$WORK/cores/0.9.3.0/bin" "$WORK/cores/0.9.3.1/bin" "$WORK/cores/0.9.2.2/bin"
+	printf '{\n  "runtimeOptions": {\n    "tfm": "net8.0",\n    "framework": {\n      "name": "Microsoft.NETCore.App",\n      "version": "8.0.0"\n    }\n  }\n}\n' >"$WORK/cores/0.9.3.0/bin/OpenSim.runtimeconfig.json"
+	cp "$WORK/cores/0.9.3.0/bin/OpenSim.runtimeconfig.json" "$WORK/cores/0.9.3.1/bin/"
+	assert_equals '8' "$(dotnet_target_majors "$WORK/cores")"
 }
 
 function test_dotnet_runtime_detection_accepts_apt_candidate_with_pipefail() {
 	quick_install_load_library || return
 	local line
 	apt-cache() {
-		case "$1" in
-		pkgnames) printf 'dotnet-runtime-10.0\n' ;;
-		policy)
-			printf 'dotnet-runtime-10.0:\n  Installed: (none)\n  Candidate: 10.0.13-0ubuntu1~26.04.1\n  Version table:\n'
-			for ((line = 0; line < 4096; line++)); do printf '    available version %s\n' "$line"; done
-			;;
-		esac
+		printf 'dotnet-runtime-8.0:\n  Installed: (none)\n  Candidate: 8.0.34-0ubuntu1~26.04.1\n  Version table:\n'
+		for ((line = 0; line < 4096; line++)); do printf '    available version %s\n' "$line"; done
 	}
-	assert_exec 'dotnet_runtime_package' --stdout 'dotnet-runtime-10.0'
+	assert_exec 'dotnet_runtime_package 8' --stdout 'dotnet-runtime-8.0'
 	unset -f apt-cache
 }
 
@@ -335,6 +337,7 @@ function test_clone_install_requests_all_packages_when_cli_and_engine_are_instal
 	install_packages() { printf '%s\n' "$*" >>"$calls"; }
 	apt_update() { return 0; }
 	end_installation() { return 0; }
+	phase_dotnet() { return 0; }
 	phase_opensim
 	installed="$(cat "$calls")"
 	# The kit: the command line, the engine, the website of a grid, the latest core and its modules
@@ -356,19 +359,21 @@ function test_clone_install_requests_all_packages_when_cli_and_engine_are_instal
 	assert_contains 'libgdiplus' "$installed"
 }
 
-function test_dotnet_installer_uses_supported_runtime_channel() {
+function test_dotnet_installer_installs_the_major_the_cores_target_beside_a_newer_one() {
 	quick_install_load_library || return
 	PGM=quick-install
 	local calls=$WORK/dotnet-installer-calls runtime_checks=0
 	recover_dpkg_configuration() { return 0; }
 	apt_update() { return 0; }
 	uname() { printf 'Linux\n'; }
+	dotnet_target_majors() { printf '8\n'; }
 	dotnet_runtime_package() { return 1; }
 	ldconfig() { printf 'libicuuc.so.76\nlibgdiplus.so.0\n'; }
 	dpkg-query() { printf 'installed\n'; }
+	# .NET 10 only at first: never taken for 8
 	dotnet_runtime_installed() {
 		((runtime_checks += 1))
-		((runtime_checks >= 3))
+		((runtime_checks >= 2))
 	}
 	curl() {
 		local output
@@ -388,8 +393,9 @@ function test_dotnet_installer_uses_supported_runtime_channel() {
 	phase_dotnet
 	local output
 	output=$(cat "$calls")
-	unset -f recover_dpkg_configuration apt_update uname dotnet_runtime_package ldconfig dpkg-query dotnet_runtime_installed curl as_root
-	assert_contains '--channel 10.0' "$output"
+	unset -f recover_dpkg_configuration apt_update uname dotnet_target_majors dotnet_runtime_package ldconfig dpkg-query dotnet_runtime_installed curl as_root
+	assert_contains '--channel 8.0' "$output"
+	assert_contains '--install-dir /usr/local/share/dotnet' "$output"
 	assert_contains '--azure-feed https://builds.dotnet.microsoft.com/dotnet' "$output"
 }
 

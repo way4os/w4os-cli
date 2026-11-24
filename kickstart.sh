@@ -32,7 +32,7 @@
 #           --setup               run `opensim setup` after the full or OpenSim install
 #           --dependencies        install quick-install's own dependencies
 #           --mariadb | --mysql   install/configure the requested SQL server
-#           --dotnet              install the .NET runtime without OpenSim packages
+#           --dotnet              install the .NET runtime the installed cores target (and libgdiplus)
 #           --opensim             install OpenSimulator and its management packages (or prepare the clone)
 #           --remote SSH_TARGET   run this installation on a server over SSH
 #           --podman              install in a persistent Podman container
@@ -523,22 +523,27 @@ apt_update() {
 	fi
 }
 
-dotnet_runtime_package() {
-	local package
-	while IFS= read -r package; do
-		[[ "$package" =~ ^dotnet-runtime-([0-9]+)\.0$ ]] || continue
-		((BASH_REMATCH[1] >= 8)) || continue
-		if LC_ALL=C apt-cache policy "$package" 2>/dev/null | awk '$1 == "Candidate:" && $2 != "(none)" { found = 1 } END { exit !found }'; then
-			printf '%s\n' "$package"
-			return 0
-		fi
-	done < <(apt-cache pkgnames dotnet-runtime- 2>/dev/null | sort -Vr)
-	return 1
+# The .NET majors the cores installed (under /usr/share/opensim, or the folder given) target, from their runtimeconfig.json: a
+# core runs on that major, never a newer one
+dotnet_target_majors() {
+	local config
+	for config in "${1:-/usr/share/opensim}"/*/bin/OpenSim.runtimeconfig.json; do
+		[[ -f "$config" ]] || continue
+		tr -d '\n' <"$config" | grep -Eo '"Microsoft\.NETCore\.App"[^}]*"version"[^"]*"[0-9]+' | grep -Eo '[0-9]+$'
+	done | sort -un
 }
 
+# The system package of the runtime of a major, when the package manager has it
+dotnet_runtime_package() {
+	local package="dotnet-runtime-$1.0"
+	LC_ALL=C apt-cache policy "$package" 2>/dev/null | awk '$1 == "Candidate:" && $2 != "(none)" { found = 1 } END { exit !found }' || return 1
+	printf '%s\n' "$package"
+}
+
+# Whether the runtime of a major is installed
 dotnet_runtime_installed() {
 	command -v dotnet >/dev/null 2>&1 &&
-		dotnet --list-runtimes 2>/dev/null | grep -Eq 'Microsoft\.NETCore\.App (8|9|[1-9][0-9]+)\.'
+		dotnet --list-runtimes 2>/dev/null | grep -Eq "Microsoft\.NETCore\.App $1\."
 }
 
 install_packages() {
@@ -1051,22 +1056,26 @@ phase_dotnet() {
 	}
 	recover_dpkg_configuration || die "could not complete package configuration"
 	apt_update || die "could not refresh package lists"
-	local runtime_package support_packages=()
-	if ! dotnet_runtime_installed; then
-		if runtime_package=$(dotnet_runtime_package); then
+	local majors=() major runtime_package support_packages=() missing=()
+	mapfile -t majors < <(dotnet_target_majors)
+	((${#majors[@]})) || say "No .NET core installed yet: no .NET runtime to install"
+	for major in "${majors[@]}"; do
+		dotnet_runtime_installed "$major" && continue
+		if runtime_package=$(dotnet_runtime_package "$major"); then
 			support_packages+=("$runtime_package")
 		else
-			say "No suitable .NET runtime package is available; use Microsoft's installer"
+			missing+=("$major")
 		fi
-	fi
+	done
 	if ! ldconfig -p 2>/dev/null | grep -q 'libgdiplus\.so'; then
 		support_packages+=(libgdiplus)
 	fi
 	if ((${#support_packages[@]})); then
 		install_packages "${support_packages[@]}" || die "could not install .NET runtime packages"
 	fi
-	dotnet_runtime_installed && return 0
+	((${#missing[@]})) || return 0
 
+	say "No system package of .NET ${missing[*]}: use Microsoft's installer"
 	if ! command -v curl >/dev/null 2>&1 || ! dpkg-query -W -f='${db:Status-Status}' ca-certificates 2>/dev/null | grep -qx installed; then
 		install_packages ca-certificates curl || die "could not install curl for the .NET installer"
 	fi
@@ -1081,15 +1090,20 @@ phase_dotnet() {
 		rm -f "$install_script"
 		die "could not download dotnet-install.sh"
 	fi
-	as_root bash "$install_script" --runtime dotnet --channel 10.0 \
-		--azure-feed https://builds.dotnet.microsoft.com/dotnet \
-		--install-dir /usr/local/share/dotnet || {
-		rm -f "$install_script"
-		die "could not install the .NET runtime"
-	}
+	# Each beside the others, in the same folder: dotnet runs each core on the major it targets
+	for major in "${missing[@]}"; do
+		as_root bash "$install_script" --runtime dotnet --channel "$major.0" \
+			--azure-feed https://builds.dotnet.microsoft.com/dotnet \
+			--install-dir /usr/local/share/dotnet || {
+			rm -f "$install_script"
+			die "could not install the .NET $major runtime"
+		}
+	done
 	rm -f "$install_script"
 	as_root ln -sf /usr/local/share/dotnet/dotnet /usr/local/bin/dotnet || die "could not link dotnet into /usr/local/bin"
-	dotnet_runtime_installed || die "no .NET 8 or newer runtime is available after installation"
+	for major in "${missing[@]}"; do
+		dotnet_runtime_installed "$major" || die "the .NET $major runtime is not available after installation"
+	done
 }
 
 # The install of before the kit on this machine (opensim-debian, in /opt/opensim): its folder, nothing when there is none
@@ -1348,6 +1362,7 @@ phase_opensim() {
 		if [[ $(uname -s) == Linux ]]; then
 			configure_package_sources || return $?
 			install_opensim_packages || die "could not install OpenSim packages"
+			phase_dotnet || die ".NET phase failed"
 		fi
 		say "Use OpenSim from clone $clone"
 		php -r 'exit(PHP_VERSION_ID >= 80200 ? 0 : 1);' || die "PHP 8.2 or newer is needed"
@@ -1357,6 +1372,8 @@ phase_opensim() {
 	fi
 	configure_package_sources || return $?
 	install_opensim_packages || die "could not install OpenSim packages"
+	# The runtime the cores installed target
+	[[ $(uname -s) != Linux ]] || phase_dotnet || die ".NET phase failed"
 	end_installation
 }
 
@@ -1567,7 +1584,6 @@ all)
 	phase_dependencies || die "quick-install dependencies failed"
 	if [[ $(uname -s) == Linux ]]; then
 		phase_database || die "database phase failed"
-		phase_dotnet || die ".NET phase failed"
 	fi
 	phase_opensim
 	;;
