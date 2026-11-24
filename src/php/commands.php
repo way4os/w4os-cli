@@ -208,10 +208,10 @@ final class Commands
     /** @param list<string> $args */
     public static function web(Environment $environment, array $args): int
     {
-        $options = ['grid' => '', 'docroot' => '', 'socket' => '', 'port' => '', 'web-group' => ''];
+        $options = ['grid' => '', 'docroot' => '', 'socket' => '', 'port' => '', 'web-group' => '', 'prefix' => ''];
         $words = [];
         for ($i = 0; $i < count($args); $i++) {
-            if (preg_match('/^--(grid|docroot|socket|port|web-group)(?:=(.*))?$/', $args[$i], $m)) {
+            if (preg_match('/^--(grid|docroot|socket|port|web-group|prefix)(?:=(.*))?$/', $args[$i], $m)) {
                 if (isset($m[2])) {
                     $options[$m[1]] = $m[2];
                 } elseif (isset($args[$i + 1])) {
@@ -291,6 +291,8 @@ final class Commands
                     $options['docroot'],
                     $options['socket'],
                     $webUrl,
+                    // Under the path of a block of its own (the mini site under /opensim): the helpers under it alone
+                    $options['prefix'],
                 ));
                 return 0;
             } catch (\InvalidArgumentException $e) {
@@ -325,7 +327,7 @@ final class Commands
         foreach ($pages as $page) {
             printf("  %-15s %-55s %s (%s)\n", $page['page'], $page['url'] ?? '(none)', $page['servedBy'] ?? '-', $page['source'] ?? '-');
         }
-        fwrite(STDOUT, "\nThe web server needs: opensim web {$grid->nick()} snippet <caddy|nginx|apache>\n");
+        fwrite(STDOUT, "\nThe web server needs: opensim web {$grid->nick()} snippet <caddy|nginx|apache> [--prefix /PATH]\n");
         return 0;
     }
 

@@ -139,6 +139,12 @@ function test_web_prints_caddy_snippet() {
 	assert_exec "'$OPENSIM' web tender_tern snippet caddy" --stdout-contains 'php_fastcgi'
 }
 
+function test_web_snippet_under_a_prefix_takes_the_helpers_under_it_alone() {
+	make_test_grid
+	printf '[Helpers]\nHelpersURL = "https://grid.example.test/opensim/economy"\n' >"$WORK/etc/opensim/grids/tender_tern/Helpers.ini"
+	assert_exec "'$OPENSIM' web tender_tern snippet caddy --prefix /opensim" --stdout-contains '@opensim_helpers path /opensim/economy /opensim/economy/*'
+}
+
 function test_web_api_prints_the_pool_and_the_local_listener_of_the_engine_api() {
 	make_test_grid
 	assert_exec "'$OPENSIM' web tender_tern api caddy --port 8781" --stdout-contains '[w4os-api]'

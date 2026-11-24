@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- new (web): opensim web GRID snippet ... --prefix /PATH, the helpers under the path of a block of its own (the mini site under /opensim)
 - doc (install): w4os-helpers comes with opensim-kit as a recommended package, not inside w4os-site
 - fix (packaging): w4os-cli needs w4os-engine 3.0.0~beta.13+502 or later (the avatars of opensim status)
 - new (status): the avatars in world, never a NPC: a column by instance that runs, the total in the last line
