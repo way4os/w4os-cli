@@ -201,8 +201,9 @@ function render(Status $status, array $modules = [], ?\W4OS\Engine\Runtime\Runti
         . ($unresponsive === [] ? '' : ', ' . count($unresponsive) . ' not answering (' . implode(', ', $unresponsive) . ')');
 
     $text .= sprintf("%s - cpu %.1f%% - mem %.1f%% - rss %d\n", $line, $t['cpu'], $t['memory'], $t['rss']);
-    foreach ($status->brokenGridInfo() as $name => $defect) {
-        $text .= "$name answers get_grid_info with what the viewers refuse ($defect): a non-ASCII value of its [GridInfoService] (gridname...) is sent in Latin-1 by OpenSim 0.9.3\n";
+    foreach ($status->brokenGridInfo() as $name => $broken) {
+        $text .= "$name answers get_grid_info with what the viewers refuse ({$broken['defect']}): OpenSim's grid info cannot send non-ASCII characters."
+            . " Fix: opensim settings $name grid --set gridName=" . escapeshellarg($broken['gridName']) . ", then opensim restart $name\n";
     }
     foreach ($probe === null ? [] : $status->wrongRuntimes($probe) as $name => $runtime) {
         $text .= "$name runs on .NET {$runtime['running']}, its core targets .NET {$runtime['target']}: its asset cache keeps nothing (grey skins)."
