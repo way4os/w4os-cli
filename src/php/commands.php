@@ -293,6 +293,8 @@ final class Commands
                     $webUrl,
                     // Under the path of a block of its own (the mini site under /opensim): the helpers under it alone
                     $options['prefix'],
+                    // The addresses it names on its site wherever they are (the paths of an install of before)
+                    $grid,
                 ));
                 return 0;
             } catch (\InvalidArgumentException $e) {
