@@ -152,6 +152,17 @@ function test_web_snippet_routes_the_addresses_the_grid_names_on_its_site_wherev
 	assert_exec "'$OPENSIM' web tender_tern snippet caddy" --stdout-contains '/helper/offline.php /helper/offline.php/*'
 }
 
+function test_web_paths_outside_a_prefix_are_the_addresses_of_the_helpers_elsewhere() {
+	make_test_grid
+	printf '[Const]\nWebURL = "https://grid.example.test"\n' >>"$WORK/etc/opensim/grids/tender_tern/Robust.ini"
+	printf '[Helpers]\nHelpersURL = "https://grid.example.test/opensim/economy"\n' >"$WORK/etc/opensim/grids/tender_tern/Helpers.ini"
+	printf '[Messaging]\nOfflineMessageModule = OfflineMessageModule\nOfflineMessageURL = "https://grid.example.test/helper/offline.php"\n' >"$WORK/etc/opensim/grids/tender_tern/OpenSim.ini"
+	assert_exec "'$OPENSIM' web tender_tern paths --outside /opensim" --stdout-contains '/helper/offline.php/*'
+	local output
+	output=$("$OPENSIM" web tender_tern paths --outside /opensim)
+	assert_not_contains '/opensim/economy' "$output"
+}
+
 function test_web_api_prints_the_pool_and_the_local_listener_of_the_engine_api() {
 	make_test_grid
 	assert_exec "'$OPENSIM' web tender_tern api caddy --port 8781" --stdout-contains '[w4os-api]'

@@ -208,10 +208,10 @@ final class Commands
     /** @param list<string> $args */
     public static function web(Environment $environment, array $args): int
     {
-        $options = ['grid' => '', 'docroot' => '', 'socket' => '', 'port' => '', 'web-group' => '', 'prefix' => ''];
+        $options = ['grid' => '', 'docroot' => '', 'socket' => '', 'port' => '', 'web-group' => '', 'prefix' => '', 'outside' => ''];
         $words = [];
         for ($i = 0; $i < count($args); $i++) {
-            if (preg_match('/^--(grid|docroot|socket|port|web-group|prefix)(?:=(.*))?$/', $args[$i], $m)) {
+            if (preg_match('/^--(grid|docroot|socket|port|web-group|prefix|outside)(?:=(.*))?$/', $args[$i], $m)) {
                 if (isset($m[2])) {
                     $options[$m[1]] = $m[2];
                 } elseif (isset($args[$i + 1])) {
@@ -223,7 +223,7 @@ final class Commands
                 $words[] = $args[$i];
             }
         }
-        $actions = ['show', 'snippet', 'check', 'set', 'api'];
+        $actions = ['show', 'snippet', 'paths', 'check', 'set', 'api'];
         $action = 'show';
         if ($words !== [] && !in_array($words[0], $actions, true)) {
             $options['grid'] = $options['grid'] ?: array_shift($words);
@@ -279,6 +279,17 @@ final class Commands
 
             return 0;
         }
+        // The addresses of the helpers outside a prefix (the mini site under it), for a block of their own: one per line
+        if ($action === 'paths') {
+            if ($options['outside'] === '') {
+                return self::error('web', 'usage: opensim web [GRID] paths --outside /PREFIX', 2);
+            }
+            foreach (Snippets::outside($grid, $options['outside']) as $path) {
+                fwrite(STDOUT, "$path\n");
+            }
+
+            return 0;
+        }
         $directory = $grid->directory();
         $services = HelpersConfig::services($directory);
         $webUrl = HelpersConfig::webUrl($directory);
@@ -329,7 +340,7 @@ final class Commands
         foreach ($pages as $page) {
             printf("  %-15s %-55s %s (%s)\n", $page['page'], $page['url'] ?? '(none)', $page['servedBy'] ?? '-', $page['source'] ?? '-');
         }
-        fwrite(STDOUT, "\nThe web server needs: opensim web {$grid->nick()} snippet <caddy|nginx|apache> [--prefix /PATH]\n");
+        fwrite(STDOUT, "\nThe web server needs: opensim web {$grid->nick()} snippet <caddy|nginx|apache> [--prefix /PATH] (paths --outside /PATH)\n");
         return 0;
     }
 
