@@ -25,8 +25,8 @@ depends:
     - curl
     - default-mysql-client | virtual-mysql-client
     - jq
-    # The first w4os-engine with what the CLI calls (Status::avatars() of opensim status)
-    - w4os-engine (>= 3.0.0~beta.13+502)
+    # The first w4os-engine with what the CLI calls (Status::simpleMaps() of opensim status)
+    - w4os-engine (>= 3.0.0~beta.13+548)
     - opensim-rest-php
     - php-cli (>= 2:8.2)
     - php-curl

@@ -158,7 +158,7 @@ final class StdUi implements UiInterface
  * @param list<string> $modules the modules enabled
  * @param ?\W4OS\Engine\Runtime\RuntimeProbe $probe tells the .NET major each instance runs on (none: not told)
  */
-function render(Status $status, array $modules = [], ?\W4OS\Engine\Runtime\RuntimeProbe $probe = null): string
+function render(Status $status, array $modules = [], ?\W4OS\Engine\Runtime\RuntimeProbe $probe = null, string $account = ''): string
 {
     $rows = [['INSTANCE', 'TYPE', 'PID', 'USER', '%CPU', '%MEM', 'RSS', 'AVATARS']];
     // A Robust that runs but cannot read its database answers nothing that needs it: it is up, not working
@@ -223,6 +223,11 @@ function render(Status $status, array $modules = [], ?\W4OS\Engine\Runtime\Runti
         $text .= "$module is installed but not configured, off for: " . implode(', ', $names)
             . (strtolower($module) === 'gloebit' ? ' (set gloebitKey and gloebitSecret: opensim settings GRID economy)' : '') . "\n";
     }
+    foreach ($status->simpleMaps($account) as $grid => $simple) {
+        $text .= 'The simple map (MapImageModule) for: ' . implode(', ', $simple['simulators']) . '. The 3D map (Warp3D): '
+            . ($simple['remedy'] === null ? '' : "its core cannot write the tiles until {$simple['remedy']}, then ")
+            . "opensim enable $grid map-warp3d and opensim restart $grid\n";
+    }
 
     return $text;
 }
@@ -264,7 +269,7 @@ switch ($command) {
         require __DIR__ . '/ports.php';
         exit(showPorts($engine, $args));
     case 'status':
-        echo render(OpenSim::status($engine), $engine->layout->enabledModules(), $engine->probe);
+        echo render(OpenSim::status($engine), $engine->layout->enabledModules(), $engine->probe, $engine->layout->systemUser());
         exit(0);
     case 'start':
         exit(outcome(OpenSim::start($words ?: null, $engine, $simulators)));
