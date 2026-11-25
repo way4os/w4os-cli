@@ -6,7 +6,7 @@
 USAGE="opensim import FILE [--apply]
        opensim import --simulator FILE [--simulator FILE...] GRID [--name NAME] [--core DIR] [--apply]
        opensim import --grid-settings FILE GRID [--apply]
-       opensim import --accounts FILE GRID|--robust ROBUST_INI [--format csv|json|yaml] [--keep-going] [--result FILE] [--apply]
+       opensim import --accounts FILE GRID|--robust ROBUST_INI [--format csv|json|yaml] [--keep-going] [--create-groups] [--result FILE] [--apply]
        opensim import --robust FILE [--nick NICK] [--core DIR] [--simulator FILE...] [--copy-data] [--apply] [--switch]
        opensim import --robust FILE --in-place [--nick NICK] [--core DIR] [--simulator FILE...] [--name NAME] [--apply] | --forget [--apply]"
 HELP="Applies a setup file (JSON or YAML: the simulators of a grid of this machine, their regions with name, location, size, roles) to the grid it names, or brings a simulator of another install (its OpenSim.ini, or its file of opensim.d, and the regions it names) into the grid GRID of this machine. Its database is kept as it is (the same one, nothing is copied), its regions are copied with their UUID and their place, its ports and its own settings are kept. Without --apply, says what would be written and where, and writes nothing.
@@ -24,7 +24,10 @@ HELP="Applies a setup file (JSON or YAML: the simulators of a grid of this machi
                     or YAML (a list of objects with the same keys); the names GRID has are skipped, an account given no
                     password gets one, kept in the result file (mode 600, accounts-result-<date>.csv or --result FILE), never
                     shown; the first failure stops the others, unless --keep-going; --robust ROBUST_INI instead of GRID
-                    makes them in a grid this install does not manage, by its Robust config where it is (nothing registered)
+                    makes them in a grid this install does not manage, by its Robust config where it is (nothing registered);
+                    groups: each account, the ones that exist too, joins its groups (Group or Group:Role, | between them in
+                    CSV), nothing taken away; a missing group or role is an error, made with --create-groups (the owner of
+                    the grid founding a group, a role with the powers of Everyone)
   --robust FILE     the Robust config of a grid of another install (Robust.HG.ini, Robust.ini), migrated into this one: the
                     same grid (its database kept as it is, so its accounts and its regions), its config made here with its own
                     settings kept; --simulator brings its simulators in the same run, --nick and --core when they are not the
@@ -41,7 +44,7 @@ HELP="Applies a setup file (JSON or YAML: the simulators of a grid of this machi
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 
-files=() grid= name= core= mode=plan scripts=true settings= accounts= format= keep=false robust= nick= switch=false inplace=false forget=false copydata=false
+files=() grid= name= core= mode=plan scripts=true settings= accounts= format= keep=false creategroups=false robust= nick= switch=false inplace=false forget=false copydata=false
 while (($#)); do
 	case "$1" in
 	--accounts)
@@ -57,6 +60,7 @@ while (($#)); do
 		;;
 	--format=*) format=${1#*=}; shift ;;
 	--keep-going) keep=true; shift ;;
+	--create-groups) creategroups=true; shift ;;
 	--robust)
 		(($# > 1)) || die "--robust requires the Robust config of the other install"
 		robust=$2
@@ -194,14 +198,15 @@ if [[ -n "$accounts" ]]; then
 		[[ -r "$accounts" ]] || die "cannot read $accounts"
 		text=$(<"$accounts")
 	fi
-	request=$(jq -cn --arg text "$text" --arg grid "$grid" --arg robust "${robust:+$(realpath "$robust")}" --arg mode "$mode" --arg format "$format" --argjson keep "$keep" \
-		'{data: {type: "imports", attributes: ({kind: "accounts", text: $text, mode: $mode, keepGoing: $keep} + (if $robust != "" then {robust: $robust} else {grid: $grid} end) + (if $format != "" then {format: $format} else {} end))}}')
+	request=$(jq -cn --arg text "$text" --arg grid "$grid" --arg robust "${robust:+$(realpath "$robust")}" --arg mode "$mode" --arg format "$format" --argjson keep "$keep" --argjson creategroups "$creategroups" \
+		'{data: {type: "imports", attributes: ({kind: "accounts", text: $text, mode: $mode, keepGoing: $keep, createGroups: $creategroups} + (if $robust != "" then {robust: $robust} else {grid: $grid} end) + (if $format != "" then {format: $format} else {} end))}}')
 	reply=$(engine POST /setups/imports --data=- <<<"$request") || true
 	jq -e '.data.attributes' <<<"$reply" >/dev/null 2>&1 ||
 		die "$(jq -r 'if .detail then .detail else (.title // "the engine did not answer") end' <<<"$reply" 2>/dev/null || printf '%s' "$reply")"
 	jq -r '.data.attributes |
 		(.errors[] | "import: \(.)"),
-		(.results[] | (if (.line // 0) > 0 then "line \(.line): " else "" end) + "\(.status)\(" " * (14 - (.status | length))) \(.first) \(.last)" + (if .detail != "" then " (\(.detail))" else "" end)),
+		(.results[] | ((if (.line // 0) > 0 then "line \(.line): " else "" end) + "\(.status)\(" " * (14 - (.status | length))) \(.first) \(.last)" + (if .detail != "" then " (\(.detail))" else "" end)),
+			((.groups // [])[] | "    \(.status)\(" " * (11 - (.status | length))) \(.group)" + (if .role then ":\(.role)" else "" end) + (if .detail != "" then " (\(.detail))" else "" end))),
 		"",
 		(.counts | to_entries | map("\(.value) \(.key)") | join(", ")),
 		(if .applied then empty else "Nothing was written: --apply makes the accounts." end)' <<<"$reply" >&2

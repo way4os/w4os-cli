@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- new (import): --accounts puts each account in its groups, with a role; --create-groups makes the missing ones
 - change (import): --accounts takes its format from the extension (.csv, .json, .yaml); each account told with its line
 - new (status): the simulators left on the simple map, and what gives them the 3D one (Warp3D)
 - new (setup): the fields of a form with choices and help, as a list of fields in dialog (the web services screen)
