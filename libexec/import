@@ -201,7 +201,7 @@ if [[ -n "$accounts" ]]; then
 		die "$(jq -r 'if .detail then .detail else (.title // "the engine did not answer") end' <<<"$reply" 2>/dev/null || printf '%s' "$reply")"
 	jq -r '.data.attributes |
 		(.errors[] | "import: \(.)"),
-		(.results[] | "\(.status)\(" " * (14 - (.status | length))) \(.first) \(.last)" + (if .detail != "" then " (\(.detail))" else "" end)),
+		(.results[] | (if (.line // 0) > 0 then "line \(.line): " else "" end) + "\(.status)\(" " * (14 - (.status | length))) \(.first) \(.last)" + (if .detail != "" then " (\(.detail))" else "" end)),
 		"",
 		(.counts | to_entries | map("\(.value) \(.key)") | join(", ")),
 		(if .applied then empty else "Nothing was written: --apply makes the accounts." end)' <<<"$reply" >&2

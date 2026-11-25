@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- change (import): --accounts takes its format from the extension (.csv, .json, .yaml); each account told with its line
 - new (status): the simulators left on the simple map, and what gives them the 3D one (Warp3D)
 - new (setup): the fields of a form with choices and help, as a list of fields in dialog (the web services screen)
 - new (web): opensim web GRID paths --outside /PREFIX, the addresses of the helpers outside the path of the mini site

@@ -145,8 +145,13 @@ import_accounts() {
 		esac
 	done
 	[[ -r "$list" ]] || die "cannot read $list"
-	if [[ "$list" =~ \.ya?ml$ && " ${arguments[*]} " != *" --format"* ]]; then
-		arguments+=(--format yaml)
+	# The format by the extension of the list, unless it is given
+	if [[ " ${arguments[*]} " != *" --format"* ]]; then
+		case "${list,,}" in
+		*.yaml | *.yml) arguments+=(--format yaml) ;;
+		*.json) arguments+=(--format json) ;;
+		*.csv) arguments+=(--format csv) ;;
+		esac
 	fi
 	csv=$($runner "$CLI_ROOT/libexec/import" --accounts - ${arguments[@]+"${arguments[@]}"} <"$list") || status=$?
 	if [[ -n "$apply" && -n "$csv" ]]; then
