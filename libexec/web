@@ -10,7 +10,14 @@ source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SO
 # imports (never the Caddyfile itself), checked by Caddy (taken back when refused), then both reloaded
 install_api() { # grid, then the options of web
 	local grid=$1 text etc=${OPENSIM_CADDY_ETC:-/etc/caddy} php=${OPENSIM_PHP_ETC:-/etc/php} pools import dir suffix file pool said version
-	text=$(run web "$@") || exit
+	local user
+	# What to write, as the account of the instances (the port of the API is kept in the conf of the grid, which is theirs)
+	user=$(install_accounts | sed -n 's/^SystemUser=//p' | head -n 1)
+	if [[ $(id -u) -eq 0 && -n "$user" && "$user" != root ]]; then
+		text=$(runuser -u "$user" -- "$0" "$@") || exit
+	else
+		text=$(run web "$@") || exit
+	fi
 	pools=$(ls -d "$php"/*/fpm/pool.d 2>/dev/null | sort -V | tail -n 1)
 	[[ -n "$pools" ]] || die "no PHP-FPM on this machine (apt install php-fpm)"
 	version=$(basename "$(dirname "$(dirname "$pools")")")
@@ -22,15 +29,15 @@ install_api() { # grid, then the options of web
 	suffix=${suffix#*\*}
 	file="$dir/$grid-api.w4os${suffix:-.caddyfile}"
 	pool="$pools/w4os-api.conf"
-	mkdir -p "$dir"
+	mkdir -p "$dir" || die "cannot write in $dir: run it as root (sudo)"
 	{
 		echo "; The engine API of the grids of this machine, as the user of their instances (opensim web $grid api caddy --install)"
 		sed -n '/^\[w4os-api\]/,/^$/p' <<<"$text" | sed '/^$/d'
-	} >"$pool"
+	} >"$pool" || die "cannot write $pool: run it as root (sudo)"
 	{
 		echo "# The engine API of the grid $grid, for the sites of this machine only (opensim web $grid api caddy --install)"
 		sed -n '/^http:\/\/127\.0\.0\.1:/,/^}$/p' <<<"$text"
-	} >"$file"
+	} >"$file" || die "cannot write $file: run it as root (sudo)"
 	said=$(caddy validate --config "$etc/Caddyfile" --adapter caddyfile 2>&1) || {
 		rm -f "$file"
 		die "Caddy refuses the listener of the engine API: $said"

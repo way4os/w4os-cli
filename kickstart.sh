@@ -714,7 +714,6 @@ apt_accessible_local_repository() {
 	if ! cmp -s "$source/Packages.gz" "$mirror/Packages.gz"; then
 		packages=("$source"/*.deb)
 		[[ -e "${packages[0]}" ]] || die "no .deb packages found in $source"
-		say "Copy local packages to APT-accessible cache $mirror" >&2
 		as_root install -d -m 755 "$mirror" || return $?
 		as_root find "$mirror" -mindepth 1 -maxdepth 1 -type f -name '*.deb' -delete || return $?
 		as_root cp -f "${packages[@]}" "$mirror/" || return $?
@@ -855,11 +854,10 @@ configure_package_sources() {
 	[[ "$OPENSIM_KIT_APT_DIST" =~ ^[A-Za-z0-9._-]+$ ]] || die "invalid OPENSIM_KIT_APT_DIST: $OPENSIM_KIT_APT_DIST"
 	[[ "$OPENSIM_KIT_APT_COMPONENT" =~ ^[A-Za-z0-9._-]+$ ]] || die "invalid OPENSIM_KIT_APT_COMPONENT: $OPENSIM_KIT_APT_COMPONENT"
 	if [[ -n "$APT_SOURCE_DIR" ]]; then
-		say "Use local packages from $local_debs"
 		if [[ "$refresh_local_index" == yes ]]; then
-			say "Refresh the local package index"
-			(cd "$local_debs" && dpkg-scanpackages --multiversion . /dev/null | gzip -9c >Packages.gz) || die "local package index refresh failed"
+			(cd "$local_debs" && dpkg-scanpackages --multiversion . /dev/null 2>>"$INSTALL_LOG" | gzip -9c >Packages.gz) || die "local package index refresh failed (log: $INSTALL_LOG)"
 		fi
+		done_line "Local packages: $local_debs ($(ls "$local_debs"/*.deb 2>/dev/null | wc -l | tr -d ' '))"
 		apt_debs=$(apt_accessible_local_repository "$local_debs") || return $?
 	fi
 	local needs_magiiic_key=no

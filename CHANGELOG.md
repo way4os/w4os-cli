@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+- fix (web): api caddy --install writes as root, its text made as the account of the instances; a write refused stops it
+- fix (kickstart): local packages said in one line, dpkg-scanpackages in the log
 - fix (web): api caddy --install checks the engine API answers, reloads without systemd too; api alone is for Caddy
 - change (kickstart): a migration checks, asks everything, then one Start; name, website, 3D map; a short summary; a rerun resumes
 - new (web): api caddy --install writes the pool and the local listener of the engine API, beside the sites; import --grid-name

@@ -203,6 +203,16 @@ oar)
 	"$libexec/$COMMAND" "$@"
 	;;
 
+web)
+	# The install of the engine API (its pool, its listener) writes the configs of the system: as root
+	if [[ " $* " == *" --install "* ]]; then
+		# Root, or the caller where it may write (OPENSIM_CADDY_ETC...): a folder it may not write in is said
+		"$libexec/web" "$@"
+	else
+		as_system_user "$libexec/web" "$@"
+	fi
+	;;
+
 install-dotnet)
 	log install-dotnet as root
 	# The runtime is installed for the whole system: as root, whoever calls
