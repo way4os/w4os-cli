@@ -49,7 +49,7 @@ function test_plans_the_import_and_says_nothing_was_written() {
 	assert_contains "Database: osredoutable @ localhost (user opensim), kept as it is" "$out"
 	assert_contains "  Redoutable (1111, 1000,1000): /opt/r/Redoutable.ini -> /etc/opensim/grids/demo/sims/demo.redoutable/regions/Redoutable.ini" "$out"
 	assert_contains "Would write:" "$out"
-	assert_contains "Nothing was written: add --apply to write it." "$out"
+	assert_contains "Nothing written. Add --apply." "$out"
 	assert_contains "- Then: opensim enable demo.redoutable, opensim start demo.redoutable." "$out"
 	assert_contains "Settings left: 4 (layout 1, replaced 2, same 1)" "$out"
 	assert_contains "Backup of the source first: /var/backups/opensim/demo/redoutable/demo-redoutable-20261117-120000-source.tar.gz (databases osredoutable, 1 files)" "$out"
@@ -117,7 +117,7 @@ function test_plans_the_settings_of_a_grid_of_another_install_the_secrets_masked
 	assert_contains "Into /etc/opensim/grids/demo/Gloebit.ini:" "$out"
 	assert_contains "  [Gloebit] GLBSecret = ***" "$out"
 	assert_contains "- Economy/CurrencyServer: the money of DTL/NSL is not handled (old code, to install by hand), left out" "$out"
-	assert_contains "Nothing was written: add --apply to write it." "$out"
+	assert_contains "Nothing written. Add --apply." "$out"
 }
 
 function test_applies_the_settings_of_a_grid_and_says_what_lays_them_in_its_simulators() {
@@ -170,9 +170,10 @@ function test_applies_a_setup_file_given_alone() {
 	assert_same '{"text":"grid:\n  nick: demo\n","mode":"plan"}' "$(jq -c '.data.attributes' "$ENGINE_LOG")"
 	assert_contains "Simulator North (demo.north): /etc/opensim/grids/demo/sims/demo.north.ini, http 9010, database demo_north @ localhost, estate Ada Love Estate (Ada Love)" "$out"
 	assert_contains "  Big Garden at 1000,1000, 512 m, port 9011, FallbackRegion: /etc/opensim/grids/demo/sims/demo.north/regions/BigGarden.ini" "$out"
-	assert_contains "Nothing was written: add --apply to write it, then:" "$out"
-	assert_contains "  opensim start demo.north" "$out"
-	assert_contains "Note: A plan reserves nothing." "$out"
+	assert_contains "Nothing written. Add --apply." "$out"
+	# One line, nothing after it
+	assert_not_contains "Note:" "$out"
+	assert_not_contains "then:" "$out"
 }
 
 function test_gives_a_region_to_a_simulator() {
@@ -206,7 +207,28 @@ function test_says_what_is_wrong_with_a_plan() {
 	said=$("$OPENSIM" region add demo alpha --name "Old Garden" --existing 2>&1)
 
 	assert_contains "Problems, to settle before it can be written:" "$said"
-	assert_contains "  simulators.0.regions.0.name: A simulator of this machine has this region already: take it out of that one first." "$said"
+	assert_contains "  A simulator of this machine has this region already: take it out of that one first." "$said"
+	assert_not_contains "simulators.0" "$said"
+}
+
+function test_simulator_add_names_what_is_missing_then_its_usage() {
+	local said
+	said=$("$OPENSIM" simulator add kimbered --region Sandbox 2>&1) && fail "a missing NAME is an error"
+
+	assert_contains "simulator add: NAME is missing" "$said"
+	assert_contains "usage: opensim simulator add GRID NAME" "$said"
+	assert_file_not_exists "$ENGINE_LOG"
+}
+
+function test_simulator_add_says_once_in_words_a_database_account_is_missing() {
+	engine_says '{"type":"about:blank","title":"Invalid request","status":400,"detail":"the setup has problems: file.0: simulators.0.database.user is required (the simulators of a grid that is not in the file); file.1: simulators.0.database.password is required (the simulators of a grid that is not in the file)","code":"invalid-request"}'
+
+	local said
+	said=$("$OPENSIM" simulator add kimbered Sandbox --region Sandbox --apply 2>&1) && fail "a refusal ends in an error"
+
+	assert_contains "No database account for the new simulator: its grid names none. Set OPENSIM_DB_USER and OPENSIM_DB_PASS." "$said"
+	assert_not_contains "file.0" "$said"
+	assert_equals 1 "$(grep -c "database account" <<<"$said")"
 }
 
 function test_a_file_to_load_a_region_with_is_one_the_caller_reads() {
@@ -287,8 +309,7 @@ function test_plans_a_restore_and_says_nothing_was_written() {
 	assert_contains "  alpha_robust @ localhost (user opensim)" "$out"
 	assert_contains "Would write:" "$out"
 	assert_contains "  /etc/opensim/robust.d/alpha.ini" "$out"
-	assert_contains "Nothing was written: add --apply to write it, then:" "$out"
-	assert_contains "  Start alpha once it is restored: opensim start alpha" "$out"
+	assert_contains "Nothing written. Add --apply." "$out"
 }
 
 function test_restores_an_archive_by_its_id_with_apply_and_says_why_the_engine_refuses() {
@@ -321,7 +342,7 @@ function test_accounts_are_sent_from_the_list_of_the_caller_and_the_result_kept_
 	assert_contains "would join  VIP:Hosts (would make the group)" "$plan"
 	assert_equals "false" "$(jq -r '.data.attributes.createGroups' "$WORK/request.json")"
 	assert_contains "line 3:" "$plan"
-	assert_contains "Nothing was written" "$plan"
+	assert_contains "Nothing written. Add --apply." "$plan"
 	assert_contains "John,Roe" "$(jq -r '.data.attributes.text' "$WORK/request.json")"
 	assert_not_contains "Made1234abcd" "$plan"
 
@@ -354,7 +375,7 @@ function test_a_grid_of_another_install_is_migrated_planned_applied_switched() {
 	assert_contains "Database: oldgrid @ db.example.org (user olduser), kept as it is" "$plan"
 	assert_contains "Simulators: Welcome (oldgrid.welcome)" "$plan"
 	assert_contains "The old Robust of oldgrid keeps running" "$plan"
-	assert_contains "Nothing was written" "$plan"
+	assert_contains "Nothing written. Add --apply." "$plan"
 	assert_equals "robust oldgrid plan $(realpath "$sim")" "$(jq -r '.data.attributes | "\(.kind) \(.nick) \(.mode) \(.simulators[0].file)"' "$WORK/request.json")"
 
 	local switched
@@ -403,7 +424,7 @@ function test_an_existing_install_is_registered_in_place_or_forgotten() {
 	plan=$(OPENSIM_API="$api" "$OPENSIM" import --robust "$robust" --in-place --simulator "$sim" --name welcome 2>&1)
 	assert_contains "Grid oldgrid in place: [Grid oldgrid] of /etc/w4os/w4os.conf" "$plan"
 	assert_contains "RobustIni = $(realpath "$robust")" "$plan"
-	assert_contains "Nothing was written" "$plan"
+	assert_contains "Nothing written. Add --apply." "$plan"
 	assert_equals "true false welcome" "$(jq -r '.data.attributes | "\(.inPlace) \(.forget) \(.simulators[0].name)"' "$WORK/request.json")"
 
 	# The core and the nick asked go to the engine

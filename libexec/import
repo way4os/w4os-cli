@@ -147,7 +147,7 @@ if [[ -n "$robust" && -z "$accounts" ]] && [[ "$inplace" == true || "$forget" ==
 		((.section // {}) | to_entries[] | "  \(.key) = \(.value)"),
 		"",
 		(if .forget then (if .applied then "Forgotten: the section is removed, the install is as it was." else "Nothing was removed: add --apply to forget it." end)
-		 elif .applied then "Written: the section of the grid" + (if ((.accounts // {}) | length) > 0 then ", and the accounts of the install" else "" end) + (if ((.gridInfo // []) | length) > 0 then "; of the install, only its grid info made ASCII." else "; nothing of the install." end) else "Nothing was written: add --apply to write it." end),
+		 elif .applied then "Written: the section of the grid" + (if ((.accounts // {}) | length) > 0 then ", and the accounts of the install" else "" end) + (if ((.gridInfo // []) | length) > 0 then "; of the install, only its grid info made ASCII." else "; nothing of the install." end) else "Nothing written. Add --apply." end),
 		((.accounts // {}) | to_entries[] | "  \(.key): \(if .value.from == "" then "(none)" else .value.from end) -> \(.value.to)"),
 		(if ((.gridInfo // []) | length) > 0 then "Grid info made ASCII in the install" + (if .applied then "" else " (with --apply)" end) + ":", ((.gridInfo // [])[] | "  \(.)") else empty end),
 		# Once applied, the service is made to follow the accounts by the caller (follow_accounts)
@@ -194,7 +194,7 @@ if [[ -n "$robust" && -z "$accounts" ]]; then
 		"",
 		(if .applied then "Written:" else "Would write:" end),
 		((.writes // [])[] | "  \(.)"),
-		(if .applied then "Report:   \(.report)" elif .switched then empty else "Nothing was written: add --apply to write it." end),
+		(if .applied then "Report:   \(.report)" elif .switched then empty else "Nothing written. Add --apply." end),
 		((.accounts // {}) | to_entries[] | "Account:  \(.key) \(if .value.from == "" then "(none)" else .value.from end) -> \(.value.to) (the owner of the old install, whose data stays where it is)"),
 		(if .switched then (if (.started | length) > 0 then "Started: \(.started | join(", "))" else empty end), ((.starting // [])[] | "Still starting, not answering yet: \(.) (opensim status, its log)"), ((.failed // {}) | to_entries[] | "Not started: \(.key): \(.value)") else (.applied as $applied | (.reminders // [])[] | select(type != "object" or .code != "install-account" or ($applied | not)) | select(($switching | not) or type != "object" or (.code != "import-stop-grid" and .code != "import-switch")) | "- \(said)") end)
 		end' <<<"$reply"
@@ -224,7 +224,7 @@ if [[ -n "$accounts" ]]; then
 			((.groups // [])[] | "    \(.status)\(" " * (11 - (.status | length))) \(.group)" + (if .role then ":\(.role)" else "" end) + (if .detail != "" then " (\(.detail))" else "" end))),
 		"",
 		(.counts | to_entries | map("\(.value) \(.key)") | join(", ")),
-		(if .applied then empty else "Nothing was written: --apply makes the accounts." end)' <<<"$reply" >&2
+		(if .applied then empty else "Nothing written. Add --apply." end)' <<<"$reply" >&2
 	jq -r '.data.attributes.csv // empty' <<<"$reply"
 	# A line that cannot be used, an account that failed or was not tried: an error
 	jq -e '.data.attributes | (.errors | length) == 0 and ((.counts.failed // 0) + (.counts["not tried"] // 0)) == 0' <<<"$reply" >/dev/null
@@ -244,7 +244,7 @@ if [[ -n "$settings" ]]; then
 		(if ((.files // {}) | length) == 0 then "Nothing to bring: the grid has them already." else ((.files // {}) | to_entries[] | "Into \(.key):", (.value | to_entries[] | .key as $section | .value | to_entries[] | "  [\($section)] \(.key) = \(.value)")) end),
 		(.notes[] | "- \(.)"),
 		"",
-		(if .applied then "Written to \((.files // {}) | keys | join(", "))", "Then the repair of the options lays them in its simulators (at the next upgrade of the packages, or now: opensim api POST /grids/\(.grid)/options/repair mode=apply)" elif ((.files // {}) | length) > 0 then "Nothing was written: add --apply to write it." else empty end)' <<<"$reply"
+		(if .applied then "Written to \((.files // {}) | keys | join(", "))", "Then the repair of the options lays them in its simulators (at the next upgrade of the packages, or now: opensim api POST /grids/\(.grid)/options/repair mode=apply)" elif ((.files // {}) | length) > 0 then "Nothing written. Add --apply." else empty end)' <<<"$reply"
 	exit
 fi
 # A setup file: the one word given, without --simulator
@@ -294,14 +294,14 @@ jq -r '
 		(if .applied then "Written:" else "Would write:" end),
 		(.writes[] | "  \(.)"),
 		"",
-		(if .applied then empty else "Nothing was written: add --apply to write it." end),
+		(if .applied then empty else "Nothing written. Add --apply." end),
 		(.reminders[] | "- \(said)")
 	else
 		step,
 		(if .applied then "Written:" else "Would write:" end),
 		(.writes[] | "  \(.)"),
 		"",
-		(if .applied then "Report:   \(.report)" else "Nothing was written: add --apply to write it." end),
+		(if .applied then "Report:   \(.report)" else "Nothing written. Add --apply." end),
 		(.reminders[] | "- \(said)")
 	end' <<<"$reply"
 # Several simulators that cannot be written together end in an error

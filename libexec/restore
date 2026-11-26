@@ -44,5 +44,4 @@ jq -r '.data.attributes |
 	(.writes[] | "  \(.)"),
 	(if (.kept | length) > 0 then "Kept as they are here:", (.kept[] | "  \(.)") else empty end),
 	"",
-	(if .applied then "Then:" else "Nothing was written: add --apply to write it, then:" end),
-	(.reminders[] | "  \(if type == "object" then .detail else . end)")' <<<"$reply"
+	(if .applied then ("Then:", (.reminders[] | "  \(if type == "object" then .detail else . end)")) else "Nothing written. Add --apply." end)' <<<"$reply"

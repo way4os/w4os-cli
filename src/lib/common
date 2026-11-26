@@ -269,25 +269,45 @@ run_setup() {
 # Apply a setup file through the engine (POST /setups/files): its text, plan or apply; shows the plan or what was written
 setup_file() { # file mode
 	local reply
-	reply=$(jq -Rsc --arg mode "$2" '{data: {type: "files", attributes: {text: ., mode: $mode}}}' <"$1" | engine POST /setups/files --data=-) || true
+	reply=$(jq -Rsc --arg mode "$2" '{data: {type: "files", attributes: {text: ., mode: $mode}}}' <"$1" | setup_file_engine POST /setups/files --data=-)
 	setup_file_report "$reply"
 }
 
 # The answer of POST /setups/files as lines: each simulator and region, what is written, what is left to do
 setup_file_report() { # reply
-	jq -e '.data.attributes' <<<"$1" >/dev/null 2>&1 ||
-		die "$(jq -r 'if .detail then .detail else (.title // "the engine did not answer") end' <<<"$1" 2>/dev/null || printf '%s' "$1")"
+	jq -e '.data.attributes' <<<"$1" >/dev/null 2>&1 || die "$(setup_file_refusal "$1")"
 	jq -r '.data.attributes |
 		"Grid \(.grid)",
 		(.steps[] |
 			(if .kind == "simulator" then "Simulator \(.simulator) (\(.slug)): \(.config), http \(.ports.http), database \(.database.name) @ \(.database.host)" + (if .estate then ", estate \(.estate.name)" + (if .estate.owner then " (\(.estate.owner))" else "" end) else "" end) else "Region of \(.slug):" end),
 			(if .region then "  \(.region.name) at \(.region.location), \(.region.size) m, port \(.region.port)" + (if (.region.roles | length) > 0 then ", " + (.region.roles | join(", ")) else "" end) + (if .region.existing then ", taken over from the grid (UUID \(.region.uuid))" else "" end) + (if .region.oar then ", loaded with \(.region.oar)" elif .region.dump then ", its database made from \(.region.dump)" else "" end) + ": \(.region.file)" else empty end)),
-		(if (.problems // {}) | length > 0 then "Problems, to settle before it can be written:", (.problems | to_entries[] | "  \(.key): \(.value)") else empty end),
+		(if (.problems // {}) | length > 0 then "Problems, to settle before it can be written:", (.problems | to_entries[] | "  \(.value)") else empty end),
 		(if .applied then "Written:" else "Would write:" end),
 		(.writes[] | "  \(.)"),
 		"",
 		(if .applied then ((.notes // [])[] | "  \(if type == "object" then .detail else . end)") else empty end),
-		(if .applied then (if (.reminders | length) > 0 then "Then:" else empty end) else "Nothing was written: add --apply to write it, then:" end),
-		(.reminders[] | "  \(if type == "object" then .detail else . end)"),
-		(if .applied then empty else ((.notes // [])[] | "Note: \(if type == "object" then .detail else . end)") end)' <<<"$1"
+		(if .applied then ((if (.reminders | length) > 0 then "Then:" else empty end), (.reminders[] | "  \(if type == "object" then .detail else . end)")) else "Nothing written. Add --apply." end)' <<<"$1"
+}
+
+# What the engine refused a setup file for, in the words of the command: the field paths of the file it was made into never said
+setup_file_refusal() { # reply
+	local detail
+	detail=$(jq -r 'if .detail then .detail else (.title // "the engine did not answer") end' <<<"$1" 2>/dev/null) || detail=$1
+	if [[ "$detail" =~ simulators\.[0-9]+\.database\.(user|password)\ is\ required ]]; then
+		echo "No database account for the new simulator: its grid names none. Set OPENSIM_DB_USER and OPENSIM_DB_PASS."
+		return
+	fi
+	# The problems one by one, without the place of each in the file
+	sed -E 's/^the setup has problems: //; s/(^|; )file\.[0-9]+: /\1/g; s/(^|; )[a-z_]+(\.[0-9a-z_]+)+: /\1/g' <<<"$detail"
+}
+
+# The engine asked for a setup file: its answer on the output, what it says of a refusal kept (the command says it once, in its words),
+# shown only when it gave no answer
+setup_file_engine() { # engine arguments...
+	local said reply
+	said=$(mktemp)
+	reply=$(engine "$@" 2>"$said") || true
+	[[ -n "$reply" ]] || cat "$said" >&2
+	rm -f "$said"
+	printf '%s' "$reply"
 }

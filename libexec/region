@@ -109,5 +109,5 @@ setup=$(jq -cn --arg grid "${words[0]}" --arg simulator "${words[1]}" --arg name
 		+ (if $size != "" then {size: ($size | tonumber)} else {} end)
 		+ (if $roles != "" then {roles: ($roles | split(","))} else {} end)
 		+ (if $port != "" then {port: ($port | tonumber)} else {} end)]}]}') || die "--size and --port are numbers"
-reply=$(jq -cn --argjson setup "$setup" --arg mode "$mode" '{data: {type: "files", attributes: {setup: $setup, mode: $mode}}}' | engine POST /setups/files --data=-) || true
+reply=$(jq -cn --argjson setup "$setup" --arg mode "$mode" '{data: {type: "files", attributes: {setup: $setup, mode: $mode}}}' | setup_file_engine POST /setups/files --data=-)
 setup_file_report "$reply"
