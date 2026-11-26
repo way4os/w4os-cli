@@ -826,6 +826,7 @@ function test_a_rerun_installs_the_website_a_failure_left_then_says_nothing_to_d
 	migration_stub
 	site_install() { echo "site $*" >>"$WORK/opensim-calls"; }
 	site_done() { [[ -f "$WORK/site-done" ]]; }
+	website_possible() { return 0; }
 	LEGACY_MODE=migrate ASSUME_YES=yes
 	: >"$WORK/here"
 	: >"$WORK/up"
@@ -840,6 +841,35 @@ function test_a_rerun_installs_the_website_a_failure_left_then_says_nothing_to_d
 	said=$(legacy_after_install)
 	assert_contains "w4osdemogrid is already here. Nothing to do." "$said"
 	assert_same "site w4osdemogrid" "$(cat "$WORK/opensim-calls")"
+}
+
+function test_with_apache_the_line_in_its_sites_is_asked_before_start_and_never_added_by_nobody() {
+	quick_install_load_library || return
+	WEB_SERVER=apache
+	as_root() { "$@"; }
+	local screen=$WORK/screen answers=$WORK/answers said
+	w4os-site() { [[ "$*" == *--vhosts* ]] && echo /etc/apache2/sites-available/kimbe.example-le-ssl.conf; }
+	# Asked: yes
+	printf '\n' >"$answers"
+	TTY_IN=$answers TTY_OUT=$screen TTY_OPEN= ASSUME_YES= SITE_EDIT=
+	apache_consent https://kimbe.example/opensim/
+	assert_same yes "$SITE_EDIT"
+	assert_contains "? Add one line to /etc/apache2/sites-available/kimbe.example-le-ssl.conf? [Y/n]" "$(cat "$screen")"
+	# Nobody there: never, but with --edit-vhosts
+	SITE_EDIT= ASSUME_YES=yes EDIT_VHOSTS=
+	said=$(apache_consent https://kimbe.example/opensim/) && status=0 || status=$?
+	assert_same 1 "$status"
+	assert_contains "which a run without anybody does not add" "$said"
+	EDIT_VHOSTS=yes
+	apache_consent https://kimbe.example/opensim/
+	assert_same yes "$SITE_EDIT"
+	# No site serving the host: go on without it, or quit
+	w4os-site() { :; }
+	printf 'g\n' >"$answers"
+	TTY_IN=$answers TTY_OUT=$screen TTY_OPEN= ASSUME_YES=
+	said=$(apache_consent https://nowhere.example/opensim/) && status=0 || status=$?
+	assert_same 1 "$status"
+	assert_contains "No site of Apache serves nowhere.example." "$said"
 }
 
 function test_a_migration_refused_at_start_changes_nothing() {

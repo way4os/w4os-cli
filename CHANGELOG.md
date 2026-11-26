@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- change (kickstart): with Apache, the line of the website in its sites asked with the other questions; --edit-vhosts when nobody is there
 - change (web): site --install beside Apache with the yes to one line in its sites (asked, or --edit-vhosts); site --vhosts
 - change (status): a Robust whose services did not load since its start is not up, and its services are said
 - fix (kickstart): a rerun of the fresh path installs a website a failure left, never sets up another grid

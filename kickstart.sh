@@ -18,6 +18,7 @@
 #
 # Setup is not started unless requested with --setup or RUN_SETUP=yes.
 # Options:  -y, --yes             do not ask before installing
+#           --edit-vhosts         with Apache, the line of the website may be added to the sites serving its host, unasked
 #           --unstable            include the unstable (beta) versions of the packages
 #           --testing             include the test builds (charm-tests), and --unstable
 #           --tools               only the command line and the engine, light (no core, no database, no website): to work on
@@ -1126,7 +1127,7 @@ end_installation() {
 	[[ -z "$setup_config_path" ]] || setup_arguments+=("$setup_option" "$setup_config_path")
 	[[ -z "$REGION_CONFIG_FILE" ]] || setup_arguments+=(--region-config "$REGION_CONFIG_FILE")
 	# A grid of a run before whose website was left (an error at that step): that step again, never a setup of another grid
-	local left=() nick
+	local left=() nick site
 	cli=$basedir/bin/opensim
 	for nick in $(grids_here "$basedir"); do
 		as_root "$cli" api GET "/grids/$nick" 2>/dev/null | jq -e '.data.attributes.site // empty' >/dev/null 2>&1 && ! site_done "$nick" && left+=("$nick")
@@ -1135,6 +1136,8 @@ end_installation() {
 		for nick in "${left[@]}"; do
 			say "  $nick is here, its website not installed yet."
 			ask "Install it?" || { say "Stopped: nothing changed."; exit 0; }
+			site=$(as_root "$cli" api GET "/grids/$nick" 2>/dev/null | jq -r '.data.attributes.site // empty')
+			website_possible && apache_consent "$site" || continue
 			run_step "Website" - site_install "$nick" || die "the website could not be installed (log: $(install_log))"
 			done_line "Website"
 			migration_summary "$nick" "$(as_root "$cli" api GET "/grids/$nick" 2>/dev/null | jq -r '.data.attributes.site // empty')"
@@ -1150,7 +1153,10 @@ end_installation() {
 		OPENSIM_SETUP_END=$end "$basedir/bin/opensim" "${setup_arguments[@]}" || die "the setup stopped (error $?)"
 		for nick in $(comm -13 <(printf '%s\n' "$before") <(grids_here "$basedir")); do
 			cli=$basedir/bin/opensim
-			as_root "$cli" api GET "/grids/$nick" 2>/dev/null | jq -e '.data.attributes.site // empty' >/dev/null 2>&1 || continue
+			site=$(as_root "$cli" api GET "/grids/$nick" 2>/dev/null | jq -r '.data.attributes.site // empty' 2>/dev/null)
+			[[ -n "$site" ]] || continue
+			website_possible || { say "  Website: no Caddy nor Apache on this machine, not installed."; continue; }
+			apache_consent "$site" || continue
 			run_step "Website" - site_install "$nick" || die "the website could not be installed (log: $(install_log))"
 			done_line "Website"
 		done
@@ -1377,7 +1383,7 @@ migrate_grid() { # robust config, simulator configs...
 			run_step "Start" engine_counter as_root "$cli" import --robust "$robust" --switch || die "$nick did not start (log: $(install_log))"
 			done_line "Started: $nick"
 		fi
-		if [[ -n "$site" ]] && ! site_done "$nick"; then
+		if [[ -n "$site" ]] && ! site_done "$nick" && website_possible && apache_consent "$site"; then
 			run_step "Website" - site_install "$nick" || die "the website could not be installed (log: $(install_log))"
 			done_line "Website"
 		fi
@@ -1432,11 +1438,10 @@ migrate_grid() { # robust config, simulator configs...
 		fi
 	fi
 	if website_possible; then
-		# A site of Apache cannot be given a path from outside its own file: the path is for every site of this Apache
-		[[ "${WEB_SERVER:-}" != apache ]] || say "  Apache: the website path will be served for every site of this Apache."
 		ask_text "Website address:" "$(jq -r '.site // empty' <<<"$plan")"
 		site=$ANSWER
 		[[ -z "$site" ]] || { site=${site%/}/; host=$(sed -E 's#^[a-z]+://([^/:]+).*#\1#' <<<"$site"); prefix=$(sed -E 's#^[a-z]+://[^/]+##; s#/$##' <<<"$site"); }
+		[[ -z "$site" ]] || apache_consent "$site" || site=
 	else
 		say "  Website: no Caddy nor Apache on this machine, not installed."
 	fi
@@ -1516,7 +1521,28 @@ site_done() { # nick
 }
 
 site_install() { # nick
-	as_root "$cli" web "$1" site --install
+	as_root "$cli" web "$1" site --install ${SITE_EDIT:+--edit-vhosts}
+}
+
+# With Apache, the yes to the one line the website needs in each site serving its host (SITE_EDIT), asked with the other questions:
+# no site serving it is said, the person goes on without the website or quits; nobody there, the line only with --edit-vhosts
+apache_consent() { # address of the website
+	local address=$1 files
+	[[ "${WEB_SERVER:-}" == apache ]] || return 0
+	files=$(as_root w4os-site web apache --host "$(sed -E 's#^([a-z]+://[^/:]+).*#\1#' <<<"$address")" --prefix "$(sed -E 's#^[a-z]+://[^/]+##; s#/$##' <<<"$address")" --vhosts 2>/dev/null | paste -sd, - | sed 's/,/, /g')
+	if [[ -z "$files" ]]; then
+		say "  No site of Apache serves $(sed -E 's#^[a-z]+://([^/:]+).*#\1#' <<<"$address")."
+		choose "[G]o on without the website  [Q]uit (G/q):" gq
+		[[ "$CHOICE" == g ]] || { say "Stopped: nothing changed."; exit 0; }
+		return 1
+	fi
+	if ! person_here; then
+		[[ -n "${EDIT_VHOSTS:-}" ]] && SITE_EDIT=yes && return 0
+		say "  Website: not installed, it needs one line in $files, which a run without anybody does not add."
+		return 1
+	fi
+	ask "Add one line to $files?" || { say "  Website: not installed."; return 1; }
+	SITE_EDIT=yes
 }
 
 # The grids of this install, one nick a line, sorted
@@ -1835,6 +1861,10 @@ while (($#)); do
 		;;
 	-y | --yes)
 		ASSUME_YES=yes
+		PODMAN_INSTALL_ARGS+=("$argument")
+		;;
+	--edit-vhosts)
+		EDIT_VHOSTS=yes
 		PODMAN_INSTALL_ARGS+=("$argument")
 		;;
 	--testing)
