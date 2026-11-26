@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# opensim module: enable or disable an OpenSimulator module for the install (EnabledModules of w4os.conf), the others kept.
+
+USAGE="opensim module [-hqv] enable|disable NAME"
+HELP="Adds the module NAME to EnabledModules of w4os.conf, or takes it out; the simulators take it at their next start (opensim restart). Its package installs it for a core: apt install opensim-0.9.3.0-NAME."
+
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+run module "$@"

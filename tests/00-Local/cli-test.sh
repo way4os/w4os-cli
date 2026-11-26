@@ -386,3 +386,16 @@ function test_completion_knows_every_command_and_the_grids() {
 	_opensim
 	assert_contains "tender_tern.welcome" "${COMPREPLY[*]}"
 }
+
+function test_module_enables_and_disables_a_module_for_the_install_the_others_kept() {
+	local conf="$WORK/w4os.conf" output
+	printf '[Defaults]\n    EnabledModules = opensimsearch\n' >"$conf"
+	output=$(OPENSIM_CONF="$conf" "$(dirname "$OPENSIM")/../libexec/module" enable gloebit 2>&1)
+	assert_contains "Module gloebit enabled for the install" "$output"
+	assert_contains 'EnabledModules = "opensimsearch gloebit"' "$(cat "$conf")"
+	output=$(OPENSIM_CONF="$conf" "$(dirname "$OPENSIM")/../libexec/module" disable gloebit 2>&1)
+	assert_contains "Module gloebit disabled" "$output"
+	assert_contains 'EnabledModules = "opensimsearch"' "$(cat "$conf")"
+	OPENSIM_CONF="$conf" "$(dirname "$OPENSIM")/../libexec/module" start gloebit >/dev/null 2>&1
+	assert_equals 2 "$?"
+}

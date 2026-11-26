@@ -5,7 +5,7 @@ set -e
 here=$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")
 libexec=$(cd "$here/../libexec" && pwd)
 
-COMMANDOPTS=service,setup,import,region,simulator,settings,address,posts,status,ports,start,stop,restart,console,screen,enable,disable,web,next,ban,save,load,backup,restore,oar,api,api-key,rest,install-dotnet
+COMMANDOPTS=service,setup,import,region,simulator,settings,address,posts,status,ports,start,stop,restart,console,screen,enable,disable,web,next,ban,save,load,backup,restore,oar,api,api-key,rest,install-dotnet,module
 HELP=$(
 	cat <<USAGE
 
@@ -34,6 +34,7 @@ HELP=$(
   api-key         make, list or revoke the keys of the engine API
   rest            use the remote OpenSim console client
   install-dotnet  install the .NET runtime OpenSimulator needs
+  module          enable or disable a module for the install (opensim module enable gloebit)
 
 System information
   --version [-v]         the version of the command line; with -v, of everything that matters here (engine, helpers, site, cores)
@@ -205,6 +206,12 @@ oar)
 install-dotnet)
 	log install-dotnet as root
 	# The runtime is installed for the whole system: as root, whoever calls
+	as_root "$libexec/$COMMAND" "$@"
+	;;
+
+module)
+	log module as root
+	# The modules of the install are in its system config: as root, whoever calls
 	as_root "$libexec/$COMMAND" "$@"
 	;;
 

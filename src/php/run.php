@@ -9,6 +9,7 @@
  *   run.php stop|restart [--simulators] [now] [target...]
  *   run.php console <instance>
  *   run.php install-dotnet [-y] [MAJOR]
+ *   run.php module enable|disable NAME
  *
  * The engine says what it does on the error output, the answer is on the standard output. The status is 0 for a success, 1 for a
  * problem, 2 for a command that is not understood.
@@ -335,6 +336,24 @@ switch ($command) {
             }
         }
         $session->close();
+        exit(0);
+    case 'module':
+        // A module of the install, added to EnabledModules of w4os.conf or taken out of it, the others kept
+        [$action, $name] = $words + ['', ''];
+        if (count($words) !== 2 || !in_array($action, ['enable', 'disable'], true) || preg_match('/^[a-z0-9][a-z0-9_-]*$/i', $name) !== 1) {
+            fwrite(STDERR, "usage: opensim module enable|disable NAME\n");
+            exit(2);
+        }
+        $conf = (string) (getenv('OPENSIM_CONF') ?: \W4OS\Engine\Config\Layout::systemFile());
+        if (!is_file($conf)) {
+            fwrite(STDERR, "opensim: $conf is not there: the install has no modules to change\n");
+            exit(1);
+        }
+        $on = $action === 'enable';
+        $changed = (new \W4OS\Engine\Config\PackagedProfiles($conf))->enableModule($name, $on);
+        echo $changed
+            ? 'Module ' . strtolower($name) . ($on ? ' enabled' : ' disabled') . " for the install ($conf): the simulators take it at their next start (opensim restart)\n"
+            : 'Module ' . strtolower($name) . ($on ? ' was enabled already' : ' was not enabled') . "\n";
         exit(0);
     case 'install-dotnet':
         if (count($words) > 1 || (isset($words[0]) && !ctype_digit($words[0]))) {

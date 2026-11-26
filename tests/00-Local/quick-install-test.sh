@@ -235,6 +235,30 @@ function test_tools_install_the_command_line_alone_without_what_it_recommends() 
 	assert_equals '--no-install-recommends w4os-cli' "$(cat "$calls")"
 }
 
+function test_with_installs_the_package_of_a_module_for_each_core_and_enables_it() {
+	quick_install_load_library || return
+	local calls=$WORK/install-calls
+	OPENSIM_CORES_ROOT=$WORK/cores
+	mkdir -p "$OPENSIM_CORES_ROOT/0.9.3.0/bin" "$OPENSIM_CORES_ROOT/empty/bin" "$OPENSIM_CORES_ROOT/unstable/bin"
+	touch "$OPENSIM_CORES_ROOT/0.9.3.0/bin/OpenSim.dll" "$OPENSIM_CORES_ROOT/unstable/bin/OpenSim.dll"
+	install_packages() { printf 'install %s\n' "$*" >>"$calls"; }
+	as_root() { printf 'root %s\n' "$*" >>"$calls"; }
+	WITH_MODULES=(gloebit)
+	install_with_modules
+	assert_equals "install opensim-0.9.3.0-gloebit opensim-unstable-gloebit
+root php /usr/share/w4os-engine/bin/opensim-profiles.php --enable-module gloebit" "$(cat "$calls")"
+}
+
+function test_without_with_the_kit_installs_no_module_of_its_own() {
+	quick_install_load_library || return
+	local calls=$WORK/install-calls
+	install_packages() { printf 'install %s\n' "$*" >>"$calls"; }
+	as_root() { printf 'root %s\n' "$*" >>"$calls"; }
+	WITH_MODULES=()
+	install_with_modules
+	assert_file_not_exists "$calls"
+}
+
 function test_apt_source_parser_accepts_multiword_options() {
 	quick_install_load_library || return
 	local source='deb [arch=amd64 signed-by=/usr/share/keyrings/example.gpg] https://packages.example.test/debian bookworm main'

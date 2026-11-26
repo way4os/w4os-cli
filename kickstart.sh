@@ -34,6 +34,7 @@
 #           --mariadb | --mysql   install/configure the requested SQL server
 #           --dotnet              install the .NET runtime the installed cores target (and libgdiplus)
 #           --opensim             install OpenSimulator and its management packages (or prepare the clone)
+#           --with MODULE         an OpenSimulator module the kit does not install (gloebit): its package for each core, enabled
 #           --remote SSH_TARGET   run this installation on a server over SSH
 #           --podman              install in a persistent Podman container
 #           --connection NAME     use a configured Podman connection; local|none forces local Podman
@@ -199,6 +200,10 @@ PODMAN_FORCE_LOCAL=no
 PODMAN_IMAGE=${OPENSIM_CONTAINER_IMAGE:-docker.io/library/ubuntu:26.04}
 PODMAN_IMAGE_SELECTED=no
 PODMAN_INSTALL_ARGS=()
+# The modules asked with --with (gloebit): installed for each core with the kit, enabled for the install
+WITH_MODULES=()
+# Where the packages put the cores
+OPENSIM_CORES_ROOT=${OPENSIM_CORES_ROOT:-/usr/share/opensim}
 CONTAINER_TOOLS_CLI_SELECTED=
 SETUP_CLI_SELECTED=
 SETUP_CONFIG_FILE=${OPENSIM_SETUP_CONFIG_FILE:-${OPENSIM_SETUP_CONFIG:-}}
@@ -1351,10 +1356,29 @@ phase_cleanup() {
 	done
 }
 
-# What the full install installs: the kit, its website with it on every supported system
+# What the full install installs: the kit, its website with it on every supported system; the modules asked with --with
 install_opensim_packages() {
 	apt_update || return $?
-	install_packages "${OPENSIM_PACKAGES[@]}"
+	install_packages "${OPENSIM_PACKAGES[@]}" || return $?
+	install_with_modules
+}
+
+# The modules asked with --with: their package for each core installed, enabled for the install (EnabledModules of w4os.conf)
+install_with_modules() {
+	local module core packages=()
+	((${#WITH_MODULES[@]})) || return 0
+	for module in "${WITH_MODULES[@]}"; do
+		[[ "$module" =~ ^[a-z0-9][a-z0-9_-]*$ ]] || die "--with $module: not the name of a module"
+		for core in "$OPENSIM_CORES_ROOT"/*/bin; do
+			[[ -e "$core/OpenSim.dll" || -e "$core/OpenSim.exe" ]] || continue
+			packages+=("opensim-$(basename "$(dirname "$core")")-$module")
+		done
+	done
+	((${#packages[@]})) || die "--with: no core installed to install ${WITH_MODULES[*]} for"
+	install_packages "${packages[@]}" || return $?
+	for module in "${WITH_MODULES[@]}"; do
+		as_root php /usr/share/w4os-engine/bin/opensim-profiles.php --enable-module "$module" || return $?
+	done
 }
 
 phase_opensim() {
@@ -1417,6 +1441,18 @@ while (($#)); do
 		[[ -n "$REMOTE_TARGET" ]] || die "--remote requires an SSH target"
 		;;
 	--podman) PODMAN_MODE=yes ;;
+	--with)
+		(($#)) && [[ "$1" != -* ]] || die "--with requires a module (gloebit)"
+		WITH_MODULES+=("$1")
+		REMOTE_ARGS+=("$1")
+		PODMAN_INSTALL_ARGS+=("$argument" "$1")
+		shift
+		;;
+	--with=*)
+		[[ -n "${argument#*=}" ]] || die "--with requires a module (gloebit)"
+		WITH_MODULES+=("${argument#*=}")
+		PODMAN_INSTALL_ARGS+=("$argument")
+		;;
 	--connection)
 		(($#)) || die "--connection requires a name (or local|none)"
 		[[ "$1" != -* ]] || die "--connection requires a name (or local|none)"
