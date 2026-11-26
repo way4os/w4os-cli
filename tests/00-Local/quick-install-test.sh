@@ -735,13 +735,14 @@ function migration_stub() {
 	cat >"$clone/bin/opensim" <<STUB
 #!/usr/bin/env bash
 case "\$1 \$2" in
-"api GET") [[ -f "$WORK/here" ]] && echo '{"data":{"attributes":{"name":"Kimbe Red","uri":"kimbe.example:8002"}}}' || exit 1 ;;
+"api GET") [[ -f "$WORK/here" ]] && cat "$WORK/grid.json" || exit 1 ;;
 "api POST") cat >/dev/null; echo '{"data":{"attributes":{"name":"Kimbe Red","grid":"w4osdemogrid","ports":{"public":8002,"private":8003},"gridInfo":["[GridInfoService] gridname '"'Kimbé Red'"' -> '"'Kimbe Red'"': OpenSim cannot"],"site":"https://kimbe.example/opensim/","data":[],"problems":{}}}}' ;;
 "status w4osdemogrid") [[ -f "$WORK/up" ]] && echo "w4osdemogrid  robust  [up]" ;;
 *) echo "\$*" >>"$WORK/opensim-calls"; [[ "\$1" != import ]] || : >"$WORK/here" ;;
 esac
 STUB
 	chmod +x "$clone/bin/opensim"
+	echo '{"data":{"attributes":{"name":"Kimbe Red","uri":"kimbe.example:8002"}}}' >"$WORK/grid.json"
 	as_root() { "$@"; }
 	maptiles_package() { :; }
 	website_possible() { return 1; }
@@ -770,6 +771,49 @@ function test_a_migration_asks_everything_first_then_runs_the_import_with_the_na
 	assert_contains "Login      http://kimbe.example:8002" "$said"
 	assert_contains "Old install  $LEGACY_ROOT, stopped, kept" "$said"
 	assert_not_contains "opensim import" "$said"
+}
+
+function test_a_migration_asks_the_website_address_then_keeps_it_with_the_grid_and_installs_it() {
+	quick_install_load_library || return
+	legacy_fixture
+	migration_stub
+	website_possible() { return 0; }
+	site_install() { echo "site $*" >>"$WORK/opensim-calls"; }
+	LEGACY_MODE=migrate
+	local said answers=$WORK/answers screen=$WORK/screen
+	# The ASCII name kept, the address proposed kept, then the start
+	printf '\n\n\n' >"$answers"
+	TTY_IN=$answers TTY_OUT=$screen TTY_OPEN= ASSUME_YES=
+
+	said=$(legacy_after_install)
+
+	assert_contains "--apply --switch --site https://kimbe.example/opensim/" "$(cat "$WORK/opensim-calls")"
+	assert_contains "site w4osdemogrid" "$(cat "$WORK/opensim-calls")"
+	assert_contains "? Website address: [https://kimbe.example/opensim/]" "$(cat "$screen")"
+	assert_contains "Website    https://kimbe.example/opensim/" "$said"
+	assert_contains "Admin      https://kimbe.example/opensim/login" "$said"
+}
+
+function test_a_rerun_installs_the_website_a_failure_left_then_says_nothing_to_do() {
+	quick_install_load_library || return
+	legacy_fixture
+	migration_stub
+	site_install() { echo "site $*" >>"$WORK/opensim-calls"; }
+	site_done() { [[ -f "$WORK/site-done" ]]; }
+	LEGACY_MODE=migrate ASSUME_YES=yes
+	: >"$WORK/here"
+	: >"$WORK/up"
+	echo '{"data":{"attributes":{"name":"Kimbe Red","uri":"kimbe.example:8002","site":"https://kimbe.example/opensim/"}}}' >"$WORK/grid.json"
+	local said
+	said=$(legacy_after_install)
+	assert_contains "w4osdemogrid is here, its website not installed yet." "$said"
+	assert_same "site w4osdemogrid" "$(cat "$WORK/opensim-calls")"
+	assert_contains "Website    https://kimbe.example/opensim/" "$said"
+
+	: >"$WORK/site-done"
+	said=$(legacy_after_install)
+	assert_contains "w4osdemogrid is already here. Nothing to do." "$said"
+	assert_same "site w4osdemogrid" "$(cat "$WORK/opensim-calls")"
 }
 
 function test_a_migration_refused_at_start_changes_nothing() {

@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+- new (web): GRID site --install puts the Quick Start website of a grid beside Caddy or Apache; api apache --install
+- change (kickstart): the fresh path installs the website after the setup, then its summary; a rerun redoes a website step left
 - fix (web): api caddy --install writes as root, its text made as the account of the instances; a write refused stops it
 - fix (kickstart): local packages said in one line, dpkg-scanpackages in the log
 - fix (web): api caddy --install checks the engine API answers, reloads without systemd too; api alone is for Caddy

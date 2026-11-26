@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 # opensim web: show, check, or print web-server snippets for a grid.
 
-USAGE="opensim web [GRID] [show|check|snippet caddy|nginx|apache|api caddy|nginx|apache [--install]|set PAGE URL] [options]"
-HELP="Show grid web services and who serves each page (the helpers under their base, the site elsewhere), check their URLs, print a server snippet, or set the address of a page (helpers, search, profile, guide, welcome, status, directory). api prints what serves the engine API to the sites of this machine as the user of the instances: a PHP-FPM pool of its own, and a listener on 127.0.0.1 for its paths only (the site then uses engine remote with a key); api caddy --install writes both (the pool in PHP-FPM, the listener in the sites Caddy imports) and reloads them. Options: --docroot DIR, --socket PATH, --port N, --web-group GROUP."
+USAGE="opensim web [GRID] [show|check|snippet caddy|nginx|apache|api caddy|nginx|apache [--install]|site --install|set PAGE URL] [options]"
+HELP="Show grid web services and who serves each page (the helpers under their base, the site elsewhere), check their URLs, print a server snippet, or set the address of a page (helpers, search, profile, guide, welcome, status, directory). api prints what serves the engine API to the sites of this machine as the user of the instances: a PHP-FPM pool of its own, and a listener on 127.0.0.1 for its paths only (the site then uses engine remote with a key); api caddy --install writes both (the pool in PHP-FPM, the listener in the sites Caddy imports) and reloads them; site --install puts the Quick Start website of the grid at the address its setup chose (the engine API, the site connected to it, its file beside the site of the host). Options: --docroot DIR, --socket PATH, --port N, --web-group GROUP."
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 
 # The pool and the listener of the engine API in place: the pool in PHP-FPM, the listener in the folder of sites the Caddyfile
 # imports (never the Caddyfile itself), checked by Caddy (taken back when refused), then both reloaded
-install_api() { # grid, then the options of web
-	local grid=$1 text etc=${OPENSIM_CADDY_ETC:-/etc/caddy} php=${OPENSIM_PHP_ETC:-/etc/php} pools import dir suffix file pool said version
-	local user
+install_api() { # grid, then the options of web (api caddy|apache)
+	local grid=$1 server text etc=${OPENSIM_CADDY_ETC:-/etc/caddy} apache=${OPENSIM_APACHE_ETC:-/etc/apache2} php=${OPENSIM_PHP_ETC:-/etc/php}
+	local pools import dir suffix file pool said version user api code arg previous=
+	for arg in "$@"; do [[ "$previous" != api ]] || server=$arg; previous=$arg; done
 	# What to write, as the account of the instances (the port of the API is kept in the conf of the grid, which is theirs)
 	user=$(install_accounts | sed -n 's/^SystemUser=//p' | head -n 1)
 	if [[ $(id -u) -eq 0 && -n "$user" && "$user" != root ]]; then
@@ -21,46 +22,104 @@ install_api() { # grid, then the options of web
 	pools=$(ls -d "$php"/*/fpm/pool.d 2>/dev/null | sort -V | tail -n 1)
 	[[ -n "$pools" ]] || die "no PHP-FPM on this machine (apt install php-fpm)"
 	version=$(basename "$(dirname "$(dirname "$pools")")")
-	import=$(sed -n 's/^[[:space:]]*import[[:space:]]\{1,\}\([^[:space:]]*\*[^[:space:]]*\).*/\1/p' "$etc/Caddyfile" 2>/dev/null | head -n 1)
-	[[ -n "$import" ]] || die "$etc/Caddyfile imports no folder of sites (import sites/*)"
-	dir=$(dirname "$import")
-	[[ "$dir" == /* ]] || dir="$etc/${dir#./}"
-	suffix=$(basename "$import")
-	suffix=${suffix#*\*}
-	file="$dir/$grid-api.w4os${suffix:-.caddyfile}"
 	pool="$pools/w4os-api.conf"
+	case $server in
+	caddy)
+		import=$(sed -n 's/^[[:space:]]*import[[:space:]]\{1,\}\([^[:space:]]*\*[^[:space:]]*\).*/\1/p' "$etc/Caddyfile" 2>/dev/null | head -n 1)
+		[[ -n "$import" ]] || die "$etc/Caddyfile imports no folder of sites (import sites/*)"
+		dir=$(dirname "$import")
+		[[ "$dir" == /* ]] || dir="$etc/${dir#./}"
+		suffix=$(basename "$import")
+		suffix=${suffix#*\*}
+		file="$dir/$grid-api.w4os${suffix:-.caddyfile}"
+		;;
+	apache)
+		dir=$apache/conf-available
+		file="$dir/w4os-api-$grid.conf"
+		;;
+	*) die "the engine API is installed for caddy or apache" ;;
+	esac
 	mkdir -p "$dir" || die "cannot write in $dir: run it as root (sudo)"
 	{
-		echo "; The engine API of the grids of this machine, as the user of their instances (opensim web $grid api caddy --install)"
+		echo "; The engine API of the grids of this machine, as the user of their instances (opensim web $grid api $server --install)"
 		sed -n '/^\[w4os-api\]/,/^$/p' <<<"$text" | sed '/^$/d'
 	} >"$pool" || die "cannot write $pool: run it as root (sudo)"
 	{
-		echo "# The engine API of the grid $grid, for the sites of this machine only (opensim web $grid api caddy --install)"
-		sed -n '/^http:\/\/127\.0\.0\.1:/,/^}$/p' <<<"$text"
+		echo "# The engine API of the grid $grid, for the sites of this machine only (opensim web $grid api $server --install)"
+		if [[ "$server" == caddy ]]; then
+			sed -n '/^http:\/\/127\.0\.0\.1:/,/^}$/p' <<<"$text"
+		else
+			sed -n '/^Listen 127\.0\.0\.1:/,/^<\/VirtualHost>$/p' <<<"$text"
+		fi
 	} >"$file" || die "cannot write $file: run it as root (sudo)"
-	said=$(caddy validate --config "$etc/Caddyfile" --adapter caddyfile 2>&1) || {
-		rm -f "$file"
-		die "Caddy refuses the listener of the engine API: $said"
-	}
+	if [[ "$server" == caddy ]]; then
+		said=$(caddy validate --config "$etc/Caddyfile" --adapter caddyfile 2>&1) || { rm -f "$file"; die "Caddy refuses the listener of the engine API: $said"; }
+		api="$(sed -n 's/^\(http:\/\/127\.0\.0\.1:[0-9]*\) {$/\1/p' "$file")/api"
+	else
+		said=$({ a2enmod -q proxy_fcgi alias && a2enconf -q "w4os-api-$grid" && apache2ctl configtest; } 2>&1) || {
+			a2disconf -q "w4os-api-$grid" >/dev/null 2>&1
+			rm -f "$file"
+			die "Apache refuses the listener of the engine API: $said"
+		}
+		api="http://$(sed -n 's/^Listen \(127\.0\.0\.1:[0-9]*\)$/\1/p' "$file")/api"
+	fi
 	if [[ -d /run/systemd/system || -n "${OPENSIM_SYSTEMD:-}" ]]; then
 		systemctl reload "php$version-fpm" || systemctl restart "php$version-fpm" || die "php$version-fpm did not take $pool"
-		systemctl reload caddy || die "Caddy did not reload with $file"
+		if [[ "$server" == caddy ]]; then systemctl reload caddy; else systemctl reload apache2; fi || die "the web server did not reload with $file"
 	else
 		# Without systemd (a container): the running ones told to read their config again
 		pkill -USR2 -f "php-fpm: master process" || die "PHP-FPM does not run: $pool is written, start php-fpm$version"
-		caddy reload --config "$etc/Caddyfile" --adapter caddyfile >/dev/null 2>&1 || die "Caddy did not reload with $file"
+		if [[ "$server" == caddy ]]; then
+			caddy reload --config "$etc/Caddyfile" --adapter caddyfile >/dev/null 2>&1
+		else
+			apache2ctl graceful >/dev/null 2>&1
+		fi || die "the web server did not reload with $file"
 	fi
 	# Answered, a key asked (401) or given: the pool and the listener are there; nothing, or 502, is no API
-	local api code
-	api="$(sed -n 's/^\(http:\/\/127\.0\.0\.1:[0-9]*\) {$/\1/p' "$file")/api"
 	for _ in 1 2 3 4 5; do
 		code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$api/info" 2>/dev/null) || code=000
-		[[ "$code" == 000 || "$code" == 502 ]] || break
+		[[ "$code" == 000 || "$code" == 502 || "$code" == 503 ]] || break
 		sleep 1
 	done
-	[[ "$code" != 000 && "$code" != 502 ]] || die "the engine API does not answer at $api (HTTP $code): see the log of php$version-fpm"
+	[[ "$code" != 000 && "$code" != 502 && "$code" != 503 ]] || die "the engine API does not answer at $api (HTTP $code): see the log of php$version-fpm"
 	say "✓ Engine API: $api"
 }
+
+# The web server the sites of this machine are served by: Caddy, else Apache (the one that runs, its config there)
+web_server() {
+	if command -v caddy >/dev/null 2>&1 && [[ -f "${OPENSIM_CADDY_ETC:-/etc/caddy}/Caddyfile" ]]; then
+		echo caddy
+	elif command -v apache2ctl >/dev/null 2>&1 && [[ -d "${OPENSIM_APACHE_ETC:-/etc/apache2}/conf-available" ]]; then
+		echo apache
+	else
+		return 1
+	fi
+}
+
+# The Quick Start website of a grid in place, at the address the grid keeps (site of the API): the engine API for the sites of this
+# machine, the site connected to it, its file beside the site of the host (never the host's own file)
+install_site() { # grid
+	local grid=$1 detail address host prefix api helpers name server
+	detail=$(engine GET "/grids/$grid" 2>/dev/null) || die "there is no grid $grid here"
+	address=$(jq -r '.data.attributes.site // empty' <<<"$detail")
+	name=$(jq -r '.data.attributes.name // empty' <<<"$detail")
+	[[ -n "$address" ]] || die "$grid has no Quick Start website (its setup did not choose one)"
+	command -v w4os-site >/dev/null 2>&1 || die "w4os-site is not installed (apt install w4os-site)"
+	server=$(web_server) || die "no Caddy nor Apache on this machine: the Quick Start website is put beside a site of one of them"
+	host=$(sed -E 's#^([a-z]+://[^/:]+).*#\1#' <<<"$address")
+	prefix=$(sed -E 's#^[a-z]+://[^/]+##; s#/$##' <<<"$address")
+	install_api "$grid" api "$server" || exit
+	api=$(run web "$grid" api "$server" | sed -n 's/.*api_url \(http:\/\/127\.0\.0\.1:[0-9]*\/api\).*/\1/p' | head -n 1)
+	helpers=$(run web "$grid" show | sed -n 's/^Helpers:[[:space:]]*//p' | head -n 1)
+	w4os-site setup --grid "$grid" --api "$api" --url "$helpers" --title "$name" </dev/null || die "the site could not be connected to $grid"
+	w4os-site web "$server" --host "$host" ${prefix:+--prefix "$prefix"} --install || die "the site could not be put in $server"
+	say "✓ Website: $address"
+}
+
+if [[ "${2:-}" == site && " $* " == *" --install "* ]]; then
+	install_site "$1"
+	exit
+fi
 
 # api alone: for Caddy, the web server the sites of the kit are put beside
 args=()
@@ -72,7 +131,7 @@ done
 [[ ${#args[@]} -eq 0 || "${args[-1]}" != api ]] || args+=(caddy)
 set -- "${args[@]}"
 
-if [[ " $* " == *" --install "* && " $* " == *" api caddy "* ]]; then
+if [[ " $* " == *" --install "* && ( " $* " == *" api caddy "* || " $* " == *" api apache "* ) ]]; then
 	args=()
 	for arg in "$@"; do [[ "$arg" == --install ]] || args+=("$arg"); done
 	install_api "${args[@]}"

@@ -7,7 +7,7 @@ USAGE="opensim import FILE [--apply]
        opensim import --simulator FILE [--simulator FILE...] GRID [--name NAME] [--core DIR] [--apply]
        opensim import --grid-settings FILE GRID [--apply]
        opensim import --accounts FILE GRID|--robust ROBUST_INI [--format csv|json|yaml] [--keep-going] [--create-groups] [--result FILE] [--apply]
-       opensim import --robust FILE [--nick NICK] [--grid-name NAME] [--core DIR] [--simulator FILE...] [--copy-data] [--apply] [--switch]
+       opensim import --robust FILE [--nick NICK] [--grid-name NAME] [--site URL] [--core DIR] [--simulator FILE...] [--copy-data] [--apply] [--switch]
        opensim import --robust FILE --in-place [--nick NICK] [--core DIR] [--simulator FILE...] [--name NAME] [--apply] | --forget [--apply]"
 HELP="Applies a setup file (JSON or YAML: the simulators of a grid of this machine, their regions with name, location, size, roles) to the grid it names, or brings a simulator of another install (its OpenSim.ini, or its file of opensim.d, and the regions it names) into the grid GRID of this machine. Its database is kept as it is (the same one, nothing is copied), its regions are copied with their UUID and their place, its ports and its own settings are kept. Without --apply, says what would be written and where, and writes nothing.
   FILE              a setup file: its simulators are made, or given its regions when the grid has them
@@ -36,6 +36,7 @@ HELP="Applies a setup file (JSON or YAML: the simulators of a grid of this machi
                     when the old install is another account's
   --grid-name NAME  the name of the migrated grid, ASCII (its grid info sends no other characters): instead of the one of its
                     config made ASCII
+  --site URL        the address of its Quick Start website, kept with the grid (opensim web GRID site --install puts it there)
   --copy-data       copy the folders of its data instead of moving them: the old install is left whole
   --in-place        the grid of another install run where it is, not migrated: only its section of the config of the suite
                     ([Grid <nick>]: its Robust config, its core, its simulators) is written, disabled; the install is never
@@ -46,7 +47,7 @@ HELP="Applies a setup file (JSON or YAML: the simulators of a grid of this machi
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 
-files=() grid= name= core= mode=plan scripts=true settings= accounts= format= keep=false creategroups=false robust= nick= gridname= switch=false inplace=false forget=false copydata=false
+files=() grid= name= core= mode=plan scripts=true settings= accounts= format= keep=false creategroups=false robust= nick= gridname= site= switch=false inplace=false forget=false copydata=false
 while (($#)); do
 	case "$1" in
 	--accounts)
@@ -81,6 +82,12 @@ while (($#)); do
 		shift 2
 		;;
 	--grid-name=*) gridname=${1#*=}; shift ;;
+	--site)
+		(($# > 1)) || die "--site requires the address of the website"
+		site=$2
+		shift 2
+		;;
+	--site=*) site=${1#*=}; shift ;;
 	--switch) switch=true; shift ;;
 	--copy-data) copydata=true; shift ;;
 	--in-place) inplace=true; shift ;;
@@ -155,8 +162,8 @@ if [[ -n "$robust" && -z "$accounts" ]]; then
 		[[ -r "$file" ]] || die "cannot read $file"
 		paths+=("$(realpath "$file")")
 	done
-	request=$(jq -cn --arg file "$(realpath "$robust")" --arg nick "$nick" --arg gridname "$gridname" --arg core "$core" --arg mode "$mode" --argjson switch "$switch" --argjson scripts "$scripts" --argjson copydata "$copydata" \
-		'{data: {type: "imports", attributes: ({kind: "robust", file: $file, mode: $mode, switch: $switch, copyData: $copydata, simulators: ($ARGS.positional | map({file: .} + (if $scripts then {} else {scripts: false} end)))} + ({nick: $nick, gridName: $gridname, core: $core} | with_entries(select(.value != ""))))}}' \
+	request=$(jq -cn --arg file "$(realpath "$robust")" --arg nick "$nick" --arg gridname "$gridname" --arg site "$site" --arg core "$core" --arg mode "$mode" --argjson switch "$switch" --argjson scripts "$scripts" --argjson copydata "$copydata" \
+		'{data: {type: "imports", attributes: ({kind: "robust", file: $file, mode: $mode, switch: $switch, copyData: $copydata, simulators: ($ARGS.positional | map({file: .} + (if $scripts then {} else {scripts: false} end)))} + ({nick: $nick, gridName: $gridname, site: $site, core: $core} | with_entries(select(.value != ""))))}}' \
 		--args ${paths[@]+"${paths[@]}"})
 	reply=$(engine POST /setups/imports --data=- <<<"$request") || true
 	jq -e '.data.attributes' <<<"$reply" >/dev/null 2>&1 ||

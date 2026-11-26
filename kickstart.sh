@@ -1060,6 +1060,8 @@ phase_database() {
 	app_source=$(password_source OPENSIM_DB_PASS)
 	OPENSIM_DB_ADMIN_PASS=${OPENSIM_DB_ADMIN_PASS:-$(openssl rand -hex 32)}
 	OPENSIM_DB_PASS=${OPENSIM_DB_PASS:-$(openssl rand -hex 32)}
+	# Nini ends a value at a double quote: OpenSim could not read it from its configs
+	[[ "$OPENSIM_DB_PASS" != *'"'* ]] || die "OPENSIM_DB_PASS has a double quote: OpenSim cannot read a database password with one from its configs"
 	# An account that exists is used only with its own password: never changed to fit the one given
 	((admin_exists == 0)) || sql_login "$OPENSIM_DB_ADMIN_USER" "$OPENSIM_DB_ADMIN_PASS" || die "SQL account $OPENSIM_DB_ADMIN_USER: its password ($admin_source) is refused"
 	((app_exists == 0)) || sql_login "$OPENSIM_DB_USER" "$OPENSIM_DB_PASS" || die "SQL account $OPENSIM_DB_USER: its password ($app_source) is refused"
@@ -1125,7 +1127,21 @@ end_installation() {
 	[[ -z "$REGION_CONFIG_FILE" ]] || setup_arguments+=(--region-config "$REGION_CONFIG_FILE")
 	if [[ "${RUN_SETUP:-}" =~ ^(yes|true|1)$ ]] || person_here; then
 		say ""
-		"$basedir/bin/opensim" "${setup_arguments[@]}" || die "the setup stopped (error $?)"
+		local before end nick
+		before=$(grids_here "$basedir")
+		# The summary of the setup said last, after the website of the grid it made
+		end=$(mktemp) && chmod 666 "$end"
+		OPENSIM_SETUP_END=$end "$basedir/bin/opensim" "${setup_arguments[@]}" || die "the setup stopped (error $?)"
+		for nick in $(comm -13 <(printf '%s\n' "$before") <(grids_here "$basedir")); do
+			cli=$basedir/bin/opensim
+			as_root "$cli" api GET "/grids/$nick" 2>/dev/null | jq -e '.data.attributes.site // empty' >/dev/null 2>&1 || continue
+			run_step "Website" - site_install "$nick" || die "the website could not be installed (log: $(install_log))"
+			done_line "Website"
+		done
+		say ""
+		cat "$end"
+		! as_root test -f "$OPENSIM_RC_PATH" || say "Passwords  $OPENSIM_RC_PATH (root only)"
+		rm -f "$end"
 	else
 		done_line "Installed"
 	fi
@@ -1328,16 +1344,28 @@ migrate_grid() { # robust config, simulator configs...
 	say "Migration of $nick"
 	# Here already: running (nothing to do), or written and not started (its start is what is left)
 	if as_root "$cli" api GET "/grids/$nick" 2>/dev/null | jq -e '.data.attributes' >/dev/null 2>&1; then
+		site=$(as_root "$cli" api GET "/grids/$nick" 2>/dev/null | jq -r '.data.attributes.site // empty' 2>/dev/null)
 		if as_root "$cli" status "$nick" 2>/dev/null | grep -q '\[up\]'; then
-			say "  $nick is already here. Nothing to do."
-			migration_summary "$nick" ""
-			return 0
+			if [[ -z "$site" ]] || site_done "$nick"; then
+				say "  $nick is already here. Nothing to do."
+				migration_summary "$nick" "$site"
+				return 0
+			fi
+			# Stopped at its website before: that step again
+			say "  $nick is here, its website not installed yet."
+			ask "Install it?" || { say "Stopped: nothing changed."; exit 0; }
+		else
+			say "  $nick is written here, not started yet."
+			ask "Start it?" || { say "Stopped: nothing changed."; exit 0; }
+			STEP_FROM=$(wc -c <"$(install_log)" | tr -d ' ')
+			run_step "Start" engine_counter as_root "$cli" import --robust "$robust" --switch || die "$nick did not start (log: $(install_log))"
+			done_line "Started: $nick"
 		fi
-		say "  $nick is written here, not started yet."
-		ask "Start it?" || { say "Stopped: nothing changed."; exit 0; }
-		STEP_FROM=$(wc -c <"$(install_log)" | tr -d ' ')
-		run_step "Start" engine_counter as_root "$cli" import --robust "$robust" --switch || die "$nick did not start (log: $(install_log))"
-		migration_summary "$nick" ""
+		if [[ -n "$site" ]] && ! site_done "$nick"; then
+			run_step "Website" - site_install "$nick" || die "the website could not be installed (log: $(install_log))"
+			done_line "Website"
+		fi
+		migration_summary "$nick" "$site"
 		return 0
 	fi
 	# The checks: its configs, the plan of the engine (what it writes, its data), the room for it, its ports
@@ -1388,11 +1416,13 @@ migrate_grid() { # robust config, simulator configs...
 		fi
 	fi
 	if website_possible; then
+		# A site of Apache cannot be given a path from outside its own file: the path is for every site of this Apache
+		[[ "${WEB_SERVER:-}" != apache ]] || say "  Apache: the website path will be served for every site of this Apache."
 		ask_text "Website address:" "$(jq -r '.site // empty' <<<"$plan")"
 		site=$ANSWER
 		[[ -z "$site" ]] || { site=${site%/}/; host=$(sed -E 's#^[a-z]+://([^/:]+).*#\1#' <<<"$site"); prefix=$(sed -E 's#^[a-z]+://[^/]+##; s#/$##' <<<"$site"); }
 	else
-		say "  Website: no Caddy on this machine, not installed."
+		say "  Website: no Caddy nor Apache on this machine, not installed."
 	fi
 	maptiles=$(maptiles_package)
 	if [[ -n "$maptiles" ]]; then
@@ -1412,6 +1442,7 @@ migrate_grid() { # robust config, simulator configs...
 		import)
 			local -a import=(import --robust "$robust" --apply --switch)
 			[[ "$ascii" == "$name" ]] || import+=(--grid-name "$ascii")
+			[[ -z "$site" ]] || import+=(--site "$site")
 			for file in "$@"; do import+=(--simulator "$file"); done
 			STEP_FROM=$(wc -c <"$(install_log)" | tr -d ' ')
 			run_step "[$count/${#steps[@]}] Migration" engine_counter as_root "$cli" "${import[@]}" || die "the migration of $nick stopped (log: $(install_log))"
@@ -1422,7 +1453,7 @@ migrate_grid() { # robust config, simulator configs...
 			done_line "3D map"
 			;;
 		site)
-			run_step "[$count/${#steps[@]}] Website: $host$prefix" - site_install "$nick" "$host" "$prefix" "$ascii" || die "the website could not be installed (log: $(install_log))"
+			run_step "[$count/${#steps[@]}] Website: $host$prefix" - site_install "$nick" || die "the website could not be installed (log: $(install_log))"
 			done_line "Website"
 			;;
 		esac
@@ -1433,7 +1464,14 @@ migrate_grid() { # robust config, simulator configs...
 
 # Whether the website of a grid can be installed here: the site, and Caddy, the web server it is put beside a site of the host with
 website_possible() {
-	command -v w4os-site >/dev/null 2>&1 && command -v caddy >/dev/null 2>&1 && [[ -f /etc/caddy/Caddyfile ]]
+	command -v w4os-site >/dev/null 2>&1 || return 1
+	if command -v caddy >/dev/null 2>&1 && [[ -f /etc/caddy/Caddyfile ]]; then
+		WEB_SERVER=caddy
+	elif command -v apache2ctl >/dev/null 2>&1 && [[ -d /etc/apache2/conf-available ]]; then
+		WEB_SERVER=apache
+	else
+		return 1
+	fi
 }
 
 # The package of the 3D map of the release of OpenSim of this machine, when it is available and not installed yet
@@ -1455,13 +1493,19 @@ map_install() { # nick package
 
 # The website of a grid: the engine API for the sites of this machine, the site connected to it, its Caddy file beside the site of
 # the host (never the host's own file)
-site_install() { # nick host prefix title
-	local api helpers
-	as_root "$cli" web "$1" api caddy --install || return
-	api=$(as_root "$cli" web "$1" api caddy | sed -n 's/.*api_url \(http:\/\/127\.0\.0\.1:[0-9]*\/api\).*/\1/p' | head -n 1)
-	helpers=$(as_root "$cli" web "$1" show | sed -n 's/^Helpers:[[:space:]]*//p' | head -n 1)
-	as_root w4os-site setup --grid "$1" --api "$api" --url "$helpers" --title "$4" </dev/null || return
-	as_root w4os-site web caddy --host "$2" ${3:+--prefix "$3"} --install
+# Whether the website of a grid is installed: the site connected to it, and its file in the web server
+site_done() { # nick
+	grep -qx "grid: $1" "${W4OS_SITE_ROOT:-/var/lib/w4os/www}/user/config/plugins/w4os.yaml" 2>/dev/null &&
+		{ ls /etc/caddy/sites/*.w4os.* >/dev/null 2>&1 || [[ -e /etc/apache2/conf-enabled/w4os-site.conf ]]; }
+}
+
+site_install() { # nick
+	as_root "$cli" web "$1" site --install
+}
+
+# The grids of this install, one nick a line, sorted
+grids_here() { # basedir
+	{ as_root "$1/bin/opensim" api GET /grids 2>/dev/null | jq -r '.data[]?.id' 2>/dev/null | sort; } || true
 }
 
 # What there is now, in a few lines: the grid, its login, its website and the way in of its owner when it has one, the passwords

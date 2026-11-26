@@ -209,6 +209,10 @@ while :; do
 		;;
 	quit)
 		[[ "$setup_mode" != prepare ]] || die "The engine ended preparation without a configuration"
+		# Its summary kept for the caller that says it last, after its own steps (kickstart: the website), else said now
+		if [[ -n "${OPENSIM_SETUP_END:-}" ]] && jq -r .message <<<"$screen" >"$OPENSIM_SETUP_END" 2>/dev/null; then
+			exit 0
+		fi
 		jq -r .message <<<"$screen"
 		exit 0
 		;;

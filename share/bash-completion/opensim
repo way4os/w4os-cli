@@ -74,7 +74,7 @@ _opensim()
       COMPREPLY=( $(compgen -W "--config --prepare --apply --region-config --existing --oar --dump --show-passwords --help" -- "$cur") )
       ;;
     import)
-      COMPREPLY=( $(compgen -W "$(_opensim_grids) --accounts --robust --simulator --grid-settings --name --core --nick --grid-name --no-scripts --format --keep-going --result --switch --in-place --forget --copy-data --apply" -- "$cur") )
+      COMPREPLY=( $(compgen -W "$(_opensim_grids) --accounts --robust --simulator --grid-settings --name --core --nick --grid-name --site --no-scripts --format --keep-going --result --switch --in-place --forget --copy-data --apply" -- "$cur") )
       ;;
     region|simulator)
       if [ "$COMP_CWORD" = 2 ]; then
@@ -115,7 +115,7 @@ _opensim()
       esac
       ;;
     web)
-      COMPREPLY=( $(compgen -W "$(_opensim_grids) show check snippet set api caddy nginx apache --grid --docroot --socket --port --web-group --install" -- "$cur") )
+      COMPREPLY=( $(compgen -W "$(_opensim_grids) show check snippet set api caddy nginx apache --grid --docroot --socket --port --web-group --install site" -- "$cur") )
       ;;
     next)
       if [ "$COMP_CWORD" = 2 ]; then
