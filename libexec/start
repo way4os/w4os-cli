@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# opensim start: Starts the services of grids (their Robust) and simulators, everything enabled when none is given; with --simulators, the simulators of the grids named too, after their Robust.
+# opensim start: Starts grids (their Robust, then their simulators) and simulators, everything enabled when none is given.
 
-USAGE="opensim start [-hqv] [--simulators] [target...]"
-HELP="Starts the services of grids (their Robust) and simulators, everything enabled when none is given; with --simulators, the simulators of the grids named too, after their Robust."
+USAGE="opensim start [-hqv] [--robust] [target...]"
+HELP="Starts grids (their Robust, then their simulators) and simulators, everything enabled when none is given. --robust: the Robust of a grid alone."
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 

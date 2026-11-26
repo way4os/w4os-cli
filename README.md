@@ -69,8 +69,8 @@ Fully tested on:
 #### Commands
 
 - [x] status
-- [x] start [--simulators] [target...]
-- [x] stop|restart [--simulators] [now] [target...]
+- [x] start [--robust] [target...]
+- [x] stop|restart [--robust] [now] [target...]
 - [x] enable|disable <instance...>
 - [x] enable|disable <grid> search [<url prefix>]
 - [x] enable|disable <grid> economy [beta|gloebit] [<url prefix>]

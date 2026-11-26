@@ -71,7 +71,7 @@ _opensim()
       COMPREPLY=( $(compgen -W "-v" -- "$cur") )
       ;;
     setup)
-      COMPREPLY=( $(compgen -W "--config --prepare --apply --region-config" -- "$cur") )
+      COMPREPLY=( $(compgen -W "--config --prepare --apply --region-config --existing --oar --dump --show-passwords --help" -- "$cur") )
       ;;
     import)
       COMPREPLY=( $(compgen -W "$(_opensim_grids) --accounts --robust --simulator --grid-settings --name --core --nick --no-scripts --format --keep-going --result --switch --in-place --forget --copy-data --apply" -- "$cur") )
@@ -99,10 +99,10 @@ _opensim()
       COMPREPLY=( $(compgen -W "$(_opensim_instances) --publish --ufw --private-address --from --manage-from" -- "$cur") )
       ;;
     start)
-      COMPREPLY=( $(compgen -W "$(_opensim_instances) --simulators" -- "$cur") )
+      COMPREPLY=( $(compgen -W "$(_opensim_instances) --robust" -- "$cur") )
       ;;
     stop|restart)
-      COMPREPLY=( $(compgen -W "$([ "$COMP_CWORD" = 2 ] && echo now) $(_opensim_instances) --simulators" -- "$cur") )
+      COMPREPLY=( $(compgen -W "$([ "$COMP_CWORD" = 2 ] && echo now) $(_opensim_instances) --robust" -- "$cur") )
       ;;
     console|screen)
       [ "$COMP_CWORD" = 2 ] && COMPREPLY=( $(compgen -W "$(_opensim_instances)" -- "$cur") )
@@ -111,7 +111,7 @@ _opensim()
       case $prev in
         economy) COMPREPLY=( $(compgen -W "beta gloebit" -- "$cur") ) ;;
         offline) COMPREPLY=( $(compgen -W "helpers robust" -- "$cur") ) ;;
-        *) COMPREPLY=( $(compgen -W "$(_opensim_all_instances) search economy profiles offline ossl-extended" -- "$cur") ) ;;
+        *) COMPREPLY=( $(compgen -W "$(_opensim_all_instances) search economy profiles offline ossl-extended map-warp3d" -- "$cur") ) ;;
       esac
       ;;
     web)

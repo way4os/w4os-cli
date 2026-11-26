@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- fix (setup): false and 0 of --config kept; start, stop, restart of a grid with its simulators (--robust alone)
 - change (kickstart): questions always shown, one live line with counters, logs in a file; migrates instead of printing commands
 - new (modules): opensim module enable|disable NAME; kickstart --with MODULE installs its package for each core, enabled
 - new (import): --accounts puts each account in its groups, with a role; --create-groups makes the missing ones

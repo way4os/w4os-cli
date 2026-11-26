@@ -117,6 +117,11 @@ state= button=next answers='{}'
 errors=$(mktemp) answer=$(mktemp) prepared_tmp=
 trap 'rm -f "$errors" "$answer"; [[ -z "$prepared_tmp" ]] || rm -f "$prepared_tmp"' EXIT
 
+# How a value of the configuration is given to a field: a boolean as yes or no, a field of yes and no told yes or no whatever word
+PREFILL_YN='def yn: if type == "boolean" then (if . then "yes" else "no" end) else tostring end;
+def yesno($o): if ($o | type) == "object" and ($o | has("yes")) and ($o | has("no")) then (ascii_downcase | if IN("true", "1", "on", "y") then "yes" elif IN("false", "0", "off", "n") then "no" else . end) else . end;
+'
+
 # Show what the engine told since the last time. A line starting with "~" is what a wait is on: on a terminal it takes one line
 # that the next one replaces, elsewhere it is not shown.
 pending=
@@ -186,8 +191,10 @@ while :; do
 	screen)
 		[[ -z "$apply_file" ]] || die "The engine could not apply the prepared configuration: $(jq -r '.notice // empty' <<<"$screen")"
 		case "$(jq -r .kind <<<"$screen")" in
-			form) screen=$(jq -c --slurpfile prefill <(printf '%s' "$setup_prefill") '$prefill[0] as $prefill | .fields |= map(if ($prefill[.name] // null) != null then .value = ($prefill[.name] | tostring) else . end)' <<<"$screen") ;;
-			checks) screen=$(jq -c --slurpfile prefill <(printf '%s' "$setup_prefill") '$prefill[0] as $prefill | .items |= map(if ($prefill[.name] // null) != null then .checked = (($prefill[.name] | tostring | ascii_downcase) == "true" or ($prefill[.name] | tostring | ascii_downcase) == "yes" or ($prefill[.name] | tostring) == "1") else . end)' <<<"$screen") ;;
+			# A value of the configuration, false and 0 too (jq's // would take false for nothing): a boolean as yes or no, and a
+			# field of yes and no takes true/false/1/0/on/off as one of them
+			form) screen=$(jq -c --slurpfile prefill <(printf '%s' "$setup_prefill") "$PREFILL_YN"'$prefill[0] as $prefill | .fields |= map(.name as $n | .options as $o | if ($prefill | has($n)) and $prefill[$n] != null then .value = ($prefill[$n] | yn | yesno($o)) else . end)' <<<"$screen") ;;
+			checks) screen=$(jq -c --slurpfile prefill <(printf '%s' "$setup_prefill") "$PREFILL_YN"'$prefill[0] as $prefill | .items |= map(.name as $n | if ($prefill | has($n)) and $prefill[$n] != null then .checked = (($prefill[$n] | yn | ascii_downcase) as $s | $s == "yes" or $s == "true" or $s == "1" or $s == "on" or $s == "y") else . end)' <<<"$screen") ;;
 		esac
 		ui_screen "$screen"
 		;;

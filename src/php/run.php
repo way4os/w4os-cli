@@ -5,8 +5,8 @@
  *
  *   run.php status
  *   run.php ports [instance...] [--publish|--ufw] [--private-address ADDRESS]
- *   run.php start [--simulators] [target...]
- *   run.php stop|restart [--simulators] [now] [target...]
+ *   run.php start [--robust] [target...]
+ *   run.php stop|restart [--robust] [now] [target...]
  *   run.php console <instance>
  *   run.php install-dotnet [-y] [MAJOR]
  *   run.php module enable|disable NAME
@@ -252,7 +252,8 @@ if ($command === 'system-user') {
     echo \W4OS\Engine\Config\Layout::resolve()->systemUser(), "\n";
     exit(0);
 }
-$simulators = in_array('--simulators', $args, true) || in_array('--sims', $args, true);
+// A grid named comes with its simulators, its Robust alone with --robust (--simulators, of before, says the default)
+$simulators = !in_array('--robust', $args, true);
 $words = array_values(array_filter($args, static fn(string $a): bool => $a === '' || $a[0] !== '-'));
 $engine = OpenSim::environment(
     new CliReporter(

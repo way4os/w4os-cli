@@ -316,6 +316,18 @@ JSON
 	SETUP_CONFIG=
 }
 
+function test_setup_config_gives_false_and_zero_as_they_are_and_a_boolean_as_yes_or_no() {
+	local out form
+	SETUP_CONFIG=$WORK/setup.json
+	printf '{"type":"grid","site":false,"ports":0}\n' >"$WORK/setup.json"
+	form=$(jq -c '.data.attributes.fields += [{"name":"site","label":"Website","value":"yes","secret":false,"options":{"yes":"Yes","no":"No"}},{"name":"ports","label":"Ports","value":"9000","secret":false}]' <<<"$FORM")
+	engine_says "$MENU" "$form" "$QUIT"
+	out=$(setup_with '' no no '')
+	assert_equals 'no' "$(request 3 '.answers.site')"
+	assert_equals '0' "$(request 3 '.answers.ports')"
+	SETUP_CONFIG=
+}
+
 function test_setup_screens_mark_unimplemented_options_properly() {
 	local out notice
 	notice=$(jq -c '.data.attributes.notice = "Error: Avatar name invalid (First Last)"' <<<"$FORM")

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# opensim stop: Stops the services of grids (their Robust) and simulators, warning their users unless 'now'; with --simulators, the simulators of the grids named too, before their Robust.
+# opensim stop: Stops grids (their simulators, then their Robust) and simulators, warning their users unless 'now'.
 
-USAGE="opensim stop [-hqv] [--simulators] [now] [target...]"
-HELP="Stops the services of grids (their Robust) and simulators, warning their users unless 'now'; with --simulators, the simulators of the grids named too, before their Robust."
+USAGE="opensim stop [-hqv] [--robust] [now] [target...]"
+HELP="Stops grids (their simulators, then their Robust) and simulators, warning their users unless 'now'. --robust: the Robust of a grid alone."
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 
