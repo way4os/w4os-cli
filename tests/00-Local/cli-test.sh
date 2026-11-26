@@ -184,7 +184,9 @@ function test_web_api_install_writes_the_pool_and_the_listener_beside_the_sites_
 	printf 'import sites/*\n' >"$WORK/caddy/Caddyfile"
 	printf '#!/usr/bin/env bash\n[ -z "${CADDY_REFUSES:-}" ] || { echo refused; exit 1; }\n' >"$WORK/stubs/caddy"
 	printf '#!/usr/bin/env bash\necho "$*" >>"%s/reloads"\n' "$WORK" >"$WORK/stubs/systemctl"
-	chmod +x "$WORK/stubs/caddy" "$WORK/stubs/systemctl"
+	# The API answers once the pool is there, a key asked
+	printf '#!/usr/bin/env bash\n[ -z "${API_DOWN:-}" ] && printf 401 || printf 502\n' >"$WORK/stubs/curl"
+	chmod +x "$WORK/stubs/caddy" "$WORK/stubs/systemctl" "$WORK/stubs/curl"
 	local caddyfile
 	caddyfile=$(cat "$WORK/caddy/Caddyfile")
 	assert_exec "env PATH='$WORK/stubs:$PATH' OPENSIM_CADDY_ETC='$WORK/caddy' OPENSIM_PHP_ETC='$WORK/php' OPENSIM_SYSTEMD=yes '$OPENSIM' web tender_tern api caddy --port 8781 --install" \
@@ -197,6 +199,11 @@ function test_web_api_install_writes_the_pool_and_the_listener_beside_the_sites_
 	assert_equals "$caddyfile" "$(cat "$WORK/caddy/Caddyfile")"
 	assert_contains 'reload php8.4-fpm' "$(cat "$WORK/reloads")"
 	assert_contains 'reload caddy' "$(cat "$WORK/reloads")"
+	# An API that does not answer once installed (no pool, 502): said
+	assert_exec "env API_DOWN=1 PATH='$WORK/stubs:$PATH' OPENSIM_CADDY_ETC='$WORK/caddy' OPENSIM_PHP_ETC='$WORK/php' OPENSIM_SYSTEMD=yes '$OPENSIM' web tender_tern api caddy --port 8781 --install" \
+		--exit 1 --stderr-contains 'does not answer'
+	# api alone is for Caddy
+	assert_exec "'$OPENSIM' web tender_tern api --port 8781" --stdout-contains 'http://127.0.0.1:8781 {'
 	# What Caddy refuses is taken back
 	rm "$WORK/caddy/sites/tender_tern-api.w4os.caddyfile"
 	assert_exec "env CADDY_REFUSES=1 PATH='$WORK/stubs:$PATH' OPENSIM_CADDY_ETC='$WORK/caddy' OPENSIM_PHP_ETC='$WORK/php' '$OPENSIM' web tender_tern api caddy --port 8781 --install" \

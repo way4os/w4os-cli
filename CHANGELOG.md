@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- fix (web): api caddy --install checks the engine API answers, reloads without systemd too; api alone is for Caddy
 - change (kickstart): a migration checks, asks everything, then one Start; name, website, 3D map; a short summary; a rerun resumes
 - new (web): api caddy --install writes the pool and the local listener of the engine API, beside the sites; import --grid-name
 - change (setup): the options on one line, kept with Enter; status without the 3D map advice; one summary, the setup's

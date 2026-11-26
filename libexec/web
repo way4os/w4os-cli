@@ -38,9 +38,32 @@ install_api() { # grid, then the options of web
 	if [[ -d /run/systemd/system || -n "${OPENSIM_SYSTEMD:-}" ]]; then
 		systemctl reload "php$version-fpm" || systemctl restart "php$version-fpm" || die "php$version-fpm did not take $pool"
 		systemctl reload caddy || die "Caddy did not reload with $file"
+	else
+		# Without systemd (a container): the running ones told to read their config again
+		pkill -USR2 -f "php-fpm: master process" || die "PHP-FPM does not run: $pool is written, start php-fpm$version"
+		caddy reload --config "$etc/Caddyfile" --adapter caddyfile >/dev/null 2>&1 || die "Caddy did not reload with $file"
 	fi
-	say "✓ Engine API: $(sed -n 's/^\(http:\/\/127\.0\.0\.1:[0-9]*\) {$/\1/p' "$file")/api"
+	# Answered, a key asked (401) or given: the pool and the listener are there; nothing, or 502, is no API
+	local api code
+	api="$(sed -n 's/^\(http:\/\/127\.0\.0\.1:[0-9]*\) {$/\1/p' "$file")/api"
+	for _ in 1 2 3 4 5; do
+		code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$api/info" 2>/dev/null) || code=000
+		[[ "$code" == 000 || "$code" == 502 ]] || break
+		sleep 1
+	done
+	[[ "$code" != 000 && "$code" != 502 ]] || die "the engine API does not answer at $api (HTTP $code): see the log of php$version-fpm"
+	say "✓ Engine API: $api"
 }
+
+# api alone: for Caddy, the web server the sites of the kit are put beside
+args=()
+for arg in "$@"; do
+	# An option right after api: no web server named
+	[[ ${#args[@]} -gt 0 && "${args[-1]}" == api && "$arg" == -* ]] && args+=(caddy)
+	args+=("$arg")
+done
+[[ ${#args[@]} -eq 0 || "${args[-1]}" != api ]] || args+=(caddy)
+set -- "${args[@]}"
 
 if [[ " $* " == *" --install "* && " $* " == *" api caddy "* ]]; then
 	args=()
