@@ -157,6 +157,32 @@ show_progress() {
 	shown=$size
 	return 0
 }
+# Before the start of a setup that makes a website beside Apache: the one line it needs in each site serving its host, asked with
+# the other questions; the answer kept beside the summary for kickstart ($OPENSIM_SETUP_END.vhosts: yes, no, or nothing for Caddy)
+setup_before_start() { # rows of the review
+	local site files host
+	site=$(awk -F$'\x1f' '$4 == "website" { print $5 }' <<<"$1" | head -n 1)
+	[[ -n "$site" && -n "${OPENSIM_SETUP_END:-}" ]] || return 0
+	# The web server the sites are served by (OPENSIM_WEB_SERVER for the tests): Caddy first, as the step of the website takes it
+	local server=${OPENSIM_WEB_SERVER:-}
+	if [[ -z "$server" ]]; then
+		if command -v caddy >/dev/null 2>&1 && [[ -f /etc/caddy/Caddyfile ]]; then server=caddy; elif command -v apache2ctl >/dev/null 2>&1; then server=apache; fi
+	fi
+	[[ "$server" == apache ]] && command -v w4os-site >/dev/null 2>&1 || return 0
+	host=$(sed -E 's#^([a-z]+://[^/:]+).*#\1#' <<<"$site")
+	files=$(w4os-site web apache --host "$host" --prefix "$(sed -E 's#^[a-z]+://[^/]+##; s#/$##' <<<"$site")" --vhosts 2>/dev/null | paste -sd, - | sed 's/,/, /g')
+	if [[ -z "$files" ]]; then
+		printf '  No site of Apache serves %s.\n' "${host#*://}" >&2
+		fe_read "? [G]o on without the website  [Q]uit (G/q): " g || return 1
+		[[ "${FE_ANSWER,,}" != q* ]] || return 1
+		echo no >"$OPENSIM_SETUP_END.vhosts"
+		return 0
+	fi
+	fe_read "? Add one line to $files? [Y/n] " y || return 1
+	if [[ -z "$FE_ANSWER" || "$FE_ANSWER" == [yY]* ]]; then echo yes >"$OPENSIM_SETUP_END.vhosts"; else echo no >"$OPENSIM_SETUP_END.vhosts"; fi
+}
+FE_BEFORE_START=setup_before_start
+
 # The engine gave no screen: what it said (a problem: its status and title), and the errors it wrote that are not progress. Nothing else is done.
 fail_engine() {
 	local what

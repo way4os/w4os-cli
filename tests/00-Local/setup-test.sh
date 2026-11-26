@@ -367,6 +367,21 @@ function test_the_review_changes_a_line_through_the_engine_then_asks_start() {
 	assert_equals 'next' "$(request 3 '.button')"
 }
 
+function test_beside_apache_the_line_of_the_website_is_asked_in_the_review_before_start() {
+	local out review
+	mkdir -p "$WORK/stubs"
+	printf '#!/usr/bin/env bash\n[[ "$*" == *--vhosts* ]] && echo /etc/apache2/sites-available/kimbe.example.conf\n' >"$WORK/stubs/w4os-site"
+	chmod +x "$WORK/stubs/w4os-site"
+	review='{"data":{"attributes":{"action":"screen","kind":"review","title":"Review","text":"","notice":"","state":"s","buttons":{"next":"Start","back":"Back"},"rows":[{"section":"Web","label":"Website","value":"https://kimbe.example/opensim/","name":"website","current":"https://kimbe.example/opensim/"}]}}}'
+	engine_says "$review" "$QUIT"
+	export OPENSIM_SETUP_END=$WORK/end OPENSIM_WEB_SERVER=apache PATH="$WORK/stubs:$PATH"
+	out=$(setup_with "" "" "") || true
+	unset OPENSIM_SETUP_END OPENSIM_WEB_SERVER
+	assert_contains "? Add one line to /etc/apache2/sites-available/kimbe.example.conf? [Y/n]" "$out"
+	assert_contains "? Start? [Y/n]" "$out"
+	assert_equals yes "$(cat "$WORK/end.vhosts")"
+}
+
 function test_a_name_of_the_engine_is_not_mistaken_for_a_name_of_variable() {
 	local out checks
 	checks=$(jq -c '.data.attributes.items += [{"name":"economy-gloebit","label":"Economy: Gloebit","checked":false,"note":""}]' <<<"$CHECKS")

@@ -1155,7 +1155,14 @@ end_installation() {
 			site=$(as_root "$cli" api GET "/grids/$nick" 2>/dev/null | jq -r '.data.attributes.site // empty' 2>/dev/null)
 			[[ -n "$site" ]] || continue
 			website_possible || { say "  Website: no Caddy nor Apache on this machine, not installed."; continue; }
-			apache_consent "$site" || continue
+			# Apache: the line of the website was asked before the start, in the review
+			if [[ "${WEB_SERVER:-}" == apache ]]; then
+				case $(cat "$end.vhosts" 2>/dev/null) in
+				yes) SITE_EDIT=yes ;;
+				no) say "  Website: not installed."; continue ;;
+				*) apache_consent "$site" || continue ;;
+				esac
+			fi
 			# The last step of the run the setup counted (its live line said [1/3] and [2/3])
 			run_step "[3/3] Website: $WEB_SERVER" - site_install "$nick" || die "the website could not be installed (log: $(install_log))"
 		done
@@ -1163,7 +1170,7 @@ end_installation() {
 		say ""
 		cat "$end"
 		! as_root test -f "$OPENSIM_RC_PATH" || say "Passwords  $OPENSIM_RC_PATH (root only)"
-		rm -f "$end"
+		rm -f "$end" "$end.vhosts"
 	else
 		done_line "Installed"
 	fi

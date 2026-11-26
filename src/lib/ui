@@ -382,6 +382,10 @@ ui_review() {
 		[[ -z "${FE_EXTRA:-}" || ! "$FE_ANSWER" =~ ^(s|:show)$ ]] || return 3
 		fe_special || return $?
 		if [[ -z "$FE_ANSWER" ]]; then
+			# What its caller still asks before the start, from the values of the review (the line of the website in Apache)
+			if [[ -n "${FE_BEFORE_START:-}" ]]; then
+				"$FE_BEFORE_START" "$_u_rows" || return 2
+			fi
 			fe_read "? ${FE_OK:-Start}? [Y/n] " y || return 2
 			[[ -z "$FE_ANSWER" || "$FE_ANSWER" == [yY]* ]] && return 0
 			continue
