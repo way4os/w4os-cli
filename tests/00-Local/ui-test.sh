@@ -134,13 +134,31 @@ function test_a_menu_without_a_text_is_answered() {
 
 function test_a_review_with_a_button_of_its_own_says_when_it_is_pressed() {
 	FE_EXTRA="Show passwords"
-	export DIALOG_EXIT=3
+	export DIALOG_EXIT=2
 
 	local status=0
 	ui_review "Review" "" $'database\x1fDatabase account\x1fopensim@localhost: ********' || status=$?
 
 	assert_same 3 "$status"
-	assert_contains "--extra-button --extra-label Show passwords" "$(cat "$WORK/args")"
+	assert_contains "--help-button --help-label Show passwords" "$(cat "$WORK/args")"
+	assert_contains "--extra-button --extra-label Start" "$(cat "$WORK/args")"
+}
+
+function test_a_review_in_dialog_changes_a_line_as_a_field_then_starts() {
+	export DIALOG_SCRIPT="$WORK/script"
+	# Line 2 chosen (Change), its value typed in its field
+	printf '0 r2\n0 8199\n' >"$DIALOG_SCRIPT"
+	local status=0 rows=$'Grid\x1fLogin\x1fkimbe.example:8002\x1flogin_uri\x1fkimbe.example:8002\nGrid\x1fPrivate port\x1f8003\x1fprivate_port\x1f8003'
+
+	ui_review "Review" "" "$rows" || status=$?
+	local edits=$REVIEW_EDITS started=0
+	printf '3\n' >"$DIALOG_SCRIPT"
+	ui_review "Review" "" "$rows" || started=$?
+
+	assert_same 4 "$status"
+	assert_same '{"private_port":"8199"}' "$edits"
+	assert_same 0 "$started"
+	assert_same $'--menu\n--inputbox\n--menu' "$(cat "$DIALOG_LOG")"
 }
 
 function test_a_review_in_plain_text_shows_the_passwords_when_s_is_answered() {

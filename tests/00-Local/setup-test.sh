@@ -517,7 +517,8 @@ function test_screen_title_describes_the_current_step() {
 	local out log
 	make_fake_dialog
 	engine_says "$MENU" "$FORM" "$CHECKS" "$REVIEW" "$QUIT"
-	printf '%s\n' '0:standalone' '0:My Island\nsecret123\n' '0:c_hypergrid\n' '0:' >"$DIALOG_ANSWERS"
+	# The review started with its own button (the one named by the engine: Install)
+	printf '%s\n' '0:standalone' '0:My Island\nsecret123\n' '0:c_hypergrid\n' '3:' >"$DIALOG_ANSWERS"
 	out=$(setup_with_dialog)
 	log=$(cat "$DIALOG_LOG")
 	assert_contains "Written in /etc/opensim/grids/amy." "$out"
@@ -525,7 +526,7 @@ function test_screen_title_describes_the_current_step() {
 	assert_contains "--title Grid --cancel-label Back --hline Enter: next field, Tab: buttons --insecure --mixedform   11 72 2 Grid name 1 1 Amy 1" "$log"
 	assert_contains "Password 2 1  2" "$(grep mixedform "$DIALOG_LOG")"
 	assert_contains "--title Options --cancel-label Back --no-tags --separate-output --checklist   10 50 2 c_ssl SSL (not implemented) off c_hypergrid Hypergrid on" "$log"
-	assert_contains "--title Review --ok-label Install --cancel-label Back --scrollbar --no-tags --menu   12 78 5" "$log"
+	assert_contains "--title Review --ok-label Change --cancel-label Back --extra-button --extra-label Install --scrollbar --no-tags --menu   12 78 5" "$log"
 	assert_not_contains "--ok-label OK" "$log"
 	assert_equals "menu mixedform checklist menu" "$(grep -oE -- '--(menu|mixedform|checklist)' "$DIALOG_LOG" | sed 's/--//' | tr '\n' ' ' | sed 's/ $//')"
 	assert_equals '{"type":"standalone"}' "$(request 2 '.answers | tojson')"

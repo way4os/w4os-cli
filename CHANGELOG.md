@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- change (setup): dialog the default at a terminal when installed, lines else; its review a panel changed line by line
 - change (kickstart): a migration asks everything, reviews it, then runs the steps of the script; nothing done before Start
 - fix (web): the sockets of the pools given to the group Apache runs as (its envvars); PHP-FPM restarted when a pool changes
 - fix (kickstart): a migration planned as root, like its import; a retry once its grid is written starts it; one switch for the setup's UI

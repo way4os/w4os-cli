@@ -68,8 +68,9 @@ apt_source_uri_index() {
 	return 1
 }
 
-# How the setup asks its questions: plain (lines, like the rest of the installer) or dialog (its screens); OPENSIM_SETUP_UI chooses
-SETUP_UI=${OPENSIM_SETUP_UI:-plain}
+# How the setup asks its questions: its panels of dialog at a terminal when dialog is installed, else lines (OPENSIM_SETUP_UI=plain
+# or dialog chooses); the run itself, and these first questions, are always lines
+SETUP_UI=${OPENSIM_SETUP_UI:-}
 
 INSTALLER_HOME=${HOME:-/root}
 if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != root ]] && command -v getent >/dev/null 2>&1; then
@@ -1582,7 +1583,7 @@ migration_review() { # nick, plan, data, running instances
 		local status=0
 		if person_here; then
 			if [[ -t 8 ]]; then
-				OPENSIM_SETUP_UI=plain FE_TTY=$TTY_IN ui_review "Review" "" "$rows" 2>>"$TTY_OUT" || status=$?
+				OPENSIM_SETUP_UI=$SETUP_UI FE_TTY=$TTY_IN FE_SCREEN=$TTY_OUT ui_review "Review" "" "$rows" 2>>"$TTY_OUT" || status=$?
 			else
 				OPENSIM_SETUP_UI=plain FE_INPUT_FD=8 ui_review "Review" "" "$rows" 2>>"$TTY_OUT" || status=$?
 			fi
@@ -1609,7 +1610,16 @@ migration_rows() { # nick, plan, data, running instances
 	printf '%s\n' "Grid${us}Name${us}$ascii ($nick)${us}name${us}$ascii"
 	printf '%s\n' "Grid${us}Login${us}$(jq -r '"\(.ports.public)"' <<<"$plan" | sed "s#^#$(legacy_host "$plan"):#")"
 	printf '%s\n' "Web${us}Website${us}${site:-none}${us}website${us}$site"
-	jq -r --arg us "$us" '(.data // [])[] | "Data\($us)\(.from | split("/") | last)\($us)\(if .acrossFilesystems then "copied" else "moved" end) to \(.to)"' <<<"$plan"
+	local from to across size
+	while IFS=$'\t' read -r from to across; do
+		[[ -n "$from" ]] || continue
+		size=$(human_size "$(as_root du -sk "$from" 2>/dev/null | cut -f1)")
+		# Its place under the folder of the grid in the old install (fsassets/data), the same name under the new one
+		local place
+		place=$(sed -E "s#^.*/${nick}/##I" <<<"$from")
+		[[ "$place" != /* ]] || place=$(basename "$from")
+		printf '%s\n' "Data${us}$place${us}$size, $([[ "$across" == true ]] && echo "copied (another disk)" || echo "moved (same disk)")"
+	done < <(jq -r '(.data // [])[] | [.from, .to, (.acrossFilesystems // false | tostring)] | @tsv' <<<"$plan")
 	printf '%s\n' "Data${us}Databases${us}kept: $(jq -r '[.database.name] + [(.simulators.imports // [])[]? | .database.name? // empty] | map(select(. != null)) | unique | join(", ")' <<<"$plan" 2>/dev/null || jq -r '.database.name' <<<"$plan")"
 	jq -r --arg us "$us" '(.dropped // [])[] | select(.reason == "corrected") | "Corrected from the old install\($us)\(.key)\($us)\(.value) → the value the kit needs"' <<<"$plan"
 	[[ -z "$(maptiles_package)" ]] || printf '%s\n' "Options${us}3D map${us}$([[ -n "$maptiles" ]] && echo on || echo off)${us}maptiles${us}$([[ -n "$maptiles" ]] && echo yes || echo no)${us}$onoff"
@@ -1620,8 +1630,9 @@ migration_rows() { # nick, plan, data, running instances
 # The host of the login of a migrated grid, as its plan says it (its Robust config), else this machine
 legacy_host() { # plan
 	local host
-	host=$(jq -r '.login // .host // empty' <<<"$1" 2>/dev/null)
-	[[ -n "$host" ]] || host=$(sed -nE 's/^[[:space:]]*BaseHostname[[:space:]]*=[[:space:]]*"?([^";[:space:]]+).*/\1/p' "$(legacy_configs robust | head -n 1)" 2>/dev/null | head -n 1)
+	# The [Const] of its config, as the plan says it: BaseHostname, else the host of BaseURL
+	host=$(jq -r '[(.dropped // [])[] | select(.section == "Const" and .key == "BaseHostname") | .value][0] // empty' <<<"$1" 2>/dev/null)
+	[[ -n "$host" ]] || host=$(jq -r '[(.dropped // [])[] | select(.section == "Const" and .key == "BaseURL") | .value][0] // empty' <<<"$1" 2>/dev/null | sed -E 's#^[a-z]+://##; s#[:/].*##')
 	printf '%s' "${host:-localhost}"
 }
 
@@ -1659,8 +1670,9 @@ maptiles_package() {
 # The 3D map of a grid: its package, its module enabled, its simulators restarted to load it
 map_install() { # nick package
 	as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y "$2" &&
-		as_root "$cli" enable "$1" map-warp3d &&
-		as_root "$cli" restart "$1"
+		as_root "$cli" enable "$1" map-warp3d || return
+	# A grid that runs restarted for it; one written and not started yet (a migration) takes it at its start
+	! as_root "$cli" status "$1" 2>/dev/null | grep -q '\[up\]' || as_root "$cli" restart "$1"
 }
 
 # The website of a grid: the engine API for the sites of this machine, the site connected to it, its Caddy file beside the site of
