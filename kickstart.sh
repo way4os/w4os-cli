@@ -1512,7 +1512,7 @@ map_install() { # nick package
 # Whether the website of a grid is installed: the site connected to it, and its file in the web server
 site_done() { # nick
 	grep -qx "grid: $1" "${W4OS_SITE_ROOT:-/var/lib/w4os/www}/user/config/plugins/w4os.yaml" 2>/dev/null &&
-		{ ls /etc/caddy/sites/*.w4os.* >/dev/null 2>&1 || [[ -e /etc/apache2/conf-enabled/w4os-site.conf ]]; }
+		{ ls /etc/caddy/sites/*.w4os.* 2>/dev/null | grep -qv -- '-api\.w4os\.' || [[ -e /etc/apache2/conf-enabled/w4os-site.conf ]]; }
 }
 
 site_install() { # nick
