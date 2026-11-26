@@ -9,7 +9,8 @@ function quick_install_load_library() {
 		bashunit::skip 'quick-install syntax check failed'
 		return 1
 	fi
-	QUICK_INSTALL_LIBRARY_ONLY=yes OPENSIM_RC=/dev/null source "$QUICK_INSTALL"
+	# Nobody at a terminal: the questions take their default, the choices that need a person are refused
+	KICKSTART_TTY_IN=$WORK/no-terminal KICKSTART_TTY_OUT=$WORK/no-terminal QUICK_INSTALL_LIBRARY_ONLY=yes OPENSIM_RC=/dev/null source "$QUICK_INSTALL"
 	QUICK_INSTALL_LIBRARY_LOADED=yes
 	# write_apt_repositories normally installs the generated file as root.
 	as_root() { "$@"; }
@@ -113,7 +114,7 @@ function test_confirmed_setup_is_applied_after_installation() {
 	RUN_SETUP=yes
 	uname() { printf 'Darwin\n'; }
 	export CALL_LOG=$calls
-	assert_exec '(end_installation)' --stdout-contains '--apply'
+	(end_installation) >/dev/null
 	assert_contains '<setup> <--apply> <'"$config"'>' "$(cat "$calls")"
 }
 
@@ -127,7 +128,7 @@ function test_unconfirmed_answers_keep_interactive_setup() {
 	RUN_SETUP=yes
 	uname() { printf 'Darwin\n'; }
 	export CALL_LOG=$calls
-	assert_exec '(end_installation)' --stdout-contains '--config'
+	(end_installation) >/dev/null
 	assert_contains '<setup> <--config> <'"$config"'>' "$(cat "$calls")"
 }
 
@@ -464,7 +465,7 @@ function test_a_package_gone_while_it_is_installed_is_installed_once_more_after_
 	local calls=$WORK/apt-calls
 	as_root() {
 		printf '%s\n' "$*" >>"$calls"
-		if [[ "$*" == "apt-get install"* && $(grep -c '^apt-get install' "$calls") -eq 1 ]]; then
+		if [[ "$*" == *"apt-get install"* && $(grep -c 'apt-get install' "$calls") -eq 1 ]]; then
 			echo "E: Failed to fetch https://apt.example.org/pool/w4os-engine_3.0.0~beta.13+459.g58a36c1_all.deb  404  Not Found [IP: 192.0.2.1 443]"
 			return 100
 		fi
@@ -475,7 +476,7 @@ function test_a_package_gone_while_it_is_installed_is_installed_once_more_after_
 	said=$(apt_install w4os-cli 2>&1) || status=$?
 
 	assert_same 0 "$status"
-	assert_same "$(printf 'apt-get install -y -qq w4os-cli\napt-get update -qq\napt-get install -y -qq w4os-cli')" "$(cat "$calls")"
+	assert_same "$(printf 'env LC_ALL=C apt-get install -y -qq w4os-cli\napt-get update -qq\nenv LC_ALL=C apt-get install -y -qq w4os-cli')" "$(cat "$calls")"
 	assert_contains "the package lists are read again" "$said"
 }
 
@@ -492,7 +493,7 @@ function test_an_install_that_fails_otherwise_is_not_tried_again() {
 	apt_install w4os-nothing >/dev/null 2>&1 || status=$?
 
 	assert_same 100 "$status"
-	assert_same "apt-get install -y -qq w4os-nothing" "$(cat "$calls")"
+	assert_same "env LC_ALL=C apt-get install -y -qq w4os-nothing" "$(cat "$calls")"
 }
 
 function test_the_sql_account_of_an_existing_grid_is_never_shadowed_by_one_for_localhost() {
@@ -520,7 +521,7 @@ function test_the_sql_account_of_an_existing_grid_is_never_shadowed_by_one_for_l
 	assert_not_contains "CREATE USER 'opensim'@" "$(cat "$sql")"
 	assert_contains "CREATE USER 'opensim_w4os'@'localhost'" "$(cat "$sql")"
 	assert_contains "user=opensim_w4os" "$said"
-	assert_contains "The SQL account opensim exists already, on %" "$said"
+	assert_contains "SQL account opensim exists (another install's): the kit uses opensim_w4os" "$said"
 }
 
 function test_an_account_name_asked_for_that_exists_needs_its_password() {
@@ -563,8 +564,8 @@ function test_beside_an_install_of_before_the_kit_nothing_happens_without_a_choi
 	said=$(legacy_gate 2>&1) || status=$?
 
 	assert_same 1 "$status"
-	assert_contains "install of before the kit, in $LEGACY_ROOT" "$said"
-	assert_contains "--in-place" "$said"
+	assert_contains "Found an existing install in $LEGACY_ROOT: grid w4osdemogrid, 1 simulator." "$said"
+	assert_contains "--migrate, --in-place or --new" "$said"
 	assert_file_exists "$LEGACY_CRON"
 }
 
@@ -585,9 +586,9 @@ function test_in_place_sets_its_own_start_aside_and_registers_its_grid() {
 	assert_file_not_exists "$LEGACY_CRON"
 	assert_file_exists "$LEGACY_CRON.w4os-disabled"
 	assert_file_exists "$WORK/systemd/opensim.service.w4os-disabled"
-	assert_contains "Set aside: $LEGACY_CRON is now $LEGACY_CRON.w4os-disabled" "$said"
+	assert_contains "✓ Old install: its start at boot set aside" "$said"
 	assert_same "$(printf 'import --robust %s --in-place --simulator %s --apply\nenable w4osdemogrid' "$LEGACY_ROOT/etc/robust.d/W4osDemoGrid.ini" "$LEGACY_ROOT/etc/opensim.d/w4osdemogrid_welcome.ini")" "$(cat "$calls")"
-	assert_contains "--in-place --restart" "$said"
+	assert_contains "✓ In place: w4osdemogrid" "$said"
 }
 
 function test_no_install_of_before_the_kit_changes_nothing() {
@@ -621,11 +622,10 @@ function test_the_sql_accounts_are_shown_before_anything_is_changed_their_passwo
 	said=$(phase_database)
 	shown=$(SHOW_PASSWORDS=yes OPENSIM_DB_PASS=visible-secret OPENSIM_DB_USER=kit_user phase_database)
 
-	assert_contains "opensim_admin@localhost (administrator, all the rights): new, made now; password generated: ********" "$said"
-	assert_contains "opensim_w4os@localhost (the instances of the kit): new, made now; password generated: ********" "$said"
-	assert_contains "opensim@%: exists, another install's: left as it is, never changed nor shadowed" "$said"
-	assert_contains "--show-passwords shows them" "$said"
-	assert_contains "kit_user@localhost (the instances of the kit): new, made now; password given (environment): visible-secret" "$shown"
+	assert_contains "SQL accounts: opensim_admin, opensim_w4os (passwords generated)" "$said"
+	assert_contains "SQL account opensim exists (another install's): the kit uses opensim_w4os" "$said"
+	assert_not_contains "visible-secret" "$said"
+	assert_contains "kit_user: visible-secret" "$shown"
 }
 
 function test_an_existing_sql_account_is_used_only_with_its_own_password() {
@@ -649,7 +649,7 @@ function test_an_existing_sql_account_is_used_only_with_its_own_password() {
 	refused=$(OPENSIM_DB_PASS=wrong phase_database 2>&1) || status=$?
 
 	assert_same 1 "$status"
-	assert_contains "SQL account opensim exists, and its password (given (environment)) is refused" "$refused"
+	assert_contains "SQL account opensim: its password (given (environment)) is refused" "$refused"
 	assert_successful_code "$(OPENSIM_DB_PASS=grid-secret phase_database >/dev/null 2>&1; echo $?)"
 }
 
@@ -689,6 +689,84 @@ function test_in_place_restart_stops_the_old_robust_by_the_file_it_runs_and_says
 
 	assert_same no "$alive"
 	assert_same 1 "$status"
-	assert_contains "does not run under the service, down: w4osdemogrid" "$said"
-	assert_not_contains "runs under the service of the kit" "$said"
+	assert_contains "not started under the kit: w4osdemogrid" "$said"
+	assert_not_contains "runs under the kit" "$said"
+}
+
+function test_a_question_is_always_shown_takes_its_default_on_enter_and_asks_again_a_wrong_letter() {
+	quick_install_load_library || return
+	local answers=$WORK/answers screen=$WORK/screen first=0 second=0
+	printf '\nx\nn\n' >"$answers"
+	TTY_IN=$answers TTY_OUT=$screen TTY_OPEN= ASSUME_YES=
+
+	ask "Install?" || first=$?
+	ask "Again?" || second=$?
+
+	assert_same 0 "$first"
+	assert_same 1 "$second"
+	assert_contains "? Install? [Y/n] " "$(cat "$screen")"
+	assert_same 3 "$(grep -o '? [A-Z][a-z]*?' "$screen" | wc -l | tr -d ' ')"
+}
+
+function test_beside_an_install_of_before_the_kit_the_choice_is_asked_and_a_new_grid_leaves_it_starting() {
+	quick_install_load_library || return
+	legacy_fixture
+	LEGACY_MODE=
+	local answers=$WORK/answers screen=$WORK/screen
+	printf 'n\n' >"$answers"
+	TTY_IN=$answers TTY_OUT=$screen TTY_OPEN= ASSUME_YES=
+	as_root() { "$@"; }
+
+	legacy_gate >/dev/null
+
+	assert_same new "$LEGACY_MODE"
+	assert_contains "[M]igrate  [I]n place  [N]ew grid beside it  [A]bort (M/i/n/a):" "$(cat "$screen")"
+	assert_file_exists "$LEGACY_CRON"
+	assert_file_exists "$WORK/systemd/opensim.service.w4os-disabled"
+}
+
+function test_a_migration_runs_the_import_of_its_grid_instead_of_printing_it() {
+	quick_install_load_library || return
+	legacy_fixture
+	LEGACY_MODE=migrate
+	as_root() { "$@"; }
+	local calls=$WORK/opensim-calls said
+	clone=$WORK/kit
+	mkdir -p "$clone/bin"
+	printf '#!/bin/sh\necho "$*" >>%s\n' "$calls" >"$clone/bin/opensim"
+	chmod +x "$clone/bin/opensim"
+
+	said=$(legacy_after_install)
+
+	assert_same "import --robust $LEGACY_ROOT/etc/robust.d/W4osDemoGrid.ini --apply --switch --simulator $LEGACY_ROOT/etc/opensim.d/w4osdemogrid_welcome.ini" "$(cat "$calls")"
+	assert_contains "✓ Migrated and started: w4osdemogrid" "$said"
+	assert_not_contains "opensim import" "$said"
+}
+
+function test_a_long_step_that_fails_says_its_log_then_retries_when_asked() {
+	quick_install_load_library || return
+	local said status=0 answers=$WORK/answers screen=$WORK/screen
+	INSTALL_LOG=$WORK/install.log
+	: >"$INSTALL_LOG"
+
+	said=$(run_step "Thing" - false 2>&1) || status=$?
+	printf 'r\n' >"$answers"
+	TTY_IN=$answers TTY_OUT=$screen TTY_OPEN= ASSUME_YES=
+	flaky() { [[ -f "$WORK/once" ]] || { : >"$WORK/once"; return 1; }; }
+	local retried=0
+	run_step "Other" - flaky >/dev/null || retried=$?
+
+	assert_same 1 "$status"
+	assert_contains "✗ Thing" "$said"
+	assert_contains "Log: $WORK/install.log" "$said"
+	assert_same 0 "$retried"
+	assert_contains "[R]etry  [A]bort (R/a):" "$(cat "$screen")"
+}
+
+function test_the_packages_being_installed_are_counted_from_what_dpkg_says() {
+	quick_install_load_library || return
+	INSTALL_LOG=$WORK/install.log PACKAGES_TOTAL=3 PACKAGES_FROM=6
+	printf 'before\nUnpacking a (1.0) ...\nSetting up a (1.0) ...\nUnpacking b:amd64 (2) ...\n' >"$INSTALL_LOG"
+
+	assert_same "1/3 b" "$(packages_counter)"
 }

@@ -25,8 +25,9 @@
 #           --cleanup             remove an existing OpenSim installation first (asks for confirmation)
 #           --in-place            beside an install of before the kit (/opt/opensim): run its grids where they are, under the
 #                                 service of the kit; its own start (its cron) set aside, reversibly
-#           --migrate             beside an install of before the kit: its own start set aside, its grids to bring into the
-#                                 layout of the kit (the commands are given)
+#           --migrate             beside an install of before the kit: its grids migrated into the layout of the kit, its own
+#                                 start set aside, the old install kept
+#           --new                 beside an install of before the kit: a new grid, the old install left as it is
 #           --restart             with --in-place: stop its running instances and start them again under the service
 #           --show-passwords      show the passwords of the SQL accounts in the plan (masked by default)
 #           --setup               run `opensim setup` after the full or OpenSim install
@@ -181,6 +182,8 @@ RUN_SETUP=${RUN_SETUP:-}
 SHOW_PASSWORDS=${SHOW_PASSWORDS:-}
 LEGACY_MODE=${LEGACY_MODE:-}
 LEGACY_RESTART=${LEGACY_RESTART:-}
+# The log of the long steps (install_log())
+INSTALL_LOG=${INSTALL_LOG:-}
 # An install of before the kit (opensim-debian): its folder, and the cron that starts its instances
 LEGACY_ROOT=${LEGACY_ROOT:-/opt/opensim}
 LEGACY_CRON=${LEGACY_CRON:-/etc/cron.hourly/opensim}
@@ -215,7 +218,10 @@ PODMAN_CONTAINER_NAME=
 
 # === Define helper functions first ===
 
-say() { printf '%s\n' "$*"; }
+say() {
+	live_clear
+	printf '%s\n' "$*"
+}
 log() {
 	[ -n "${DEBUG}" ] || return 0
 	[ "$DEBUG" = "yes" ] || return 0
@@ -229,14 +235,109 @@ die() {
 	exit 1
 }
 
-# A question for the person at the terminal, even when this script comes from a pipe; yes when nobody can answer
-ask() {
-	[[ -n "$ASSUME_YES" ]] && return 0
-	[[ -r /dev/tty ]] || return 0
-	local answer=
-	# A terminal that cannot be opened (no controlling one: ssh without a tty, cron) is nobody to answer
-	read -r -p "$1 [Y/n] " answer </dev/tty 2>/dev/null || return 0
-	[[ ! $answer =~ ^[Nn] ]]
+# Where the person answers and sees the questions: the terminal (KICKSTART_TTY_IN and KICKSTART_TTY_OUT for the tests)
+TTY_IN=${KICKSTART_TTY_IN:-/dev/tty}
+TTY_OUT=${KICKSTART_TTY_OUT:-/dev/tty}
+
+# Whether a person can answer at the terminal (not --yes, a terminal that opens: none for ssh without a tty, cron, a pipe alone)
+person_here() {
+	[[ -z "$ASSUME_YES" ]] || return 1
+	{ : <"$TTY_IN" >>"$TTY_OUT"; } 2>/dev/null
+}
+
+# The live line, cleared before anything else is written (defined before say(), which uses it)
+LIVE=
+[[ -t 1 ]] && LIVE=yes
+live() {
+	[[ -z "$LIVE" ]] || printf '\r\033[K» %s' "$*"
+}
+live_clear() {
+	[[ -z "$LIVE" ]] || printf '\r\033[K'
+}
+
+# A question with its letters, the default first (its letter in capitals in the prompt): the letter answered in CHOICE, the default
+# when Enter is pressed or nobody can answer. The prompt is written to the terminal, always shown
+choose() { # "question (M/i/n/a):" letters
+	local question=$1 letters default answer
+	letters=$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')
+	default=${letters:0:1}
+	CHOICE=$default
+	person_here || return 0
+	live_clear
+	# Opened once: the answers follow each other (a file of answers in the tests)
+	[[ -n "${TTY_OPEN:-}" ]] || { exec 8<"$TTY_IN" && TTY_OPEN=yes; }
+	while :; do
+		printf '? %s ' "$question" >>"$TTY_OUT"
+		IFS= read -r -u 8 answer || return 0
+		answer=$(printf '%s' "${answer:0:1}" | tr '[:upper:]' '[:lower:]')
+		[[ -n "$answer" ]] || answer=$default
+		[[ "$letters" == *"$answer"* ]] && CHOICE=$answer && return 0
+	done
+}
+
+# A question answered yes or no, yes by default (ask) or no by default (ask_no)
+ask() { # "question"
+	choose "$1 [Y/n]" yn
+	[[ "$CHOICE" == y ]]
+}
+ask_no() { # "question": no by default
+	choose "$1 [y/N]" ny
+	[[ "$CHOICE" == y ]]
+}
+
+done_line() {
+	live_clear
+	say "✓ $*"
+}
+failed_line() {
+	live_clear
+	say "✗ $*"
+}
+
+# The time since a moment (SECONDS), as m:ss
+elapsed() { # started
+	local seconds=$((SECONDS - $1))
+	printf '%d:%02d' $((seconds / 60)) $((seconds % 60))
+}
+
+# Where the long steps write what they say (apt, dotnet, the import), shown on an error: made once by the main shell (called there
+# without $(...), which would keep it), in /var/log/opensim as root, else in the temporary folder of the person
+install_log() {
+	if [[ -z "$INSTALL_LOG" ]]; then
+		local folder=${TMPDIR:-/tmp}
+		[[ $(id -u) -ne 0 ]] || { mkdir -p /var/log/opensim 2>/dev/null && folder=/var/log/opensim; }
+		INSTALL_LOG=$folder/install-$(date +%Y%m%d-%H%M%S).log
+		{ : >>"$INSTALL_LOG" && chmod 600 "$INSTALL_LOG"; } 2>/dev/null || INSTALL_LOG=$(mktemp)
+	fi
+	printf '%s\n' "$INSTALL_LOG"
+}
+
+# A long step: the command writes into the log while the live line says the step, what it is at (COUNTER, a function that prints
+# it: 12/27 opensim-0.9.3.0), else a spinner, and the time; a failure says the log and asks to retry or to stop
+run_step() { # label counter|- command...
+	local label=$1 counter=$2 started pid status spin='|/-\' turn=0 at log
+	shift 2
+	log=$(install_log)
+	while :; do
+		started=$SECONDS
+		"$@" >>"$log" 2>&1 &
+		pid=$!
+		while kill -0 "$pid" 2>/dev/null; do
+			at=
+			[[ "$counter" == - ]] || at=$("$counter" 2>/dev/null) || at=
+			[[ -n "$at" ]] || at=${spin:turn++%4:1}
+			live "$label: $at · $(elapsed "$started")"
+			sleep 0.5
+		done
+		status=0
+		wait "$pid" || status=$?
+		((status != 0)) || return 0
+		failed_line "$label"
+		say "  Log: $log"
+		person_here || return "$status"
+		choose "[R]etry  [A]bort (R/a):" ra
+		[[ "$CHOICE" == r ]] || return "$status"
+	done
 }
 
 as_root() {
@@ -510,10 +611,10 @@ run_container_tool() {
 	fi
 }
 
+# A package configuration an earlier run left unfinished, completed (nothing to say when there was none)
 recover_dpkg_configuration() {
 	if [[ "$DPKG_CONFIGURED" != yes ]]; then
-		say "Complete any interrupted package configuration"
-		as_root dpkg --configure -a || return $?
+		as_root dpkg --configure -a >>"$(install_log)" 2>&1 || return $?
 		DPKG_CONFIGURED=yes
 	fi
 	return 0
@@ -521,10 +622,8 @@ recover_dpkg_configuration() {
 
 apt_update() {
 	if [[ "$APT_UPDATED" != yes ]]; then
-		local started=$SECONDS
-		as_root apt-get update -qq || return $?
+		run_step "Package lists" - as_root apt-get update -qq || return $?
 		APT_UPDATED=yes
-		log "apt-get update completed in $((SECONDS - started))s"
 	fi
 }
 
@@ -551,15 +650,29 @@ dotnet_runtime_installed() {
 		dotnet --list-runtimes 2>/dev/null | grep -Eq "Microsoft\.NETCore\.App $1\."
 }
 
+# The packages of an install in progress, from what dpkg wrote in the log since it started: 12/27 opensim-0.9.3.0
+PACKAGES_TOTAL=0
+PACKAGES_FROM=0
+packages_counter() {
+	local said
+	said=$(tail -c +$((PACKAGES_FROM + 1)) "$INSTALL_LOG" 2>/dev/null | grep -E '^(Unpacking|Setting up) ')
+	printf '%s/%s %s' "$(grep -c '^Setting up ' <<<"$said")" "$PACKAGES_TOTAL" "$(tail -n 1 <<<"$said" | awk '{ name = $1 == "Setting" ? $3 : $2; sub(/:.*/, "", name); print name }')"
+}
+
+# Packages installed behind the live line (PACKAGES_LABEL names them, Packages by default), what apt says in the log; nothing said
+# when they are all there
 install_packages() {
-	local started
-	command -v apt-get >/dev/null 2>&1 || die "no apt-get here: this works on Debian and Ubuntu (see INSTALLATION.md for the others)"
+	local label=${PACKAGES_LABEL:-Packages} log
+	command -v apt-get >/dev/null 2>&1 || die "no apt-get here: this works on Debian and Ubuntu"
 	export DEBIAN_FRONTEND=noninteractive
 	recover_dpkg_configuration || return $?
 	apt_update || return $?
-	started=$SECONDS
-	apt_install "$@" || return $?
-	log "apt-get install ($*) completed in $((SECONDS - started))s"
+	log=$(install_log)
+	PACKAGES_TOTAL=$(LC_ALL=C apt-get -s install "$@" 2>/dev/null | grep -c '^Inst ') || PACKAGES_TOTAL=0
+	((PACKAGES_TOTAL > 0)) || return 0
+	PACKAGES_FROM=$(wc -c <"$log" | tr -d ' ')
+	run_step "$label" packages_counter apt_install "$@" || return $?
+	done_line "$label ($PACKAGES_TOTAL)"
 }
 
 # apt-get install, once more after the package lists are read again when a package it was to fetch is gone (Failed to fetch, a
@@ -567,11 +680,10 @@ install_packages() {
 apt_install() {
 	local said status=0
 	said=$(mktemp) || return $?
-	as_root apt-get install -y -qq "$@" 2>&1 | tee "$said" || status=${PIPESTATUS[0]}
+	as_root env LC_ALL=C apt-get install -y -qq "$@" 2>&1 | tee "$said" || status=${PIPESTATUS[0]}
 	if ((status != 0)) && grep -qE '^E: Failed to fetch .* 404' "$said"; then
 		say "A package changed in the repository while it was installed: the package lists are read again, and it is installed once more"
-		APT_UPDATED=
-		apt_update && status=0 && { as_root apt-get install -y -qq "$@" || status=$?; }
+		as_root apt-get update -qq && status=0 && { as_root env LC_ALL=C apt-get install -y -qq "$@" || status=$?; }
 	fi
 	rm -f "$said"
 	return "$status"
@@ -850,7 +962,7 @@ start_sql_server() {
 		as_root runuser -u mysql -- mariadb-install-db --datadir="$datadir" --basedir=/usr --auth-root-authentication-method=normal || return 1
 	fi
 	log_file=${TMP:-/tmp/quick-install}.mariadb.log
-	say 'Starting MariaDB as its service user in the container'
+	log 'Starting MariaDB as its service user in the container'
 	as_root start-stop-daemon --start --background --chuid mysql \
 		--exec "$(command -v mariadbd-safe)" -- --datadir="$datadir" >>"$log_file" 2>&1 || return 1
 	local attempt
@@ -870,19 +982,6 @@ password_source() { # variable
 		echo "from $OPENSIM_RC_PATH"
 	else
 		echo "given (environment)"
-	fi
-}
-
-# One account of the plan: its name and hosts, whether it exists, what is done with it, where its password comes from (masked
-# unless --show-passwords)
-account_line() { # name exists role source password
-	local hosts shown='********'
-	[[ -z "$SHOW_PASSWORDS" ]] || shown=$5
-	hosts=$(sql_account_hosts "$1" | paste -sd, -)
-	if [[ "$2" == 1 ]]; then
-		say "  $1@$hosts ($3): exists, used as it is, never changed; password $4: $shown"
-	else
-		say "  $1@localhost ($3): new, made now; password $4: $shown"
 	fi
 }
 
@@ -911,14 +1010,14 @@ phase_database() {
 	[[ $(uname -s) == Linux ]] || die "SQL server installation is available on Debian and Ubuntu"
 	configure_package_sources || return $?
 	if database_server_installed; then
-		say "Keep the installed database server"
+		done_line "Database server (kept)"
 	else
 		local server_package
 		case "$DATABASE_CHOICE" in
 		mariadb) server_package=mariadb-server ;;
 		mysql) server_package=mysql-server ;;
 		esac
-		install_packages "$server_package" || die "could not install $server_package"
+		PACKAGES_LABEL="Database server" install_packages "$server_package" || die "could not install $server_package"
 	fi
 	start_sql_server || die "could not start the SQL server"
 	command -v mysql >/dev/null 2>&1 || command -v mariadb >/dev/null 2>&1 || die "SQL client is unavailable after server installation"
@@ -943,7 +1042,7 @@ phase_database() {
 			die "SQL account $OPENSIM_DB_ADMIN_USER already exists; set OPENSIM_DB_ADMIN_PASS in ~/.opensimrc to preserve its password"
 		else
 			OPENSIM_DB_ADMIN_USER=$(free_sql_account "$OPENSIM_DB_ADMIN_USER") || die "cannot inspect SQL accounts"
-			say "The SQL account opensim_admin exists already, on $(sql_account_hosts opensim_admin | paste -sd, -): it is left as it is, the kit uses $OPENSIM_DB_ADMIN_USER"
+			say "  SQL account opensim_admin exists (another install's): the kit uses $OPENSIM_DB_ADMIN_USER"
 		fi
 	fi
 	if [[ -n "$(sql_account_hosts "$OPENSIM_DB_USER")" ]]; then
@@ -953,7 +1052,7 @@ phase_database() {
 			die "SQL account $OPENSIM_DB_USER already exists; set OPENSIM_DB_PASS in ~/.opensimrc to preserve its password"
 		else
 			OPENSIM_DB_USER=$(free_sql_account "$OPENSIM_DB_USER") || die "cannot inspect SQL accounts"
-			say "The SQL account opensim exists already, on $(sql_account_hosts opensim | paste -sd, -) (the one of an existing grid?): it is left as it is, the kit uses $OPENSIM_DB_USER"
+			say "  SQL account opensim exists (another install's): the kit uses $OPENSIM_DB_USER"
 		fi
 	fi
 	local admin_source app_source
@@ -961,20 +1060,23 @@ phase_database() {
 	app_source=$(password_source OPENSIM_DB_PASS)
 	OPENSIM_DB_ADMIN_PASS=${OPENSIM_DB_ADMIN_PASS:-$(openssl rand -hex 32)}
 	OPENSIM_DB_PASS=${OPENSIM_DB_PASS:-$(openssl rand -hex 32)}
-	# Each account, and what is done with it, said before anything is changed
-	say "The SQL accounts the kit uses, on the server of this machine:"
-	account_line "$OPENSIM_DB_ADMIN_USER" "$admin_exists" "administrator, all the rights" "$admin_source" "$OPENSIM_DB_ADMIN_PASS"
-	account_line "$OPENSIM_DB_USER" "$app_exists" "the instances of the kit" "$app_source" "$OPENSIM_DB_PASS"
-	local other
-	for other in opensim opensim_admin; do
-		[[ "$other" == "$OPENSIM_DB_USER" || "$other" == "$OPENSIM_DB_ADMIN_USER" ]] && continue
-		[[ -z "$(sql_account_hosts "$other")" ]] || say "  $other@$(sql_account_hosts "$other" | paste -sd, -): exists, another install's: left as it is, never changed nor shadowed"
-	done
-	[[ -n "$SHOW_PASSWORDS" ]] || say "  (the passwords are masked: --show-passwords shows them)"
 	# An account that exists is used only with its own password: never changed to fit the one given
-	((admin_exists == 0)) || sql_login "$OPENSIM_DB_ADMIN_USER" "$OPENSIM_DB_ADMIN_PASS" || die "SQL account $OPENSIM_DB_ADMIN_USER exists, and its password ($admin_source) is refused: give its own (OPENSIM_DB_ADMIN_PASS), it is never changed"
-	((app_exists == 0)) || sql_login "$OPENSIM_DB_USER" "$OPENSIM_DB_PASS" || die "SQL account $OPENSIM_DB_USER exists, and its password ($app_source) is refused: give its own (OPENSIM_DB_PASS), it is never changed"
-	ask "Use these SQL accounts?" || die "nothing changed in the SQL server"
+	((admin_exists == 0)) || sql_login "$OPENSIM_DB_ADMIN_USER" "$OPENSIM_DB_ADMIN_PASS" || die "SQL account $OPENSIM_DB_ADMIN_USER: its password ($admin_source) is refused"
+	((app_exists == 0)) || sql_login "$OPENSIM_DB_USER" "$OPENSIM_DB_PASS" || die "SQL account $OPENSIM_DB_USER: its password ($app_source) is refused"
+	# One line, the passwords on request, then the question: nothing is made before the answer
+	local -a made=()
+	((admin_exists)) || made+=("$OPENSIM_DB_ADMIN_USER")
+	((app_exists)) || made+=("$OPENSIM_DB_USER")
+	if ((${#made[@]})); then
+		say "  SQL accounts: $OPENSIM_DB_ADMIN_USER, $OPENSIM_DB_USER (passwords generated)"
+	else
+		say "  SQL accounts: $OPENSIM_DB_ADMIN_USER, $OPENSIM_DB_USER (existing)"
+	fi
+	if [[ -n "$SHOW_PASSWORDS" ]] || { ((${#made[@]})) && ask_no "Show the passwords now?"; }; then
+		say "  $OPENSIM_DB_ADMIN_USER: $OPENSIM_DB_ADMIN_PASS"
+		say "  $OPENSIM_DB_USER: $OPENSIM_DB_PASS"
+	fi
+	((${#made[@]} == 0)) || ask "Create them?" || die "Stopped: nothing changed in the SQL server."
 	if [[ $admin_exists != 1 || $app_exists != 1 ]]; then
 		local admin_password_sql=${OPENSIM_DB_ADMIN_PASS//\'/\'\'} app_password_sql=${OPENSIM_DB_PASS//\'/\'\'}
 		{
@@ -985,13 +1087,18 @@ phase_database() {
 		} | as_root "$sql_client" || die "could not create the OpenSim SQL accounts"
 	fi
 	save_database_credentials || return $?
+	done_line "Database"
 }
 
-# Installation completed, give proper instructions and run opensim setup if RUN_SETUP=yes
+# Installation completed: the grids of an install of before migrated or run in place, else the assistant (opensim setup) in the same
+# run when somebody is there to answer (or RUN_SETUP=yes)
 end_installation() {
-	local basedir opensim_path setup_config=${OPENSIM_SETUP_CONFIG_FILE:-$SETUP_CONFIG_FILE} setup_config_path= setup_command setup_option=--config
+	local basedir opensim_path setup_config=${OPENSIM_SETUP_CONFIG_FILE:-$SETUP_CONFIG_FILE} setup_config_path= setup_option=--config
 	local -a setup_arguments=(setup)
-	[[ -z "$LEGACY_MODE" || $(uname -s) != Linux ]] || legacy_after_install
+	if [[ "$LEGACY_MODE" == migrate || "$LEGACY_MODE" == in-place ]] && [[ $(uname -s) == Linux ]]; then
+		legacy_after_install
+		exit 0
+	fi
 
 	if [ -n "${clone:-}" ]; then
 		basedir=$clone
@@ -1014,26 +1121,16 @@ end_installation() {
 			setup_config_path=$setup_config
 		fi
 	fi
-	setup_command="$basedir/bin/opensim setup"
-	if [[ -n "$setup_config_path" ]]; then
-		setup_arguments+=("$setup_option" "$setup_config_path")
-		setup_command+=" $setup_option $(shell_quote "$setup_config_path")"
-	fi
-	if [[ -n "$REGION_CONFIG_FILE" ]]; then
-		setup_arguments+=(--region-config "$REGION_CONFIG_FILE")
-		setup_command+=" --region-config $(shell_quote "$REGION_CONFIG_FILE")"
-	fi
-	cat <<-INSTALL_COMPLETED
-		Installation completed, execute:
-		    source ${basedir}/share/bash-completion/opensim
-		    $setup_command
-	INSTALL_COMPLETED
-	if [[ "${RUN_SETUP:-}" =~ ^(yes|true|1)$ ]]; then
-		"$basedir/bin/opensim" "${setup_arguments[@]}" || die "Error $? while executing opensim setup"
-		say "Setup completed"
+	[[ -z "$setup_config_path" ]] || setup_arguments+=("$setup_option" "$setup_config_path")
+	[[ -z "$REGION_CONFIG_FILE" ]] || setup_arguments+=(--region-config "$REGION_CONFIG_FILE")
+	if [[ "${RUN_SETUP:-}" =~ ^(yes|true|1)$ ]] || person_here; then
+		say ""
+		"$basedir/bin/opensim" "${setup_arguments[@]}" || die "the setup stopped (error $?)"
 		if [[ -n "$setup_config" && -r "$setup_config" ]]; then
 			print_setup_summary "$setup_config"
 		fi
+	else
+		done_line "Installed"
 	fi
 	exit 0
 }
@@ -1063,7 +1160,6 @@ phase_dotnet() {
 	apt_update || die "could not refresh package lists"
 	local majors=() major runtime_package support_packages=() missing=()
 	mapfile -t majors < <(dotnet_target_majors)
-	((${#majors[@]})) || say "No .NET core installed yet: no .NET runtime to install"
 	for major in "${majors[@]}"; do
 		dotnet_runtime_installed "$major" && continue
 		if runtime_package=$(dotnet_runtime_package "$major"); then
@@ -1076,11 +1172,11 @@ phase_dotnet() {
 		support_packages+=(libgdiplus)
 	fi
 	if ((${#support_packages[@]})); then
-		install_packages "${support_packages[@]}" || die "could not install .NET runtime packages"
+		PACKAGES_LABEL=".NET runtime" install_packages "${support_packages[@]}" || die "could not install .NET runtime packages"
 	fi
 	((${#missing[@]})) || return 0
 
-	say "No system package of .NET ${missing[*]}: use Microsoft's installer"
+	# No system package of the runtime of a major: Microsoft's installer, its output in the log
 	if ! command -v curl >/dev/null 2>&1 || ! dpkg-query -W -f='${db:Status-Status}' ca-certificates 2>/dev/null | grep -qx installed; then
 		install_packages ca-certificates curl || die "could not install curl for the .NET installer"
 	fi
@@ -1097,18 +1193,28 @@ phase_dotnet() {
 	fi
 	# Each beside the others, in the same folder: dotnet runs each core on the major it targets
 	for major in "${missing[@]}"; do
-		as_root bash "$install_script" --runtime dotnet --channel "$major.0" \
+		run_step ".NET $major runtime" - as_root bash "$install_script" --runtime dotnet --channel "$major.0" \
 			--azure-feed https://builds.dotnet.microsoft.com/dotnet \
 			--install-dir /usr/local/share/dotnet || {
 			rm -f "$install_script"
 			die "could not install the .NET $major runtime"
 		}
+		done_line ".NET $major runtime"
 	done
 	rm -f "$install_script"
 	as_root ln -sf /usr/local/share/dotnet/dotnet /usr/local/bin/dotnet || die "could not link dotnet into /usr/local/bin"
 	for major in "${missing[@]}"; do
 		dotnet_runtime_installed "$major" || die "the .NET $major runtime is not available after installation"
 	done
+}
+
+# The machine in one line: its system, its memory, the free space of its disk
+system_line() {
+	local name memory free
+	name=$(. /etc/os-release 2>/dev/null && printf '%s' "${PRETTY_NAME:-$NAME}")
+	memory=$(awk '/^MemTotal:/ { printf "%.0f GB RAM", $2 / 1048576 }' /proc/meminfo 2>/dev/null)
+	free=$(df -Pk / 2>/dev/null | awk 'NR == 2 { printf "%.0f GB free", $4 / 1048576 }')
+	printf '%s' "${name:-Linux}${memory:+, $memory}${free:+, $free}"
 }
 
 # The install of before the kit on this machine (opensim-debian, in /opt/opensim): its folder, nothing when there is none
@@ -1129,25 +1235,44 @@ legacy_starters() {
 	return 0
 }
 
-# Before anything is installed, beside an install of before the kit: the choice is asked for (--in-place or --migrate), and its
-# own start is set aside, renamed *.w4os-disabled (a cron of run-parts skips a name with a dot), so that it never starts what the
-# kit runs, nor reads its /etc/opensim
+# The install of before the kit, in one line: its folder, its grid, its simulators
+legacy_summary() { # root
+	local nick count robust
+	robust=$(legacy_configs robust | head -n 1)
+	[[ -z "$robust" ]] || nick=$(legacy_nick "$robust")
+	count=$(legacy_configs simulator | grep -c .) || count=0
+	printf 'Found an existing install in %s%s.' "$1" "${nick:+: grid $nick, $count simulator$( ((count == 1)) || printf s)}"
+}
+
+# Before anything is installed, beside an install of before the kit: the choice is asked (or given: --migrate, --in-place, --new).
+# Migrated or run in place, its own start is set aside, renamed *.w4os-disabled (a cron of run-parts skips a name with a dot), so
+# that it never starts what the kit runs; beside it (a new grid), only a unit of its own named opensim, which would hide the kit's
 legacy_gate() {
-	local root starter
+	local root starter set_aside=
 	root=$(legacy_install)
 	[[ -n "$root" ]] || return 0
 	if [[ -z "$LEGACY_MODE" ]]; then
-		say "This machine has an install of before the kit, in $root: the kit never runs beside it without your choice."
-		say "  --in-place  its grids run where they are, under the service of the kit (opensim import --in-place), its own start set aside"
-		say "  --migrate   its own start set aside, its grids to bring into the layout of the kit (opensim import), the old install kept"
-		die "choose one: run kickstart.sh again with --in-place (or --migrate)"
+		say "  $(legacy_summary "$root")"
+		person_here || die "an existing install in $root: give --migrate, --in-place or --new"
+		choose "[M]igrate  [I]n place  [N]ew grid beside it  [A]bort (M/i/n/a):" mina
+		case "$CHOICE" in
+		m) LEGACY_MODE=migrate ;;
+		i) LEGACY_MODE=in-place ;;
+		n) LEGACY_MODE=new ;;
+		*)
+			say "Stopped: nothing changed."
+			exit 0
+			;;
+		esac
 	fi
 	while IFS= read -r starter; do
 		[[ -n "$starter" ]] || continue
+		[[ "$LEGACY_MODE" != new || "$starter" == */opensim.service || "$starter" == */init.d/opensim ]] || continue
 		as_root mv -- "$starter" "$starter.w4os-disabled" || die "could not set aside $starter"
-		say "Set aside: $starter is now $starter.w4os-disabled (rename it back to run the install of before the kit again)"
+		set_aside=yes
 	done < <(legacy_starters)
 	[[ ! -d /run/systemd/system ]] || as_root systemctl daemon-reload || true
+	[[ -z "$set_aside" ]] || done_line "Old install: its start at boot set aside"
 }
 
 # The configs of the install of before the kit: its Robusts, its simulators (one a line, by kind)
@@ -1161,7 +1286,7 @@ legacy_configs() { # robust|simulator
 # simulators), else the commands to do it; with --restart, its instances stopped (SIGTERM: a Robust with a REST console has no
 # screen) and started again under the service
 legacy_after_install() {
-	local root robust file pid cli
+	local root robust file pid cli nick
 	local -a robusts=() simulators=() import=()
 	root=$(legacy_install)
 	[[ -n "$root" ]] || return 0
@@ -1171,42 +1296,48 @@ legacy_after_install() {
 	[[ -x "$cli" ]] || cli=opensim
 	mapfile -t robusts < <(legacy_configs robust)
 	mapfile -t simulators < <(legacy_configs simulator)
+	((${#robusts[@]})) || return 0
 	if [[ "$LEGACY_MODE" == migrate ]]; then
-		say "To bring the grids of $root into the layout of the kit (its config and databases kept, its data folders moved: --copy-data copies them):"
-		for robust in "${robusts[@]}"; do say "  sudo opensim import --robust $robust$(((${#simulators[@]})) && printf ' --simulator %s' "${simulators[@]}") --apply --switch"; done
+		# Each grid of the install (one Robust each), with its simulators: migrated here and started, the old install kept
+		for robust in "${robusts[@]}"; do
+			nick=$(legacy_nick "$robust")
+			ask "Migrate $nick now?" || { say "  $nick not migrated."; continue; }
+			import=(import --robust "$robust" --apply --switch)
+			for file in "${simulators[@]}"; do import+=(--simulator "$file"); done
+			run_step "Migration of $nick" - as_root "$cli" "${import[@]}" || die "the migration of $nick stopped (log: $(install_log))"
+			done_line "Migrated and started: $nick"
+		done
 		return 0
 	fi
-	if ((${#robusts[@]} != 1)); then
-		say "The grids of $root are run in place once registered, one for each Robust, with its simulators:"
-		for robust in "${robusts[@]}"; do say "  opensim import --robust $robust --in-place --simulator SIMULATOR.ini... --apply && opensim enable NICK"; done
-		return 0
-	fi
+	((${#robusts[@]} == 1)) || die "$root has ${#robusts[@]} grids: in place, one grid at a time"
 	import=(import --robust "${robusts[0]}" --in-place)
 	for file in "${simulators[@]}"; do import+=(--simulator "$file"); done
 	# Its owner and the account of its site become the ones of the suite (SystemUser, WebUser, WebGroup), the service follows them;
 	# nothing of the install is changed
-	as_root "$cli" "${import[@]}" --apply || die "could not register the grid of $root in place"
-	as_root "$cli" enable "$(legacy_nick "${robusts[0]}")" || die "could not enable the grid of $root"
-	if [[ "$LEGACY_RESTART" != yes ]]; then
-		say "Its instances still run as they were started. Once the grid may stop: $0 --in-place --restart (or stop them, then sudo systemctl restart opensim)"
-		return 0
-	fi
+	nick=$(legacy_nick "${robusts[0]}")
+	run_step "In place: $nick" - as_root "$cli" "${import[@]}" --apply || die "the grid of $root could not be registered in place (log: $(install_log))"
+	as_root "$cli" enable "$nick" >>"$(install_log)" 2>&1 || die "the grid of $root could not be enabled"
+	done_line "In place: $nick"
+	# Restarted when asked (--restart), or when the person says so; never by default when nobody is there
+	[[ "$LEGACY_RESTART" == yes ]] || { person_here && ask "Restart its instances under the kit now?"; } || return 0
 	# The simulators first, then the Robust: each asked to end (SIGTERM, a Robust with a REST console has no screen), a minute each at
 	# most; found by the config it runs, by the path given or the one it leads to (a link of robust.d to the file of its grid)
-	local nick down
+	local down count=0 total=$((${#simulators[@]} + ${#robusts[@]}))
 	for file in "${simulators[@]}" "${robusts[@]}"; do
+		count=$((count + 1))
+		live "Stop: $(basename "$file" .ini) ($count/$total)"
 		for pid in $(legacy_pids "$file"); do
 			as_root kill -TERM "$pid" 2>/dev/null || continue
 			for _ in $(seq 1 60); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
-			! kill -0 "$pid" 2>/dev/null || die "process $pid ($file) did not stop: stop it, then $0 --in-place --restart again"
+			! kill -0 "$pid" 2>/dev/null || die "process $pid ($file) did not stop"
 		done
 	done
-	[[ ! -d /run/systemd/system ]] || as_root systemctl restart opensim || die "could not start opensim.service: systemctl status opensim"
+	done_line "Old instances stopped ($total)"
+	[[ ! -d /run/systemd/system ]] || run_step "Start under the kit" - as_root systemctl restart opensim || die "opensim.service did not start"
 	# Said to run only once each instance of the grid does
-	nick=$(legacy_nick "${robusts[0]}")
 	down=$("$cli" status 2>/dev/null | awk -v nick="$nick" '($1 == nick || index($1, nick ".") == 1) && $3 == "[down]" { print $1 }')
-	[[ -z "$down" ]] || die "the grid of $root does not run under the service, down: $(paste -sd, - <<<"$down") (opensim status, journalctl -u opensim)"
-	say "The grid of $root runs under the service of the kit (opensim status)"
+	[[ -z "$down" ]] || die "not started under the kit: $(paste -sd, - <<<"$down")"
+	done_line "$nick runs under the kit"
 }
 
 # The processes that run a config, one a line: the -inifile of each process as it was given (its real arguments, the quotes a shell
@@ -1375,7 +1506,7 @@ install_with_modules() {
 		done
 	done
 	((${#packages[@]})) || die "--with: no core installed to install ${WITH_MODULES[*]} for"
-	install_packages "${packages[@]}" || return $?
+	PACKAGES_LABEL="Modules" install_packages "${packages[@]}" || return $?
 	for module in "${WITH_MODULES[@]}"; do
 		as_root php /usr/share/w4os-engine/bin/opensim-profiles.php --enable-module "$module" || return $?
 	done
@@ -1405,8 +1536,7 @@ phase_opensim() {
 phase_tools() {
 	configure_package_sources || return $?
 	install_packages --no-install-recommends w4os-cli || die "could not install the tools"
-	say "Ready: the opensim command and the engine."
-	say "The accounts of a list into a grid installed otherwise: opensim import --accounts FILE --robust /path/to/Robust.HG.ini"
+	done_line "The opensim command and the engine"
 }
 
 # === Actual business logic starts here ===
@@ -1506,8 +1636,8 @@ while (($#)); do
 		RUN_CLEANUP=yes
 		PODMAN_INSTALL_ARGS+=("$argument")
 		;;
-	--in-place | --migrate)
-		[[ -z "$LEGACY_MODE" || "$LEGACY_MODE" == "${argument#--}" ]] || die "choose --in-place or --migrate, not both"
+	--in-place | --migrate | --new)
+		[[ -z "$LEGACY_MODE" || "$LEGACY_MODE" == "${argument#--}" ]] || die "choose one of --migrate, --in-place, --new"
 		LEGACY_MODE=${argument#--}
 		PODMAN_INSTALL_ARGS+=("$argument")
 		;;
@@ -1612,8 +1742,17 @@ if [[ "$RUN_CLEANUP" == yes ]]; then
 	[[ $(uname -s) == Linux ]] || die "cleanup is available on Debian and Ubuntu only"
 	phase_cleanup
 fi
-# An install of before the kit: never beside it silently (both would read /etc/opensim and start the same grids)
-[[ $(uname -s) != Linux || "$RUN_CLEANUP" == yes ]] || legacy_gate
+say "OpenSim kit installer"
+install_log >/dev/null
+[[ $(uname -s) != Linux ]] || done_line "System: $(system_line)"
+# An install of before the kit: never beside it silently (both would read /etc/opensim and start the same grids); its choice is the
+# question of the install, else the install is asked for
+if [[ $(uname -s) == Linux && "$RUN_CLEANUP" != yes && -n "$(legacy_install)" ]]; then
+	legacy_gate
+elif [[ "$INSTALL_PHASE" == all ]] && ! ask "Install OpenSim (kit, database, website)?"; then
+	say "Stopped: nothing changed."
+	exit 0
+fi
 
 case "$INSTALL_PHASE" in
 all)

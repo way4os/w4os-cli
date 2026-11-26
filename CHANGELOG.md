@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- change (kickstart): questions always shown, one live line with counters, logs in a file; migrates instead of printing commands
 - new (modules): opensim module enable|disable NAME; kickstart --with MODULE installs its package for each core, enabled
 - new (import): --accounts puts each account in its groups, with a role; --create-groups makes the missing ones
 - change (import): --accounts takes its format from the extension (.csv, .json, .yaml); each account told with its line
