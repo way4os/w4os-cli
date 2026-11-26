@@ -194,6 +194,10 @@ function test_web_api_install_writes_the_pool_and_the_listener_beside_the_sites_
 	# The pool and the listener, without the instructions to copy them
 	assert_file_contains "$WORK/php/8.4/fpm/pool.d/w4os-api.conf" '[w4os-api]'
 	assert_not_contains 'Put it in' "$(cat "$WORK/php/8.4/fpm/pool.d/w4os-api.conf")"
+	# The helpers in a pool of their own, as the web user, beside the one of the API
+	assert_file_contains "$WORK/php/8.4/fpm/pool.d/w4os-helpers.conf" '[w4os-helpers]'
+	assert_file_contains "$WORK/php/8.4/fpm/pool.d/w4os-helpers.conf" 'listen = /run/php/w4os-helpers.sock'
+	assert_file_contains "$WORK/php/8.4/fpm/pool.d/w4os-helpers.conf" 'listen.group = caddy'
 	assert_file_contains "$WORK/caddy/sites/tender_tern-api.w4os.caddyfile" 'http://127.0.0.1:8781 {'
 	assert_not_contains 'api-key create' "$(cat "$WORK/caddy/sites/tender_tern-api.w4os.caddyfile")"
 	assert_equals "$caddyfile" "$(cat "$WORK/caddy/Caddyfile")"

@@ -6,12 +6,16 @@ HELP="Show grid web services and who serves each page (the helpers under their b
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 
-# The pool and the listener of the engine API in place: the pool in PHP-FPM, the listener in the folder of sites the Caddyfile
+# The pools of the suite (the engine API, the helpers) and the listener of the engine API in place: the pools in PHP-FPM, the listener in the folder of sites the Caddyfile
 # imports (never the Caddyfile itself), checked by Caddy (taken back when refused), then both reloaded
 install_api() { # grid, then the options of web (api caddy|apache)
 	local grid=$1 server text etc=${OPENSIM_CADDY_ETC:-/etc/caddy} apache=${OPENSIM_APACHE_ETC:-/etc/apache2} php=${OPENSIM_PHP_ETC:-/etc/php}
-	local pools import dir suffix file pool said version user api code arg previous=
-	for arg in "$@"; do [[ "$previous" != api ]] || server=$arg; previous=$arg; done
+	local pools import dir suffix file said version user api code arg previous= group= written
+	for arg in "$@"; do
+		[[ "$previous" != api ]] || server=$arg
+		[[ "$previous" != --web-group ]] || group=$arg
+		previous=$arg
+	done
 	# What to write, as the account of the instances (the port of the API is kept in the conf of the grid, which is theirs)
 	user=$(install_accounts | sed -n 's/^SystemUser=//p' | head -n 1)
 	if [[ $(id -u) -eq 0 && -n "$user" && "$user" != root ]]; then
@@ -22,7 +26,6 @@ install_api() { # grid, then the options of web (api caddy|apache)
 	pools=$(ls -d "$php"/*/fpm/pool.d 2>/dev/null | sort -V | tail -n 1)
 	[[ -n "$pools" ]] || die "no PHP-FPM on this machine (apt install php-fpm)"
 	version=$(basename "$(dirname "$(dirname "$pools")")")
-	pool="$pools/w4os-api.conf"
 	case $server in
 	caddy)
 		import=$(sed -n 's/^[[:space:]]*import[[:space:]]\{1,\}\([^[:space:]]*\*[^[:space:]]*\).*/\1/p' "$etc/Caddyfile" 2>/dev/null | head -n 1)
@@ -40,10 +43,9 @@ install_api() { # grid, then the options of web (api caddy|apache)
 	*) die "the engine API is installed for caddy or apache" ;;
 	esac
 	mkdir -p "$dir" || die "cannot write in $dir: run it as root (sudo)"
-	{
-		echo "; The engine API of the grids of this machine, as the user of their instances (opensim web $grid api $server --install)"
-		sed -n '/^\[w4os-api\]/,/^$/p' <<<"$text" | sed '/^$/d'
-	} >"$pool" || die "cannot write $pool: run it as root (sudo)"
+	# The pools of the suite, the API's and the helpers', written by the engine; their sockets for the group of the web server
+	written=$(W4OS_PHP_ETC=$php php "$(dirname "$OPENSIM_API")/opensim-pools.php" --web-group "${group:-$([[ "$server" == caddy ]] && echo caddy || echo www-data)}") ||
+		die "cannot write the pools of PHP-FPM in $pools: run it as root (sudo)"
 	{
 		echo "# The engine API of the grid $grid, for the sites of this machine only (opensim web $grid api $server --install)"
 		if [[ "$server" == caddy ]]; then
@@ -64,11 +66,11 @@ install_api() { # grid, then the options of web (api caddy|apache)
 		api="http://$(sed -n 's/^Listen \(127\.0\.0\.1:[0-9]*\)$/\1/p' "$file")/api"
 	fi
 	if [[ -d /run/systemd/system || -n "${OPENSIM_SYSTEMD:-}" ]]; then
-		systemctl reload "php$version-fpm" || systemctl restart "php$version-fpm" || die "php$version-fpm did not take $pool"
+		systemctl reload "php$version-fpm" || systemctl restart "php$version-fpm" || die "php$version-fpm did not take the pools in $pools"
 		if [[ "$server" == caddy ]]; then systemctl reload caddy; else systemctl reload apache2; fi || die "the web server did not reload with $file"
 	else
 		# Without systemd (a container): the running ones told to read their config again
-		pkill -USR2 -f "php-fpm: master process" || die "PHP-FPM does not run: $pool is written, start php-fpm$version"
+		pkill -USR2 -f "php-fpm: master process" || die "PHP-FPM does not run: the pools are in $pools, start php-fpm$version"
 		if [[ "$server" == caddy ]]; then
 			caddy reload --config "$etc/Caddyfile" --adapter caddyfile >/dev/null 2>&1
 		else
