@@ -1,9 +1,51 @@
 #!/usr/bin/env bash
 # opensim web: show, check, or print web-server snippets for a grid.
 
-USAGE="opensim web [GRID] [show|check|snippet caddy|nginx|apache|api caddy|nginx|apache|set PAGE URL] [options]"
-HELP="Show grid web services and who serves each page (the helpers under their base, the site elsewhere), check their URLs, print a server snippet, or set the address of a page (helpers, search, profile, guide, welcome, status, directory). api prints what serves the engine API to the sites of this machine as the user of the instances: a PHP-FPM pool of its own, and a listener on 127.0.0.1 for its paths only (the site then uses engine remote with a key). Options: --docroot DIR, --socket PATH, --port N, --web-group GROUP."
+USAGE="opensim web [GRID] [show|check|snippet caddy|nginx|apache|api caddy|nginx|apache [--install]|set PAGE URL] [options]"
+HELP="Show grid web services and who serves each page (the helpers under their base, the site elsewhere), check their URLs, print a server snippet, or set the address of a page (helpers, search, profile, guide, welcome, status, directory). api prints what serves the engine API to the sites of this machine as the user of the instances: a PHP-FPM pool of its own, and a listener on 127.0.0.1 for its paths only (the site then uses engine remote with a key); api caddy --install writes both (the pool in PHP-FPM, the listener in the sites Caddy imports) and reloads them. Options: --docroot DIR, --socket PATH, --port N, --web-group GROUP."
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 
+# The pool and the listener of the engine API in place: the pool in PHP-FPM, the listener in the folder of sites the Caddyfile
+# imports (never the Caddyfile itself), checked by Caddy (taken back when refused), then both reloaded
+install_api() { # grid, then the options of web
+	local grid=$1 text etc=${OPENSIM_CADDY_ETC:-/etc/caddy} php=${OPENSIM_PHP_ETC:-/etc/php} pools import dir suffix file pool said version
+	text=$(run web "$@") || exit
+	pools=$(ls -d "$php"/*/fpm/pool.d 2>/dev/null | sort -V | tail -n 1)
+	[[ -n "$pools" ]] || die "no PHP-FPM on this machine (apt install php-fpm)"
+	version=$(basename "$(dirname "$(dirname "$pools")")")
+	import=$(sed -n 's/^[[:space:]]*import[[:space:]]\{1,\}\([^[:space:]]*\*[^[:space:]]*\).*/\1/p' "$etc/Caddyfile" 2>/dev/null | head -n 1)
+	[[ -n "$import" ]] || die "$etc/Caddyfile imports no folder of sites (import sites/*)"
+	dir=$(dirname "$import")
+	[[ "$dir" == /* ]] || dir="$etc/${dir#./}"
+	suffix=$(basename "$import")
+	suffix=${suffix#*\*}
+	file="$dir/$grid-api.w4os${suffix:-.caddyfile}"
+	pool="$pools/w4os-api.conf"
+	mkdir -p "$dir"
+	{
+		echo "; The engine API of the grids of this machine, as the user of their instances (opensim web $grid api caddy --install)"
+		sed -n '/^\[w4os-api\]/,/^$/p' <<<"$text" | sed '/^$/d'
+	} >"$pool"
+	{
+		echo "# The engine API of the grid $grid, for the sites of this machine only (opensim web $grid api caddy --install)"
+		sed -n '/^http:\/\/127\.0\.0\.1:/,/^}$/p' <<<"$text"
+	} >"$file"
+	said=$(caddy validate --config "$etc/Caddyfile" --adapter caddyfile 2>&1) || {
+		rm -f "$file"
+		die "Caddy refuses the listener of the engine API: $said"
+	}
+	if [[ -d /run/systemd/system || -n "${OPENSIM_SYSTEMD:-}" ]]; then
+		systemctl reload "php$version-fpm" || systemctl restart "php$version-fpm" || die "php$version-fpm did not take $pool"
+		systemctl reload caddy || die "Caddy did not reload with $file"
+	fi
+	say "✓ Engine API: $(sed -n 's/^\(http:\/\/127\.0\.0\.1:[0-9]*\) {$/\1/p' "$file")/api"
+}
+
+if [[ " $* " == *" --install "* && " $* " == *" api caddy "* ]]; then
+	args=()
+	for arg in "$@"; do [[ "$arg" == --install ]] || args+=("$arg"); done
+	install_api "${args[@]}"
+	exit
+fi
 run web "$@"

@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+- change (kickstart): a migration checks, asks everything, then one Start; name, website, 3D map; a short summary; a rerun resumes
+- new (web): api caddy --install writes the pool and the local listener of the engine API, beside the sites; import --grid-name
 - change (setup): the options on one line, kept with Enter; status without the 3D map advice; one summary, the setup's
 - fix (setup): false and 0 of --config kept; start, stop, restart of a grid with its simulators (--robust alone)
 - change (kickstart): questions always shown, one live line with counters, logs in a file; migrates instead of printing commands

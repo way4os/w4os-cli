@@ -728,22 +728,82 @@ function test_beside_an_install_of_before_the_kit_the_choice_is_asked_and_a_new_
 	assert_file_exists "$WORK/systemd/opensim.service.w4os-disabled"
 }
 
-function test_a_migration_runs_the_import_of_its_grid_instead_of_printing_it() {
-	quick_install_load_library || return
-	legacy_fixture
-	LEGACY_MODE=migrate
-	as_root() { "$@"; }
-	local calls=$WORK/opensim-calls said
+# A command line of the kit that says the plan of a migration and keeps what it is asked to do
+function migration_stub() {
 	clone=$WORK/kit
 	mkdir -p "$clone/bin"
-	printf '#!/bin/sh\necho "$*" >>%s\n' "$calls" >"$clone/bin/opensim"
+	cat >"$clone/bin/opensim" <<STUB
+#!/usr/bin/env bash
+case "\$1 \$2" in
+"api GET") [[ -f "$WORK/here" ]] && echo '{"data":{"attributes":{"name":"Kimbe Red","uri":"kimbe.example:8002"}}}' || exit 1 ;;
+"api POST") cat >/dev/null; echo '{"data":{"attributes":{"name":"Kimbe Red","grid":"w4osdemogrid","ports":{"public":8002,"private":8003},"gridInfo":["[GridInfoService] gridname '"'Kimbé Red'"' -> '"'Kimbe Red'"': OpenSim cannot"],"site":"https://kimbe.example/opensim/","data":[],"problems":{}}}}' ;;
+"status w4osdemogrid") [[ -f "$WORK/up" ]] && echo "w4osdemogrid  robust  [up]" ;;
+*) echo "\$*" >>"$WORK/opensim-calls"; [[ "\$1" != import ]] || : >"$WORK/here" ;;
+esac
+STUB
 	chmod +x "$clone/bin/opensim"
+	as_root() { "$@"; }
+	maptiles_package() { :; }
+	website_possible() { return 1; }
+	PROC_ROOT=$WORK/proc INSTALL_LOG=$WORK/install.log
+	mkdir -p "$PROC_ROOT"
+	: >"$INSTALL_LOG"
+}
+
+function test_a_migration_asks_everything_first_then_runs_the_import_with_the_name_chosen() {
+	quick_install_load_library || return
+	legacy_fixture
+	migration_stub
+	LEGACY_MODE=migrate
+	local said answers=$WORK/answers screen=$WORK/screen
+	# The ASCII name refused, another given, then the start
+	printf 'n\nKimbe Rouge\n\n' >"$answers"
+	TTY_IN=$answers TTY_OUT=$screen TTY_OPEN= ASSUME_YES=
 
 	said=$(legacy_after_install)
 
-	assert_same "import --robust $LEGACY_ROOT/etc/robust.d/W4osDemoGrid.ini --apply --switch --simulator $LEGACY_ROOT/etc/opensim.d/w4osdemogrid_welcome.ini" "$(cat "$calls")"
+	assert_same "import --robust $LEGACY_ROOT/etc/robust.d/W4osDemoGrid.ini --apply --switch --grid-name Kimbe Rouge --simulator $LEGACY_ROOT/etc/opensim.d/w4osdemogrid_welcome.ini" "$(cat "$WORK/opensim-calls")"
+	assert_contains '? Grid name "Kimbé Red" becomes "Kimbe Red" (viewers need ASCII). OK? [Y/n] ? Grid name: [Kimbe Red] ? Start? [Y/n]' "$(cat "$screen")"
+	assert_contains "✓ Old config readable (2 files)" "$said"
 	assert_contains "✓ Migrated and started: w4osdemogrid" "$said"
+	assert_contains "Grid       Kimbe Red (w4osdemogrid)" "$said"
+	assert_contains "Login      http://kimbe.example:8002" "$said"
+	assert_contains "Old install  $LEGACY_ROOT, stopped, kept" "$said"
 	assert_not_contains "opensim import" "$said"
+}
+
+function test_a_migration_refused_at_start_changes_nothing() {
+	quick_install_load_library || return
+	legacy_fixture
+	migration_stub
+	LEGACY_MODE=migrate
+	local said answers=$WORK/answers
+	printf '\nn\n' >"$answers"
+	TTY_IN=$answers TTY_OUT=$WORK/screen TTY_OPEN= ASSUME_YES=
+
+	said=$(legacy_after_install)
+
+	assert_file_not_exists "$WORK/opensim-calls"
+	assert_contains "Stopped: nothing changed." "$said"
+}
+
+function test_a_rerun_says_a_grid_migrated_already_and_starts_one_written_only() {
+	quick_install_load_library || return
+	legacy_fixture
+	migration_stub
+	LEGACY_MODE=migrate ASSUME_YES=yes
+	: >"$WORK/here"
+	: >"$WORK/up"
+	local said
+	said=$(legacy_after_install)
+	assert_contains "w4osdemogrid is already here. Nothing to do." "$said"
+	assert_contains "Grid       Kimbe Red (w4osdemogrid)" "$said"
+	assert_file_not_exists "$WORK/opensim-calls"
+
+	rm "$WORK/up"
+	said=$(legacy_after_install)
+	assert_contains "w4osdemogrid is written here, not started yet." "$said"
+	assert_same "import --robust $LEGACY_ROOT/etc/robust.d/W4osDemoGrid.ini --switch" "$(cat "$WORK/opensim-calls")"
 }
 
 function test_a_long_step_that_fails_says_its_log_then_retries_when_asked() {

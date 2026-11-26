@@ -1281,33 +1281,8 @@ legacy_after_install() {
 	mapfile -t simulators < <(legacy_configs simulator)
 	((${#robusts[@]})) || return 0
 	if [[ "$LEGACY_MODE" == migrate ]]; then
-		# The old instances that run: stopped first, the grid here takes their ports and their database; kept running, the grid is
-		# run in place instead, or nothing is done
-		local -a running=()
-		for file in "${simulators[@]}" "${robusts[@]}"; do
-			[[ -z "$(legacy_pids "$file")" ]] || running+=("$file")
-		done
-		if ((${#running[@]})); then
-			say "  The old instances run: $(for file in "${running[@]}"; do basename "$file" .ini; done | paste -sd, - | sed 's/,/, /g')."
-			if ! ask "Stop them now?"; then
-				say "  The migration needs the old instances stopped (same ports, same database)."
-				choose "[I]n place  [A]bort (I/a):" ia
-				[[ "$CHOICE" == i ]] || { say "Stopped: nothing changed."; exit 0; }
-				LEGACY_MODE=in-place
-				legacy_after_install
-				return
-			fi
-			legacy_stop "${running[@]}"
-		fi
-		# Each grid of the install (one Robust each), with its simulators: migrated here and started, the old install kept
 		for robust in "${robusts[@]}"; do
-			nick=$(legacy_nick "$robust")
-			ask "Migrate $nick now?" || { say "  $nick not migrated."; continue; }
-			import=(import --robust "$robust" --apply --switch)
-			for file in "${simulators[@]}"; do import+=(--simulator "$file"); done
-			STEP_FROM=$(wc -c <"$(install_log)" | tr -d ' ')
-			run_step "Migration of $nick" engine_counter as_root "$cli" "${import[@]}" || die "the migration of $nick stopped (log: $(install_log))"
-			done_line "Migrated and started: $nick"
+			migrate_grid "$robust" "${simulators[@]}"
 		done
 		return 0
 	fi
@@ -1331,6 +1306,178 @@ legacy_after_install() {
 	down=$("$cli" status 2>/dev/null | awk -v nick="$nick" '($1 == nick || index($1, nick ".") == 1) && $3 == "[down]" { print $1 }')
 	[[ -z "$down" ]] || die "not started under the kit: $(paste -sd, - <<<"$down")"
 	done_line "$nick runs under the kit"
+}
+
+# A question answered with a text: the default shown and taken with Enter, or when nobody can answer
+ask_text() { # "question" default
+	local answer
+	ANSWER=$2
+	person_here || return 0
+	live_clear
+	[[ -n "${TTY_OPEN:-}" ]] || { exec 8<"$TTY_IN" && TTY_OPEN=yes; }
+	printf '? %s %s' "$1" "${2:+[$2] }" >>"$TTY_OUT"
+	IFS= read -r -u 8 answer || return 0
+	[[ -z "$answer" ]] || ANSWER=$answer
+}
+
+# The grid of an install of before the kit migrated here: what is checked, every question, one "Start?", then the steps to the
+# summary; a grid that is here already is said with its summary, one written but not started is started
+migrate_grid() { # robust config, simulator configs...
+	local robust=$1 file nick plan name ascii running=() steps=() step count=0 site= host= prefix= maptiles= free data
+	shift
+	nick=$(legacy_nick "$robust")
+	say ""
+	say "Migration of $nick"
+	# Here already: running (nothing to do), or written and not started (its start is what is left)
+	if as_root "$cli" api GET "/grids/$nick" 2>/dev/null | jq -e '.data.attributes' >/dev/null 2>&1; then
+		if as_root "$cli" status "$nick" 2>/dev/null | grep -q '\[up\]'; then
+			say "  $nick is already here. Nothing to do."
+			migration_summary "$nick" ""
+			return 0
+		fi
+		say "  $nick is written here, not started yet."
+		ask "Start it?" || { say "Stopped: nothing changed."; exit 0; }
+		STEP_FROM=$(wc -c <"$(install_log)" | tr -d ' ')
+		run_step "Start" engine_counter as_root "$cli" import --robust "$robust" --switch || die "$nick did not start (log: $(install_log))"
+		migration_summary "$nick" ""
+		return 0
+	fi
+	# The checks: its configs, the plan of the engine (what it writes, its data), the room for it, its ports
+	for file in "$robust" "$@"; do
+		as_root test -r "$file" || die "cannot read $file"
+	done
+	done_line "Old config readable ($(($# + 1)) files)"
+	plan=$(jq -cn --arg file "$robust" '{data: {type: "imports", attributes: {kind: "robust", file: $file, simulators: ($ARGS.positional | map({file: .}))}}}' --args "$@" |
+		as_root "$cli" api POST /setups/imports --data=-) || true
+	jq -e '.data.attributes' <<<"$plan" >/dev/null 2>&1 || die "$(jq -r '.detail // .title // "the engine did not answer"' <<<"$plan" 2>/dev/null || printf '%s' "$plan")"
+	plan=$(jq -c '.data.attributes' <<<"$plan")
+	if jq -e '(.problems // {}) | length > 0' <<<"$plan" >/dev/null; then
+		jq -r '.problems | to_entries[] | "✗ \(.key): \(.value)"' <<<"$plan"
+		die "the migration of $nick cannot be done as it is"
+	fi
+	data=$(jq -r '[(.data // [])[].from] | .[]' <<<"$plan" | while IFS= read -r file; do as_root du -sk "$file" 2>/dev/null; done | awk '{ k += $1 } END { printf "%.1f", k / 1048576 }')
+	free=$(df -Pk /var/lib 2>/dev/null | awk 'NR == 2 { printf "%.0f", $4 / 1048576 }')
+	done_line "Disk: ${free:-?} GB free, data ${data:-0} GB$(jq -r 'if ((.data // []) | any(.acrossFilesystems)) then ", copied" else ", same disk (moved)" end' <<<"$plan")"
+	for file in "$@" "$robust"; do
+		[[ -z "$(legacy_pids "$file")" ]] || running+=("$file")
+	done
+	done_line "Ports $(jq -r '"\(.ports.public) \(.ports.private)"' <<<"$plan") free once the old instances stop"
+
+	# Every question, then one start
+	if ((${#running[@]})); then
+		say "  The old instances run: $(for file in "${running[@]}"; do basename "$file" .ini; done | paste -sd, - | sed 's/,/, /g')."
+		if ! ask "Stop them now?"; then
+			say "  The migration needs the old instances stopped (same ports, same database)."
+			choose "[I]n place  [A]bort (I/a):" ia
+			[[ "$CHOICE" == i ]] || { say "Stopped: nothing changed."; exit 0; }
+			LEGACY_MODE=in-place
+			legacy_after_install
+			exit 0
+		fi
+	fi
+	name=$(jq -r '.name' <<<"$plan")
+	ascii=$name
+	if jq -e '(.gridInfo // []) | any(test("^\\[GridInfoService\\] gridname "))' <<<"$plan" >/dev/null; then
+		local original
+		original=$(jq -r '(.gridInfo // [])[] | select(test("^\\[GridInfoService\\] gridname ")) | capture("gridname .(?<from>.*). -> ").from' <<<"$plan")
+		if ! ask "Grid name \"$original\" becomes \"$name\" (viewers need ASCII). OK?"; then
+			while :; do
+				ask_text "Grid name:" "$name"
+				LC_ALL=C grep -q '[^ -~]' <<<"$ANSWER" || break
+				say "  ASCII only."
+			done
+			ascii=$ANSWER
+		fi
+	fi
+	if website_possible; then
+		ask_text "Website address:" "$(jq -r '.site // empty' <<<"$plan")"
+		site=$ANSWER
+		[[ -z "$site" ]] || { site=${site%/}/; host=$(sed -E 's#^[a-z]+://([^/:]+).*#\1#' <<<"$site"); prefix=$(sed -E 's#^[a-z]+://[^/]+##; s#/$##' <<<"$site"); }
+	else
+		say "  Website: no Caddy on this machine, not installed."
+	fi
+	maptiles=$(maptiles_package)
+	if [[ -n "$maptiles" ]]; then
+		ask "3D map (installs $maptiles)?" || maptiles=
+	fi
+	ask "Start?" || { say "Stopped: nothing changed."; exit 0; }
+
+	# The steps, one live line each, to the summary
+	((${#running[@]} == 0)) || steps+=(stop)
+	steps+=(import)
+	[[ -z "$maptiles" ]] || steps+=(map)
+	[[ -z "$site" ]] || steps+=(site)
+	for step in "${steps[@]}"; do
+		count=$((count + 1))
+		case $step in
+		stop) legacy_stop "${running[@]}" ;;
+		import)
+			local -a import=(import --robust "$robust" --apply --switch)
+			[[ "$ascii" == "$name" ]] || import+=(--grid-name "$ascii")
+			for file in "$@"; do import+=(--simulator "$file"); done
+			STEP_FROM=$(wc -c <"$(install_log)" | tr -d ' ')
+			run_step "[$count/${#steps[@]}] Migration" engine_counter as_root "$cli" "${import[@]}" || die "the migration of $nick stopped (log: $(install_log))"
+			done_line "Migrated and started: $nick"
+			;;
+		map)
+			run_step "[$count/${#steps[@]}] 3D map: $maptiles" - map_install "$nick" "$maptiles" || die "the 3D map could not be installed (log: $(install_log))"
+			done_line "3D map"
+			;;
+		site)
+			run_step "[$count/${#steps[@]}] Website: $host$prefix" - site_install "$nick" "$host" "$prefix" "$ascii" || die "the website could not be installed (log: $(install_log))"
+			done_line "Website"
+			;;
+		esac
+	done
+	migration_summary "$nick" "$site"
+	say "Old install  $(legacy_install), stopped, kept"
+}
+
+# Whether the website of a grid can be installed here: the site, and Caddy, the web server it is put beside a site of the host with
+website_possible() {
+	command -v w4os-site >/dev/null 2>&1 && command -v caddy >/dev/null 2>&1 && [[ -f /etc/caddy/Caddyfile ]]
+}
+
+# The package of the 3D map of the release of OpenSim of this machine, when it is available and not installed yet
+maptiles_package() {
+	local release
+	release=$(dpkg-query -W -f '${Package}\n' 'opensim-[0-9]*' 2>/dev/null | grep -E '^opensim-[0-9.]+$' | sort -V | tail -n 1)
+	[[ -n "$release" ]] || return 0
+	dpkg-query -W -f '${Status}' "$release-maptiles" 2>/dev/null | grep -q 'ok installed' && return 0
+	apt-cache show "$release-maptiles" >/dev/null 2>&1 && printf '%s\n' "$release-maptiles"
+	return 0
+}
+
+# The 3D map of a grid: its package, its module enabled, its simulators restarted to load it
+map_install() { # nick package
+	as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y "$2" &&
+		as_root "$cli" enable "$1" map-warp3d &&
+		as_root "$cli" restart "$1"
+}
+
+# The website of a grid: the engine API for the sites of this machine, the site connected to it, its Caddy file beside the site of
+# the host (never the host's own file)
+site_install() { # nick host prefix title
+	local api helpers
+	as_root "$cli" web "$1" api caddy --install || return
+	api=$(as_root "$cli" web "$1" api caddy | sed -n 's/.*api_url \(http:\/\/127\.0\.0\.1:[0-9]*\/api\).*/\1/p' | head -n 1)
+	helpers=$(as_root "$cli" web "$1" show | sed -n 's/^Helpers:[[:space:]]*//p' | head -n 1)
+	as_root w4os-site setup --grid "$1" --api "$api" --url "$helpers" --title "$4" </dev/null || return
+	as_root w4os-site web caddy --host "$2" ${3:+--prefix "$3"} --install
+}
+
+# What there is now, in a few lines: the grid, its login, its website and the way in of its owner when it has one, the passwords
+migration_summary() { # nick site
+	local grid
+	grid=$(as_root "$cli" api GET "/grids/$1" 2>/dev/null | jq -c '.data.attributes' 2>/dev/null) || grid='{}'
+	say ""
+	say "Grid       $(jq -r '.name // empty' <<<"$grid") ($1)"
+	say "Login      http://$(jq -r '.uri // empty' <<<"$grid")"
+	if [[ -n "$2" ]]; then
+		say "Website    $2"
+		say "Admin      ${2}login"
+	fi
+	! as_root test -f "$OPENSIM_RC_PATH" || say "Passwords  $OPENSIM_RC_PATH (root only)"
 }
 
 # The old instances that run these configs stopped, the simulators given first: each asked to end (SIGTERM, a Robust with a REST

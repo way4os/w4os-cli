@@ -178,6 +178,32 @@ function test_web_api_prints_the_pool_and_the_local_listener_of_the_engine_api()
 	assert_exec "'$OPENSIM' web tender_tern api lighttpd" --exit 2 --stderr-contains 'unknown web server'
 }
 
+function test_web_api_install_writes_the_pool_and_the_listener_beside_the_sites_never_the_caddyfile() {
+	make_test_grid
+	mkdir -p "$WORK/caddy/sites" "$WORK/php/8.4/fpm/pool.d" "$WORK/stubs"
+	printf 'import sites/*\n' >"$WORK/caddy/Caddyfile"
+	printf '#!/usr/bin/env bash\n[ -z "${CADDY_REFUSES:-}" ] || { echo refused; exit 1; }\n' >"$WORK/stubs/caddy"
+	printf '#!/usr/bin/env bash\necho "$*" >>"%s/reloads"\n' "$WORK" >"$WORK/stubs/systemctl"
+	chmod +x "$WORK/stubs/caddy" "$WORK/stubs/systemctl"
+	local caddyfile
+	caddyfile=$(cat "$WORK/caddy/Caddyfile")
+	assert_exec "env PATH='$WORK/stubs:$PATH' OPENSIM_CADDY_ETC='$WORK/caddy' OPENSIM_PHP_ETC='$WORK/php' OPENSIM_SYSTEMD=yes '$OPENSIM' web tender_tern api caddy --port 8781 --install" \
+		--stdout-contains 'Engine API: http://127.0.0.1:8781/api'
+	# The pool and the listener, without the instructions to copy them
+	assert_file_contains "$WORK/php/8.4/fpm/pool.d/w4os-api.conf" '[w4os-api]'
+	assert_not_contains 'Put it in' "$(cat "$WORK/php/8.4/fpm/pool.d/w4os-api.conf")"
+	assert_file_contains "$WORK/caddy/sites/tender_tern-api.w4os.caddyfile" 'http://127.0.0.1:8781 {'
+	assert_not_contains 'api-key create' "$(cat "$WORK/caddy/sites/tender_tern-api.w4os.caddyfile")"
+	assert_equals "$caddyfile" "$(cat "$WORK/caddy/Caddyfile")"
+	assert_contains 'reload php8.4-fpm' "$(cat "$WORK/reloads")"
+	assert_contains 'reload caddy' "$(cat "$WORK/reloads")"
+	# What Caddy refuses is taken back
+	rm "$WORK/caddy/sites/tender_tern-api.w4os.caddyfile"
+	assert_exec "env CADDY_REFUSES=1 PATH='$WORK/stubs:$PATH' OPENSIM_CADDY_ETC='$WORK/caddy' OPENSIM_PHP_ETC='$WORK/php' '$OPENSIM' web tender_tern api caddy --port 8781 --install" \
+		--exit 1 --stderr-contains 'refused'
+	assert_file_not_exists "$WORK/caddy/sites/tender_tern-api.w4os.caddyfile"
+}
+
 function test_web_set_writes_the_one_key_of_a_page_and_says_robust_must_restart() {
 	make_test_grid
 	assert_exec "'$OPENSIM' web tender_tern set search https://site.example.org/search" --stdout-contains 'restart Robust'
