@@ -224,11 +224,6 @@ function render(Status $status, array $modules = [], ?\W4OS\Engine\Runtime\Runti
         $text .= "$module is installed but not configured, off for: " . implode(', ', $names)
             . (strtolower($module) === 'gloebit' ? ' (set gloebitKey and gloebitSecret: opensim settings GRID economy)' : '') . "\n";
     }
-    foreach ($status->simpleMaps($account) as $grid => $simple) {
-        $text .= 'The simple map (MapImageModule) for: ' . implode(', ', $simple['simulators']) . '. The 3D map (Warp3D): '
-            . ($simple['remedy'] === null ? '' : "its core cannot write the tiles until {$simple['remedy']}, then ")
-            . "opensim enable $grid map-warp3d and opensim restart $grid\n";
-    }
 
     return $text;
 }

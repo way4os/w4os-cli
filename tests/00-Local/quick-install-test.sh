@@ -424,7 +424,7 @@ function test_dotnet_installer_installs_the_major_the_cores_target_beside_a_newe
 	assert_contains '--azure-feed https://builds.dotnet.microsoft.com/dotnet' "$output"
 }
 
-function test_confirmed_setup_ends_with_a_grid_summary() {
+function test_confirmed_setup_ends_with_the_summary_of_the_setup_alone() {
 	quick_install_load_library || return
 	local config="$WORK/Confirmed Setup.json"
 	cat >"$config" <<'JSON'
@@ -435,7 +435,10 @@ JSON
 	unset OPENSIM_SETUP_CONFIG_FILE
 	RUN_SETUP=yes
 	uname() { printf 'Darwin\n'; }
-	assert_exec '(end_installation)' --stdout-contains 'Installation completed' --stdout-contains 'Grid:       Test Grid' --stdout-contains 'Login URI:  http://grid.example.test:8123' --stdout-contains 'Avatar:     Ada Resident'
+	local said
+	said=$( (end_installation) 2>&1)
+	assert_not_contains "Setup summary" "$said"
+	assert_not_contains "Installation completed" "$said"
 }
 
 function test_cleanup_takes_out_the_web_server_configs_that_use_the_files_it_removes() {

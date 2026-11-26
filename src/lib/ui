@@ -307,6 +307,20 @@ ui_checks() {
 		done
 	else
 		[[ -n "$_u_text" ]] && printf '\n%s\n' "$_u_text" >&2
+		# The choices proposed on one line, kept with Enter; each asked only when the person chooses them
+		_u_picked=
+		for _u_n in "${_u_names[@]}"; do
+			_u_picked+="${_u_picked:+  }$([[ ${!_u_n} == yes ]] && echo '[x]' || echo '[ ]') ${LABEL[$_u_n]}"
+		done
+		printf '%s: %s\n' "$_u_title" "$_u_picked" >&2
+		while :; do
+			fe_read "Keep them? [Y] / choose [c]: " y || return 2
+			fe_special || return $?
+			case ${FE_ANSWER,,} in
+			'' | y | yes) return 0 ;;
+			c | choose) break ;;
+			esac
+		done
 		for _u_n in "${_u_names[@]}"; do
 			while :; do
 				fe_read "${LABEL[$_u_n]} [${!_u_n}]: " "${!_u_n}" || return 2

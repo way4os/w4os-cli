@@ -108,7 +108,7 @@ function setup_with_dialog() {
 function test_setup_screens_drawn_and_sent_back_filled() {
 	local out
 	engine_says "$MENU" "$FORM" "$CHECKS" "$REVIEW" "$QUIT"
-	out=$(setup_with 2 1 "My Island" 2 secret123 "" "" no "")
+	out=$(setup_with 2 1 "My Island" 2 secret123 "" c "" no "")
 	assert_contains "Grid name:  Amy" "$out"
 	assert_contains "Written in /etc/opensim/grids/amy." "$out"
 	# The first request asks for the first screen, the others carry the state of the screen before and its answers
@@ -340,16 +340,26 @@ function test_setup_screens_mark_unimplemented_options_properly() {
 function test_unimplemented_options_properly_marked_as_not_implemented() {
 	local out
 	engine_says "$CHECKS" "$ABORT"
-	out=$(setup_with "" "") || true
+	out=$(setup_with c "" "") || true
 	assert_contains "SSL (not implemented) [no]" "$out"
 	assert_contains "Hypergrid [yes]" "$out"
+}
+
+function test_the_options_are_shown_on_one_line_and_kept_with_enter() {
+	local out
+	engine_says "$CHECKS" "$ABORT"
+	out=$(setup_with "") || true
+	assert_contains "Options: [ ] SSL (not implemented)  [x] Hypergrid" "$out"
+	assert_contains "Keep them? [Y] / choose [c]:" "$out"
+	assert_not_contains "Hypergrid [yes]" "$out"
+	assert_equals '{"ssl":false,"hypergrid":true}' "$(request 2 '.answers | tojson')"
 }
 
 function test_a_name_of_the_engine_is_not_mistaken_for_a_name_of_variable() {
 	local out checks
 	checks=$(jq -c '.data.attributes.items += [{"name":"economy-gloebit","label":"Economy: Gloebit","checked":false,"note":""}]' <<<"$CHECKS")
 	engine_says "$checks" "$ABORT"
-	out=$(setup_with "" "" yes) || true
+	out=$(setup_with c "" "" yes) || true
 	assert_not_contains "variable" "$out"
 	assert_equals '{"ssl":false,"hypergrid":true,"economy-gloebit":true}' "$(request 2 '.answers | tojson')"
 }

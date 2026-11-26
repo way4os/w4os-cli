@@ -1128,29 +1128,10 @@ end_installation() {
 	if [[ "${RUN_SETUP:-}" =~ ^(yes|true|1)$ ]] || person_here; then
 		say ""
 		"$basedir/bin/opensim" "${setup_arguments[@]}" || die "the setup stopped (error $?)"
-		if [[ -n "$setup_config" && -r "$setup_config" ]]; then
-			print_setup_summary "$setup_config"
-		fi
 	else
 		done_line "Installed"
 	fi
 	exit 0
-}
-
-print_setup_summary() {
-	local config=$1 summary
-	[[ -r "$config" ]] || return 0
-	summary=$(jq -r '
-		.answers as $answers | .setup as $setup |
-		[
-			(if ($setup.grid.name // $answers.name // "") != "" then "Grid:       \($setup.grid.name // $answers.name)" else empty end),
-			(if ($setup.grid.hostname // $answers.login_uri // "") != "" then "Login URI:  \(if $setup.grid.hostname then "http://\($setup.grid.hostname):\($setup.grid.public_port // 8002)" else $answers.login_uri end)" else empty end),
-			(if ($answers.avatar // $setup.simulators[0].estate.owner // "") != "" then "Avatar:     \($answers.avatar // $setup.simulators[0].estate.owner)" else empty end)
-		] | .[]
-	' "$config") || return 0
-	[[ -n "$summary" ]] || return 0
-	say "Setup summary"
-	say "$summary"
 }
 
 phase_dotnet() {
