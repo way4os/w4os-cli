@@ -793,10 +793,12 @@ function test_a_migration_asks_everything_first_then_runs_the_import_with_the_na
 
 	said=$(legacy_after_install)
 
-	assert_same "import --robust $LEGACY_ROOT/etc/robust.d/W4osDemoGrid.ini --apply --switch --grid-name Kimbe Rouge --simulator $LEGACY_ROOT/etc/opensim.d/w4osdemogrid_welcome.ini" "$(cat "$WORK/opensim-calls")"
-	assert_contains '? Grid name "Kimbé Red" becomes "Kimbe Red" (viewers need ASCII). OK? [Y/n] ? Grid name: [Kimbe Red] ? Start? [Y/n]' "$(cat "$screen")"
+	# Written first, started last, once every step before it is done
+	assert_same "import --robust $LEGACY_ROOT/etc/robust.d/W4osDemoGrid.ini --apply --grid-name Kimbe Rouge --simulator $LEGACY_ROOT/etc/opensim.d/w4osdemogrid_welcome.ini
+import --robust $LEGACY_ROOT/etc/robust.d/W4osDemoGrid.ini --switch" "$(cat "$WORK/opensim-calls")"
+	assert_contains '? Grid name "Kimbé Red" becomes "Kimbe Red" (viewers need ASCII). OK? [Y/n] ? Grid name: ? Start? [Y/n]' "$(cat "$screen")"
 	assert_contains "✓ Old config readable (2 files)" "$said"
-	assert_contains "✓ Migrated and started: w4osdemogrid" "$said"
+	assert_contains "✓ Done" "$said"
 	assert_contains "Grid       Kimbe Red (w4osdemogrid)" "$said"
 	assert_contains "Login      http://kimbe.example:8002" "$said"
 	assert_contains "Old install  $LEGACY_ROOT, stopped, kept" "$said"
@@ -817,9 +819,11 @@ function test_a_migration_asks_the_website_address_then_keeps_it_with_the_grid_a
 
 	said=$(legacy_after_install)
 
-	assert_contains "--apply --switch --site https://kimbe.example/opensim/" "$(cat "$WORK/opensim-calls")"
-	assert_contains "site w4osdemogrid" "$(cat "$WORK/opensim-calls")"
-	assert_contains "? Website address: [https://kimbe.example/opensim/]" "$(cat "$screen")"
+	assert_contains "--apply --site https://kimbe.example/opensim/" "$(cat "$WORK/opensim-calls")"
+	# The website before the start, the last step
+	assert_contains $'site w4osdemogrid\nimport --robust '"$LEGACY_ROOT"'/etc/robust.d/W4osDemoGrid.ini --switch' "$(cat "$WORK/opensim-calls")"
+	# The address proposed in place (a terminal), kept with Enter here; no brackets
+	assert_contains "? Website address: ? Start? [Y/n]" "$(cat "$screen")"
 	assert_contains "Website    https://kimbe.example/opensim/" "$said"
 	assert_contains "Admin      https://kimbe.example/opensim/login" "$said"
 }
@@ -972,15 +976,52 @@ function test_a_website_is_done_whether_its_site_quotes_the_name_of_its_grid_or_
 	assert_same "yes yes no " "$seen"
 }
 
-function test_a_retry_of_a_migration_whose_grid_is_written_starts_it_and_imports_nothing_again() {
+function test_a_retry_of_a_migration_whose_grid_is_written_imports_nothing_again() {
 	quick_install_load_library || return
 	legacy_fixture
 	migration_stub
 	cli=$clone/bin/opensim
-	migration_run w4osdemogrid /old/Robust.HG.ini import --robust /old/Robust.HG.ini --apply --switch
+	migration_run w4osdemogrid /old/Robust.HG.ini import --robust /old/Robust.HG.ini --apply
 	: >"$WORK/here"
-	migration_run w4osdemogrid /old/Robust.HG.ini import --robust /old/Robust.HG.ini --apply --switch
+	migration_run w4osdemogrid /old/Robust.HG.ini import --robust /old/Robust.HG.ini --apply
 
-	assert_same "import --robust /old/Robust.HG.ini --apply --switch
-import --robust /old/Robust.HG.ini --switch" "$(cat "$WORK/opensim-calls")"
+	assert_same "import --robust /old/Robust.HG.ini --apply" "$(cat "$WORK/opensim-calls")"
+}
+
+function test_a_migration_sets_aside_before_its_start_only_a_unit_that_would_hide_the_kits() {
+	quick_install_load_library || return
+	legacy_fixture
+	as_root() { "$@"; }
+	LEGACY_MODE=migrate
+
+	legacy_gate >/dev/null
+	local cron_kept=no unit_aside=no
+	[[ -f "$LEGACY_CRON" ]] && cron_kept=yes
+	[[ -f "$WORK/systemd/opensim.service.w4os-disabled" ]] && unit_aside=yes
+	legacy_restore
+
+	# Its watchdog kept until the run stops it; only a unit named opensim, which would hide the kit's, set aside, and put back
+	assert_same "yes yes" "$cron_kept $unit_aside"
+	assert_file_exists "$WORK/systemd/opensim.service"
+}
+
+function test_a_website_that_fails_is_skipped_and_the_migration_ends_on_its_summary() {
+	quick_install_load_library || return
+	legacy_fixture
+	migration_stub
+	website_possible() { return 0; }
+	site_install() { return 1; }
+	LEGACY_MODE=migrate
+	local said answers=$WORK/answers screen=$WORK/screen
+	# The name, the address and the start kept, the website skipped
+	printf '\n\n\ns\n' >"$answers"
+	TTY_IN=$answers TTY_OUT=$screen TTY_OPEN= ASSUME_YES=
+
+	said=$(legacy_after_install)
+
+	assert_contains "[R]etry  [S]kip  [A]bort (R/s/a):" "$(cat "$screen")"
+	assert_contains "import --robust $LEGACY_ROOT/etc/robust.d/W4osDemoGrid.ini --switch" "$(cat "$WORK/opensim-calls")"
+	assert_contains "✓ Done" "$said"
+	assert_contains "Website    not installed (rerun to install it)" "$said"
+	assert_contains "Old install  $LEGACY_ROOT, stopped, kept" "$said"
 }

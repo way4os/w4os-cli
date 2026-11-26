@@ -318,7 +318,7 @@ install_log() {
 
 # A long step: the command writes into the log while the live line says the step, what it is at (COUNTER, a function that prints
 # it: 12/27 opensim-0.9.3.0) and the time; a failure says the log and asks to retry or to stop
-run_step() { # label counter|- command...
+run_step() { # label counter|- command... (RUN_STEP_SKIP: the step can be skipped)
 	local label=$1 counter=$2 started pid status at log
 	shift 2
 	log=$(install_log)
@@ -330,16 +330,21 @@ run_step() { # label counter|- command...
 			at=
 			[[ "$counter" == - ]] || at=$("$counter" 2>/dev/null) || at=
 			# The time spent shows it goes on; a counter, when there is one, says how far
-			live "$label${at:+: $at} · $(elapsed "$started")"
+			live "$label${at:+${label:+: }$at} · $(elapsed "$started")"
 			sleep 0.5
 		done
 		status=0
 		wait "$pid" || status=$?
 		((status != 0)) || return 0
-		failed_line "$label"
+		failed_line "${label:-$at}"
 		say "  Log: $log"
 		person_here || return "$status"
-		choose "[R]etry  [A]bort (R/a):" ra
+		# A step the run can go on without (RUN_STEP_SKIP): skipped, or the run stopped
+		if [[ -n "${RUN_STEP_SKIP:-}" ]]; then
+			choose "[R]etry  [S]kip  [A]bort (R/s/a):" rsa
+		else
+			choose "[R]etry  [A]bort (R/a):" ra
+		fi
 		[[ "$CHOICE" == r ]] || return "$status"
 	done
 }
@@ -1277,7 +1282,7 @@ legacy_summary() { # root
 # Migrated or run in place, its own start is set aside, renamed *.w4os-disabled (a cron of run-parts skips a name with a dot), so
 # that it never starts what the kit runs; beside it (a new grid), only a unit of its own named opensim, which would hide the kit's
 legacy_gate() {
-	local root starter set_aside=
+	local root
 	root=$(legacy_install)
 	[[ -n "$root" ]] || return 0
 	if [[ -z "$LEGACY_MODE" ]]; then
@@ -1294,14 +1299,42 @@ legacy_gate() {
 			;;
 		esac
 	fi
+	# A migration sets it aside in its run, after Start (Stop); before it, only a unit named opensim, which would hide the kit's
+	if [[ "$LEGACY_MODE" == migrate ]]; then
+		legacy_set_aside units
+	else
+		legacy_set_aside "$([[ "$LEGACY_MODE" == new ]] && echo units)"
+		[[ ${#LEGACY_SET_ASIDE[@]} -eq 0 ]] || done_line "Old install: its start at boot set aside"
+	fi
+}
+
+# The start at boot of the install of before the kit set aside (renamed *.w4os-disabled), all of it or only its units named opensim
+# (units), each kept in LEGACY_SET_ASIDE for legacy_restore
+LEGACY_SET_ASIDE=()
+legacy_set_aside() { # [units]
+	local starter
 	while IFS= read -r starter; do
 		[[ -n "$starter" ]] || continue
-		[[ "$LEGACY_MODE" != new || "$starter" == */opensim.service || "$starter" == */init.d/opensim ]] || continue
+		[[ "${1:-}" != units || "$starter" == */opensim.service || "$starter" == */init.d/opensim ]] || continue
 		as_root mv -- "$starter" "$starter.w4os-disabled" || die "could not set aside $starter"
-		set_aside=yes
+		LEGACY_SET_ASIDE+=("$starter")
 	done < <(legacy_starters)
 	[[ ! -d /run/systemd/system ]] || as_root systemctl daemon-reload || true
-	[[ -z "$set_aside" ]] || done_line "Old install: its start at boot set aside"
+}
+
+# What legacy_set_aside set aside put back: an abort before the start changes nothing
+legacy_restore() {
+	local starter
+	for starter in "${LEGACY_SET_ASIDE[@]}"; do
+		as_root mv -- "$starter.w4os-disabled" "$starter" || true
+	done
+	LEGACY_SET_ASIDE=()
+	[[ ! -d /run/systemd/system ]] || as_root systemctl daemon-reload || true
+}
+
+# A size of du (kilobytes) as a person reads it: 412 MB, 11 GB
+human_size() { # kilobytes
+	awk -v k="$1" 'BEGIN { if (k >= 1048576) printf "%.0f GB", k / 1048576; else if (k >= 1024) printf "%.0f MB", k / 1024; else printf "%d KB", k }'
 }
 
 # The configs of the install of before the kit: its Robusts, its simulators (one a line, by kind)
@@ -1347,6 +1380,7 @@ legacy_after_install() {
 	# most; found by the config it runs, by the path given or the one it leads to (a link of robust.d to the file of its grid)
 	local down
 	legacy_stop "${simulators[@]}" "${robusts[@]}"
+	done_line "Old instances stopped ($((${#simulators[@]} + ${#robusts[@]})))"
 	[[ ! -d /run/systemd/system ]] || run_step "Start under the kit" - as_root systemctl restart opensim || die "opensim.service did not start"
 	# Said to run only once each instance of the grid does
 	down=$("$cli" status 2>/dev/null | awk -v nick="$nick" '($1 == nick || index($1, nick ".") == 1) && $3 == "[down]" { print $1 }')
@@ -1361,9 +1395,15 @@ ask_text() { # "question" default
 	person_here || return 0
 	live_clear
 	[[ -n "${TTY_OPEN:-}" ]] || { exec 8<"$TTY_IN" && TTY_OPEN=yes; }
-	printf '? %s %s' "$1" "${2:+[$2] }" >>"$TTY_OUT"
-	IFS= read -r -u 8 answer || return 0
-	[[ -z "$answer" ]] || ANSWER=$answer
+	# At a terminal the value is proposed in place, to change or keep; elsewhere (a script, the tests) an empty line keeps it
+	if [[ -t 8 ]]; then
+		IFS= read -e -r -i "$2" -p "? $1 " answer <&8 2>>"$TTY_OUT" || return 0
+		ANSWER=$answer
+	else
+		printf '? %s ' "$1" >>"$TTY_OUT"
+		IFS= read -r -u 8 answer || return 0
+		[[ -z "$answer" ]] || ANSWER=$answer
+	fi
 }
 
 # The grid of an install of before the kit migrated here: what is checked, every question, one "Start?", then the steps to the
@@ -1417,22 +1457,23 @@ migrate_grid() { # robust config, simulator configs...
 		jq -r '.problems | to_entries[] | "✗ \(.key): \(.value)"' <<<"$plan"
 		die "the migration of $nick cannot be done as it is"
 	fi
-	data=$(jq -r '[(.data // [])[].from] | .[]' <<<"$plan" | while IFS= read -r file; do as_root du -sk "$file" 2>/dev/null; done | awk '{ k += $1 } END { printf "%.1f", k / 1048576 }')
+	data=$(jq -r '[(.data // [])[].from] | .[]' <<<"$plan" | while IFS= read -r file; do as_root du -sk "$file" 2>/dev/null; done | awk '{ k += $1 } END { print k + 0 }')
 	free=$(df -Pk /var/lib 2>/dev/null | awk 'NR == 2 { printf "%.0f", $4 / 1048576 }')
-	done_line "Disk: ${free:-?} GB free, data ${data:-0} GB$(jq -r 'if ((.data // []) | any(.acrossFilesystems)) then ", copied" else ", same disk (moved)" end' <<<"$plan")"
+	done_line "Disk: ${free:-?} GB free, data $(human_size "${data:-0}")$(jq -r 'if ((.data // []) | length) == 0 then "" elif ((.data // []) | any(.acrossFilesystems)) then ", another disk (copied)" else ", same disk (moved, not copied)" end' <<<"$plan")"
 	for file in "$@" "$robust"; do
 		[[ -z "$(legacy_pids "$file")" ]] || running+=("$file")
 	done
 	done_line "Ports $(jq -r '"\(.ports.public) \(.ports.private)"' <<<"$plan") free once the old instances stop"
 
-	# Every question, then one start
+	# Every question, then the review of what is set without asking, then one start
 	if ((${#running[@]})); then
 		say "  The old instances run: $(for file in "${running[@]}"; do basename "$file" .ini; done | paste -sd, - | sed 's/,/, /g')."
-		if ! ask "Stop them now?"; then
+		if ! ask "Stop them now (their start at boot set aside)?"; then
 			say "  The migration needs the old instances stopped (same ports, same database)."
 			choose "[I]n place  [A]bort (I/a):" ia
-			[[ "$CHOICE" == i ]] || { say "Stopped: nothing changed."; exit 0; }
+			[[ "$CHOICE" == i ]] || { legacy_restore; say "Stopped: nothing changed."; exit 0; }
 			LEGACY_MODE=in-place
+			legacy_set_aside
 			legacy_after_install
 			exit 0
 		fi
@@ -1443,19 +1484,12 @@ migrate_grid() { # robust config, simulator configs...
 		local original
 		original=$(jq -r '(.gridInfo // [])[] | select(test("^\\[GridInfoService\\] gridname ")) | capture("gridname .(?<from>.*). -> ").from' <<<"$plan")
 		if ! ask "Grid name \"$original\" becomes \"$name\" (viewers need ASCII). OK?"; then
-			while :; do
-				ask_text "Grid name:" "$name"
-				LC_ALL=C grep -q '[^ -~]' <<<"$ANSWER" || break
-				say "  ASCII only."
-			done
-			ascii=$ANSWER
+			ascii=$(ascii_name "$name")
 		fi
 	fi
 	if website_possible; then
 		ask_text "Website address:" "$(jq -r '.site // empty' <<<"$plan")"
-		site=$ANSWER
-		[[ -z "$site" ]] || { site=${site%/}/; host=$(sed -E 's#^[a-z]+://([^/:]+).*#\1#' <<<"$site"); prefix=$(sed -E 's#^[a-z]+://[^/]+##; s#/$##' <<<"$site"); }
-		[[ -z "$site" ]] || apache_consent "$site" || site=
+		site_set "$ANSWER"
 	else
 		say "  Website: no Caddy nor Apache on this machine, not installed."
 	fi
@@ -1463,49 +1497,141 @@ migrate_grid() { # robust config, simulator configs...
 	if [[ -n "$maptiles" ]]; then
 		ask "3D map (installs $maptiles)?" || maptiles=
 	fi
-	ask "Start?" || { say "Stopped: nothing changed."; exit 0; }
+	migration_review "$nick" "$plan" "$data" "${#running[@]}" || { legacy_restore; say "Stopped: nothing changed."; exit 0; }
 
-	# The steps, one live line each, to the summary
-	((${#running[@]} == 0)) || steps+=(stop)
-	steps+=(import)
-	[[ -z "$maptiles" ]] || steps+=(map)
-	[[ -z "$site" ]] || steps+=(site)
-	for step in "${steps[@]}"; do
-		count=$((count + 1))
-		case $step in
-		stop) legacy_stop "${running[@]}" ;;
-		import)
-			local -a import=(import --robust "$robust" --apply --switch)
-			[[ "$ascii" == "$name" ]] || import+=(--grid-name "$ascii")
-			[[ -z "$site" ]] || import+=(--site "$site")
-			for file in "$@"; do import+=(--simulator "$file"); done
-			STEP_FROM=$(wc -c <"$(install_log)" | tr -d ' ')
-			run_step "[$count/${#steps[@]}] Migration" engine_counter migration_run "$nick" "$robust" "${import[@]}" || die "the migration of $nick stopped (log: $(install_log))"
-			done_line "Migrated and started: $nick"
-			;;
-		map)
-			run_step "[$count/${#steps[@]}] 3D map: $maptiles" - map_install "$nick" "$maptiles" || die "the 3D map could not be installed (log: $(install_log))"
-			done_line "3D map"
-			;;
-		site)
-			run_step "[$count/${#steps[@]}] Website: $host$prefix" - site_install "$nick" || die "the website could not be installed (log: $(install_log))"
-			done_line "Website"
-			;;
-		esac
-	done
-	migration_summary "$nick" "$site"
+	# The steps of the run, one live line each ("[k/n] step: item"), then the summary
+	((${#running[@]} == 0)) || steps+=(Stop)
+	steps+=(Backup Config Data Ownership)
+	[[ -z "$maptiles" ]] || steps+=("3D map")
+	[[ -z "$site" ]] || steps+=(Website)
+	steps+=(Start)
+	MIGRATION_STEPS=$(printf '%s\n' "${steps[@]}")
+	if ((${#running[@]})); then
+		live "$(step_label Stop): $(basename "${running[0]}" .ini) (1/${#running[@]})"
+		legacy_set_aside
+		legacy_stop "${running[@]}"
+	fi
+	local -a import=(import --robust "$robust" --apply)
+	[[ "$ascii" == "$name" ]] || import+=(--grid-name "$ascii")
+	[[ -z "$site" ]] || import+=(--site "$site")
+	for file in "$@"; do import+=(--simulator "$file"); done
+	STEP_FROM=$(wc -c <"$(install_log)" | tr -d ' ')
+	run_step "" migration_counter migration_run "$nick" "$robust" "${import[@]}" || die "the migration of $nick stopped (log: $(install_log)): the old install is kept"
+	local website_left=
+	if [[ -n "$maptiles" ]]; then
+		RUN_STEP_SKIP=yes run_step "$(step_label "3D map"): $maptiles" - map_install "$nick" "$maptiles" || say "  3D map: not installed (rerun to install it)."
+	fi
+	if [[ -n "$site" ]]; then
+		RUN_STEP_SKIP=yes run_step "$(step_label Website): $host$prefix" - site_install "$nick" || website_left=yes
+	fi
+	STEP_FROM=$(wc -c <"$(install_log)" | tr -d ' ')
+	run_step "" migration_counter as_root "$cli" import --robust "$robust" --switch || die "$nick is migrated, its start failed (log: $(install_log)): opensim start $nick once the cause is fixed"
+	done_line "Done"
+	migration_summary "$nick" "$site" "$website_left"
 	say "Old install  $(legacy_install), stopped, kept"
 }
 
-# The import of a migration, or once its grid is written here (a retry after a start that failed), its start alone
+# The number of a step of the run of a migration, by its name: "[k/n] Name" (MIGRATION_STEPS, one a line)
+step_label() { # name
+	local k
+	k=$(grep -nxF -- "$1" <<<"${MIGRATION_STEPS:-}" | cut -d: -f1 | head -n 1)
+	[[ -n "$k" ]] || { printf '%s' "$1"; return 0; }
+	printf '[%s/%s] %s' "$k" "$(grep -c . <<<"$MIGRATION_STEPS")" "$1"
+}
+
+# What a migration is at, for the live line: the last step the engine said in place, numbered among the steps of the run (Backup,
+# Config, Data, Start), the account of the instances given what it brought (Ownership)
+migration_counter() {
+	local line name
+	line=$(engine_counter)
+	[[ -n "$line" ]] || return 0
+	name=${line%%:*}
+	[[ "$line" != Giving* ]] || { name=Ownership line="Ownership: ${line#Giving }"; line=${line% to *}; }
+	grep -qxF -- "$name" <<<"$MIGRATION_STEPS" || { printf '%s' "$line"; return 0; }
+	printf '[%s/%s] %s' "$(grep -nxF -- "$name" <<<"$MIGRATION_STEPS" | cut -d: -f1 | head -n 1)" "$(grep -c . <<<"$MIGRATION_STEPS")" "$line"
+}
+
+# The name of the grid in ASCII, as the person gives it
+ascii_name() { # proposed
+	local name=$1
+	while :; do
+		ask_text "Grid name:" "$name"
+		LC_ALL=C grep -q '[^ -~]' <<<"$ANSWER" || break
+		say "  ASCII only."
+	done
+	printf '%s' "$ANSWER"
+}
+
+# The website of the migrated grid at an address, its line in Apache asked: site, host and prefix, all empty for none
+site_set() { # address
+	site=$1 host= prefix=
+	[[ -z "$site" ]] || { site=${site%/}/; host=$(sed -E 's#^[a-z]+://([^/:]+).*#\1#' <<<"$site"); prefix=$(sed -E 's#^[a-z]+://[^/]+##; s#/$##' <<<"$site"); }
+	[[ -z "$site" ]] || apache_consent "$site" || site= host= prefix=
+}
+
+# The review of a migration: what it takes from the old install and what it sets without a question, each line changed there (the
+# name, the website, the 3D map), then Start; 1 when the person does not start
+migration_review() { # nick, plan, data, running instances
+	local nick=$1 plan=$2 data=$3 running=$4 rows lib field value
+	lib=$(dirname "$cli")/../src/lib/ui
+	[[ -r "$lib" ]] || { ask "Start?"; return; }
+	# shellcheck disable=SC1090
+	source "$lib"
+	while :; do
+		rows=$(migration_rows "$nick" "$plan" "$data" "$running")
+		local status=0
+		if person_here; then
+			if [[ -t 8 ]]; then
+				OPENSIM_SETUP_UI=plain FE_TTY=$TTY_IN ui_review "Review" "" "$rows" 2>>"$TTY_OUT" || status=$?
+			else
+				OPENSIM_SETUP_UI=plain FE_INPUT_FD=8 ui_review "Review" "" "$rows" 2>>"$TTY_OUT" || status=$?
+			fi
+		fi
+		case $status in
+		0) return 0 ;;
+		4)
+			field=$(jq -r 'keys[0]' <<<"$REVIEW_EDITS")
+			value=$(jq -r '.[]' <<<"$REVIEW_EDITS")
+			case $field in
+			name) LC_ALL=C grep -q '[^ -~]' <<<"$value" && say "  ASCII only." || ascii=$value ;;
+			website) site_set "$value" ;;
+			maptiles) [[ "$value" == yes ]] && maptiles=$(maptiles_package) || maptiles= ;;
+			esac
+			;;
+		*) return 1 ;;
+		esac
+	done
+}
+
+# The lines of the review of a migration (section, label, value, name, current, options; separated by the unit separator)
+migration_rows() { # nick, plan, data, running instances
+	local nick=$1 plan=$2 data=$3 running=$4 us=$'\x1f' onoff='{"yes":"on","no":"off"}'
+	printf '%s\n' "Grid${us}Name${us}$ascii ($nick)${us}name${us}$ascii"
+	printf '%s\n' "Grid${us}Login${us}$(jq -r '"\(.ports.public)"' <<<"$plan" | sed "s#^#$(legacy_host "$plan"):#")"
+	printf '%s\n' "Web${us}Website${us}${site:-none}${us}website${us}$site"
+	jq -r --arg us "$us" '(.data // [])[] | "Data\($us)\(.from | split("/") | last)\($us)\(if .acrossFilesystems then "copied" else "moved" end) to \(.to)"' <<<"$plan"
+	printf '%s\n' "Data${us}Databases${us}kept: $(jq -r '[.database.name] + [(.simulators.imports // [])[]? | .database.name? // empty] | map(select(. != null)) | unique | join(", ")' <<<"$plan" 2>/dev/null || jq -r '.database.name' <<<"$plan")"
+	jq -r --arg us "$us" '(.dropped // [])[] | select(.reason == "corrected") | "Corrected from the old install\($us)\(.key)\($us)\(.value) → the value the kit needs"' <<<"$plan"
+	[[ -z "$(maptiles_package)" ]] || printf '%s\n' "Options${us}3D map${us}$([[ -n "$maptiles" ]] && echo on || echo off)${us}maptiles${us}$([[ -n "$maptiles" ]] && echo yes || echo no)${us}$onoff"
+	((running == 0)) || printf '%s\n' "Old install${us}Instances${us}stopped, their start at boot set aside"
+	printf '%s\n' "Old install${us}Folder${us}$(legacy_install), kept"
+}
+
+# The host of the login of a migrated grid, as its plan says it (its Robust config), else this machine
+legacy_host() { # plan
+	local host
+	host=$(jq -r '.login // .host // empty' <<<"$1" 2>/dev/null)
+	[[ -n "$host" ]] || host=$(sed -nE 's/^[[:space:]]*BaseHostname[[:space:]]*=[[:space:]]*"?([^";[:space:]]+).*/\1/p' "$(legacy_configs robust | head -n 1)" 2>/dev/null | head -n 1)
+	printf '%s' "${host:-localhost}"
+}
+
+# The import of a migration (written, not started: its start is the last step), nothing once its grid is written here (a retry
+# after a step that failed past it)
 migration_run() { # nick, robust config, import arguments...
-	local nick=$1 robust=$2
+	local nick=$1
 	shift 2
-	if as_root "$cli" api GET "/grids/$nick" 2>/dev/null | jq -e '.data.attributes' >/dev/null 2>&1; then
-		as_root "$cli" import --robust "$robust" --switch
-	else
-		as_root "$cli" "$@"
-	fi
+	as_root "$cli" api GET "/grids/$nick" 2>/dev/null | jq -e '.data.attributes' >/dev/null 2>&1 && return 0
+	as_root "$cli" "$@"
 }
 
 # Whether the website of a grid can be installed here: the site, and Caddy, the web server it is put beside a site of the host with
@@ -1577,13 +1703,15 @@ grids_here() { # basedir
 }
 
 # What there is now, in a few lines: the grid, its login, its website and the way in of its owner when it has one, the passwords
-migration_summary() { # nick site
+migration_summary() { # nick site [left: the website was not installed]
 	local grid
 	grid=$(as_root "$cli" api GET "/grids/$1" 2>/dev/null | jq -c '.data.attributes' 2>/dev/null) || grid='{}'
 	say ""
 	say "Grid       $(jq -r '.name // empty' <<<"$grid") ($1)"
 	say "Login      http://$(jq -r '.uri // empty' <<<"$grid")"
-	if [[ -n "$2" ]]; then
+	if [[ -n "$2" && -n "${3:-}" ]]; then
+		say "Website    not installed (rerun to install it)"
+	elif [[ -n "$2" ]]; then
 		say "Website    $2"
 		say "Admin      ${2}login"
 	fi
@@ -1593,17 +1721,17 @@ migration_summary() { # nick site
 # The old instances that run these configs stopped, the simulators given first: each asked to end (SIGTERM, a Robust with a REST
 # console has no screen), a minute each at most
 legacy_stop() { # config...
-	local file pid count=0
+	local file pid count=0 started=$SECONDS
 	for file in "$@"; do
 		count=$((count + 1))
-		live "Stop: $(basename "$file" .ini) ($count/$#)"
+		live "$(step_label Stop): $(basename "$file" .ini) ($count/$#) · $(elapsed "$started")"
 		for pid in $(legacy_pids "$file"); do
 			as_root kill -TERM "$pid" 2>/dev/null || continue
 			for _ in $(seq 1 60); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
 			! kill -0 "$pid" 2>/dev/null || die "process $pid ($file) did not stop"
 		done
 	done
-	done_line "Old instances stopped ($#)"
+	live_clear
 }
 
 # What the engine is at, the last line it said in place since the step started ("opensim: ~[3/6] Data"), for the live line
