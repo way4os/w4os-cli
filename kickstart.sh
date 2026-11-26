@@ -1149,7 +1149,8 @@ end_installation() {
 		before=$(grids_here "$basedir")
 		# The summary of the setup said last, after the website of the grid it made
 		end=$(mktemp) && chmod 666 "$end"
-		OPENSIM_SETUP_END=$end "$basedir/bin/opensim" "${setup_arguments[@]}" || die "the setup stopped (error $?)"
+		# Its questions as lines, like the ones of the installer before them (OPENSIM_SETUP_UI=dialog for the screens of dialog)
+		OPENSIM_SETUP_UI=${OPENSIM_SETUP_UI:-plain} OPENSIM_SETUP_END=$end "$basedir/bin/opensim" "${setup_arguments[@]}" || die "the setup stopped (error $?)"
 		for nick in $(comm -13 <(printf '%s\n' "$before") <(grids_here "$basedir")); do
 			cli=$basedir/bin/opensim
 			site=$(as_root "$cli" api GET "/grids/$nick" 2>/dev/null | jq -r '.data.attributes.site // empty' 2>/dev/null)
@@ -1523,8 +1524,9 @@ map_install() { # nick package
 # the host (never the host's own file)
 # Whether the website of a grid is installed: the site connected to it, and its file in the web server
 site_done() { # nick
-	grep -qx "grid: $1" "${W4OS_SITE_ROOT:-/var/lib/w4os/www}/user/config/plugins/w4os.yaml" 2>/dev/null &&
-		{ ls /etc/caddy/sites/*.w4os.* 2>/dev/null | grep -qv -- '-api\.w4os\.' || [[ -e /etc/apache2/conf-enabled/w4os-site.conf ]]; }
+	# The grid the site is connected to, as its YAML writes it (grid: 'kimbe_test', or bare)
+	grep -qxE "grid: ['\"]?$1['\"]?" "${W4OS_SITE_ROOT:-/var/lib/w4os/www}/user/config/plugins/w4os.yaml" 2>/dev/null &&
+		{ ls "${OPENSIM_CADDY_ETC:-/etc/caddy}"/sites/*.w4os.* 2>/dev/null | grep -qv -- '-api\.w4os\.' || [[ -e /etc/apache2/conf-enabled/w4os-site.conf ]]; }
 }
 
 site_install() { # nick

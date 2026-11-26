@@ -955,3 +955,15 @@ function test_the_packages_being_installed_are_counted_from_what_dpkg_says() {
 
 	assert_same "1/3 b" "$(packages_counter)"
 }
+
+function test_a_website_is_done_whether_its_site_quotes_the_name_of_its_grid_or_not() {
+	quick_install_load_library || return
+	local root=$WORK/site seen=
+	mkdir -p "$root/user/config/plugins" "$WORK/caddy/sites"
+	: >"$WORK/caddy/sites/kimbe.example.w4os.caddyfile"
+	for line in "grid: 'kimbe_test'" "grid: kimbe_test" "grid: 'other'"; do
+		printf '%s\n' "$line" >"$root/user/config/plugins/w4os.yaml"
+		W4OS_SITE_ROOT=$root OPENSIM_CADDY_ETC=$WORK/caddy site_done kimbe_test && seen+="yes " || seen+="no "
+	done
+	assert_same "yes yes no " "$seen"
+}

@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- fix (kickstart): the setup asked as lines, like the rest of the run; a website seen done when its site quotes its grid
 - fix (setup): the live line says each step as [k/n] step: item · time, no spinner, no stray ~; options one space apart
 - change (setup): beside Apache, the line of the website in its sites asked in the review, before Start
 - change (setup): the review changed line by line, then ? Start? [Y/n]; one question asked as one; the run as one live line
