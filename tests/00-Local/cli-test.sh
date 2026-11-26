@@ -201,7 +201,8 @@ function test_web_api_install_writes_the_pool_and_the_listener_beside_the_sites_
 	assert_file_contains "$WORK/caddy/sites/tender_tern-api.w4os.caddyfile" 'http://127.0.0.1:8781 {'
 	assert_not_contains 'api-key create' "$(cat "$WORK/caddy/sites/tender_tern-api.w4os.caddyfile")"
 	assert_equals "$caddyfile" "$(cat "$WORK/caddy/Caddyfile")"
-	assert_contains 'reload php8.4-fpm' "$(cat "$WORK/reloads")"
+	# The pools written anew: PHP-FPM restarted, its sockets made again with their group
+	assert_contains 'restart php8.4-fpm' "$(cat "$WORK/reloads")"
 	assert_contains 'reload caddy' "$(cat "$WORK/reloads")"
 	# An API that does not answer once installed (no pool, 502): said
 	assert_exec "env API_DOWN=1 PATH='$WORK/stubs:$PATH' OPENSIM_CADDY_ETC='$WORK/caddy' OPENSIM_PHP_ETC='$WORK/php' OPENSIM_SYSTEMD=yes '$OPENSIM' web tender_tern api caddy --port 8781 --install" \
@@ -213,6 +214,19 @@ function test_web_api_install_writes_the_pool_and_the_listener_beside_the_sites_
 	assert_exec "env CADDY_REFUSES=1 PATH='$WORK/stubs:$PATH' OPENSIM_CADDY_ETC='$WORK/caddy' OPENSIM_PHP_ETC='$WORK/php' '$OPENSIM' web tender_tern api caddy --port 8781 --install" \
 		--exit 1 --stderr-contains 'refused'
 	assert_file_not_exists "$WORK/caddy/sites/tender_tern-api.w4os.caddyfile"
+}
+
+function test_web_api_install_gives_the_sockets_to_the_group_apache_runs_as() {
+	make_test_grid
+	mkdir -p "$WORK/apache/conf-available" "$WORK/php/8.4/fpm/pool.d" "$WORK/stubs"
+	printf 'export APACHE_RUN_USER=magic\nexport APACHE_RUN_GROUP=magic\n' >"$WORK/apache/envvars"
+	for stub in a2enmod a2enconf a2disconf apache2ctl systemctl; do printf '#!/usr/bin/env bash\nexit 0\n' >"$WORK/stubs/$stub"; done
+	printf '#!/usr/bin/env bash\nprintf 401\n' >"$WORK/stubs/curl"
+	chmod +x "$WORK"/stubs/*
+	assert_exec "env PATH='$WORK/stubs:$PATH' OPENSIM_APACHE_ETC='$WORK/apache' OPENSIM_PHP_ETC='$WORK/php' OPENSIM_SYSTEMD=yes '$OPENSIM' web tender_tern api apache --port 8781 --install" \
+		--stdout-contains 'Engine API: http://127.0.0.1:8781/api'
+	assert_file_contains "$WORK/php/8.4/fpm/pool.d/w4os-api.conf" 'listen.group = magic'
+	assert_file_contains "$WORK/php/8.4/fpm/pool.d/w4os-helpers.conf" 'listen.group = magic'
 }
 
 function test_web_set_writes_the_one_key_of_a_page_and_says_robust_must_restart() {

@@ -44,7 +44,7 @@ install_api() { # grid, then the options of web (api caddy|apache)
 	esac
 	mkdir -p "$dir" || die "cannot write in $dir: run it as root (sudo)"
 	# The pools of the suite, the API's and the helpers', written by the engine; their sockets for the group of the web server
-	written=$(W4OS_PHP_ETC=$php php "$(dirname "$OPENSIM_API")/opensim-pools.php" --web-group "${group:-$([[ "$server" == caddy ]] && echo caddy || echo www-data)}") ||
+	written=$(W4OS_PHP_ETC=$php php "$(dirname "$OPENSIM_API")/opensim-pools.php" --web-group "${group:-$(web_group "$server")}") ||
 		die "cannot write the pools of PHP-FPM in $pools: run it as root (sudo)"
 	{
 		echo "# The engine API of the grid $grid, for the sites of this machine only (opensim web $grid api $server --install)"
@@ -66,7 +66,9 @@ install_api() { # grid, then the options of web (api caddy|apache)
 		api="http://$(sed -n 's/^Listen \(127\.0\.0\.1:[0-9]*\)$/\1/p' "$file")/api"
 	fi
 	if [[ -d /run/systemd/system || -n "${OPENSIM_SYSTEMD:-}" ]]; then
-		systemctl reload "php$version-fpm" || systemctl restart "php$version-fpm" || die "php$version-fpm did not take the pools in $pools"
+		# A pool written anew is restarted: a reload keeps the sockets PHP-FPM has open, with their owner and group of before
+		if [[ -n "$written" ]]; then systemctl restart "php$version-fpm"; else systemctl reload "php$version-fpm" || systemctl restart "php$version-fpm"; fi ||
+			die "php$version-fpm did not take the pools in $pools"
 		if [[ "$server" == caddy ]]; then systemctl reload caddy; else systemctl reload apache2; fi || die "the web server did not reload with $file"
 	else
 		# Without systemd (a container): the running ones told to read their config again
@@ -85,6 +87,17 @@ install_api() { # grid, then the options of web (api caddy|apache)
 	done
 	[[ "$code" != 000 && "$code" != 502 && "$code" != 503 ]] || die "the engine API does not answer at $api (HTTP $code): see the log of php$version-fpm"
 	say "✓ Engine API: $api"
+}
+
+# The group the web server runs as, the one that reaches the sockets of the pools: Apache's of its envvars, caddy for Caddy
+web_group() { # server
+	local group=
+	if [[ "$1" == apache ]]; then
+		group=$(sed -nE 's/^[[:space:]]*export[[:space:]]+APACHE_RUN_GROUP=["\x27]?([^"\x27[:space:]]+).*/\1/p' "${OPENSIM_APACHE_ETC:-/etc/apache2}/envvars" 2>/dev/null | tail -n 1)
+		[[ "$group" != *'$'* ]] || group=
+	fi
+	[[ -n "$group" ]] || group=$([[ "$1" == caddy ]] && echo caddy || echo www-data)
+	echo "$group"
 }
 
 # The web server the sites of this machine are served by: Caddy, else Apache (the one that runs, its config there)
