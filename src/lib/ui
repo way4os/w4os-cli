@@ -179,6 +179,14 @@ ui_form_plain() {
 	shift 2
 	local _u_names=("$@")
 	[[ -n "$_u_text" ]] && printf '\n%s\n' "$_u_text" >&2
+	# One question alone is asked as one, its proposal ready to be kept with Enter or changed
+	_u_n=${_u_names[0]}
+	if ((${#_u_names[@]} == 1)) && [[ -z "${OPTIONS[$_u_n]:-}" && -z "${SECRET[$_u_n]:-}" && -z "${READONLY[$_u_n]:-}" ]]; then
+		fe_read "? ${LABEL[$_u_n]}: " "${!_u_n}" || return 2
+		fe_special || return $?
+		printf -v "$_u_n" '%s' "$FE_ANSWER"
+		return 0
+	fi
 	while :; do
 		printf '\n%s\n' "$_u_title" >&2
 		for _u_i in "${!_u_names[@]}"; do
@@ -312,9 +320,8 @@ ui_checks() {
 		for _u_n in "${_u_names[@]}"; do
 			_u_picked+="${_u_picked:+  }$([[ ${!_u_n} == yes ]] && echo '[x]' || echo '[ ]') ${LABEL[$_u_n]}"
 		done
-		printf '%s: %s\n' "$_u_title" "$_u_picked" >&2
 		while :; do
-			fe_read "Keep them? [Y] / choose [c]: " y || return 2
+			fe_read "? $_u_title (Enter keeps them, c to choose): $_u_picked " '' || return 2
 			fe_special || return $?
 			case ${FE_ANSWER,,} in
 			'' | y | yes) return 0 ;;
@@ -336,21 +343,28 @@ ui_checks() {
 	fi
 }
 
-# ui_review "Title" "Text" "ROWS": what the setup stands for, to confirm. ROWS is the lines section, label, value separated by the unit separator (an empty value stays one). In dialog
-# a list that scrolls, in plain text the list and a question.
+# ui_review "Title" "Text" "ROWS": what the setup stands for, to confirm and to change. ROWS is the lines section, label, value, name,
+# current value, options (JSON) separated by the unit separator; a line with a name is changed as in a form: REVIEW_EDITS then holds
+# the change (JSON) and the status is 4, for the engine to check it and show the review again. Enter asks Start; no goes back to the
+# list. In dialog a list that scrolls, to confirm only.
 ui_review() {
-	local _u_title=$1 _u_text_above=$2 _u_rows=$3 _u_section _u_label _u_value _u_previous= _u_items=() _u_n=0 _u_height _u_lines _u_above _u_text=
+	local _u_title=$1 _u_text_above=$2 _u_rows=$3 _u_section _u_label _u_value _u_name _u_current _u_options _u_previous= _u_items=() _u_n=0
+	local _u_height _u_lines _u_above _u_text= _u_i _u_names=() _u_currents=() _u_labels=() _u_choices=() _u_key _u_choice
+	REVIEW_EDITS='{}'
 	fe_choose_ui
-	while IFS=$'\x1f' read -r _u_section _u_label _u_value; do
+	while IFS=$'\x1f' read -r _u_section _u_label _u_value _u_name _u_current _u_options; do
 		[[ -z "$_u_section" ]] && continue
 		if [[ "$_u_section" != "$_u_previous" ]]; then
-			_u_text+="${_u_previous:+$'\n'}"
 			_u_items+=("h$((++_u_n))" "-- ${_u_section^} --")
-			_u_text+="* ${_u_section^}"$'\n'
+			_u_text+="  ${_u_section^}"$'\n'
 			_u_previous=$_u_section
 		fi
+		_u_names+=("$_u_name")
+		_u_currents+=("$_u_current")
+		_u_labels+=("$_u_label")
+		_u_choices+=("$_u_options")
 		_u_items+=("r$((++_u_n))" "$_u_label: $_u_value")
-		_u_text+="* $_u_label: $_u_value"$'\n'
+		_u_text+=$(printf '  %3d) %-20s %s' "${#_u_names[@]}" "$_u_label" "$_u_value")$'\n'
 	done <<<"$_u_rows"
 	if [[ $FE_UI == dialog ]]; then
 		# The list scrolls when it does not fit: a terminal of 24 lines has 15 for it
@@ -358,13 +372,35 @@ ui_review() {
 		_u_above=$(fe_lines "$_u_text_above")
 		_u_height=$((_u_lines + 7 + _u_above > 22 ? 22 : _u_lines + 7 + _u_above))
 		fe_dialog "$_u_title" --scrollbar --no-tags --menu "${_u_text_above:- }" "$_u_height" 78 "$((_u_height - 7 - _u_above))" "${_u_items[@]}" || return $?
-	else
-		[[ -n "$_u_text_above" ]] && printf '\n%s\n' "$_u_text_above" >&2
-		printf '%s' "$_u_text" >&2
-		fe_read "${FE_OK:-OK}? [Enter]${FE_EXTRA:+, s: $FE_EXTRA}: " '' || return 2
+		return 0
+	fi
+	[[ -n "$_u_text_above" ]] && printf '\n%s\n' "$_u_text_above" >&2
+	printf '%s\n%s' "$_u_title" "$_u_text" >&2
+	while :; do
+		fe_read "Edit [1-${#_u_names[@]}, Enter to continue]${FE_EXTRA:+, s: $FE_EXTRA}: " '' || return 2
+		# The button of its own the engine gives (the passwords of the reviews that show them)
 		[[ -z "${FE_EXTRA:-}" || ! "$FE_ANSWER" =~ ^(s|:show)$ ]] || return 3
 		fe_special || return $?
-	fi
+		if [[ -z "$FE_ANSWER" ]]; then
+			fe_read "? ${FE_OK:-Start}? [Y/n] " y || return 2
+			[[ -z "$FE_ANSWER" || "$FE_ANSWER" == [yY]* ]] && return 0
+			continue
+		fi
+		[[ "$FE_ANSWER" =~ ^[0-9]+$ ]] && ((FE_ANSWER >= 1 && FE_ANSWER <= ${#_u_names[@]})) || continue
+		_u_i=$((FE_ANSWER - 1))
+		# A line that names nothing is only shown
+		[[ -n "${_u_names[$_u_i]}" ]] || continue
+		if [[ -n "${_u_choices[$_u_i]}" && "${_u_choices[$_u_i]}" != null ]]; then
+			local _u_menu=()
+			while IFS=$'\x1f' read -r _u_key _u_choice; do _u_menu+=("$_u_key" "$_u_choice"); done < <(jq -r 'to_entries[] | "\(.key)\u001f\(.value)"' <<<"${_u_choices[$_u_i]}")
+			FE_OK= FE_CANCEL=Back FE_EXTRA= ui_menu _u_choice "${_u_labels[$_u_i]}" '' "${_u_currents[$_u_i]}" "${_u_menu[@]}" || continue
+			FE_ANSWER=$_u_choice
+		else
+			fe_read "${_u_labels[$_u_i]}: " "${_u_currents[$_u_i]}" || return 2
+		fi
+		REVIEW_EDITS=$(jq -cn --arg name "${_u_names[$_u_i]}" --arg value "$FE_ANSWER" '{($name): $value}')
+		return 4
+	done
 }
 
 # _ui_var NAME: NAME as a name of variable, whatever the engine called it (a hyphen in the name of an option...): every character that
@@ -441,7 +477,9 @@ ui_screen() {
 		done
 		;;
 	review)
-		ui_review "$_u_title" "$_u_text" "$(jq -r '.rows[] | [.section, .label, .value] | join("\u001f")' <<<"$_u_screen")" || _u_status=$?
+		ui_review "$_u_title" "$_u_text" "$(jq -r '.rows[] | [.section, .label, .value, (.name // ""), (.current // .value | tostring), (if .options then (.options | tojson) else "" end)] | join("\u001f")' <<<"$_u_screen")" || _u_status=$?
+		# A line changed: the engine checks it, and shows the review again
+		((_u_status != 4)) || answers=$REVIEW_EDITS
 		if ((_u_status == 0)); then
 			answers=$(jq -cn \
 				--arg host "${OPENSIM_DB_HOST:-}" \
@@ -458,6 +496,7 @@ ui_screen() {
 	0) button=next ;;
 	1) button=back ;;
 	3) button=show ;;
+	4) button=edit ;;
 	*) button=quit ;;
 	esac
 	# What the engine is about to do takes time: said before it is asked

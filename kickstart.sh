@@ -1066,7 +1066,7 @@ phase_database() {
 	# An account that exists is used only with its own password: never changed to fit the one given
 	((admin_exists == 0)) || sql_login "$OPENSIM_DB_ADMIN_USER" "$OPENSIM_DB_ADMIN_PASS" || die "SQL account $OPENSIM_DB_ADMIN_USER: its password ($admin_source) is refused"
 	((app_exists == 0)) || sql_login "$OPENSIM_DB_USER" "$OPENSIM_DB_PASS" || die "SQL account $OPENSIM_DB_USER: its password ($app_source) is refused"
-	# One line, the passwords on request, then the question: nothing is made before the answer
+	# One line, the passwords on request: the accounts are made, the person was asked to install
 	local -a made=()
 	((admin_exists)) || made+=("$OPENSIM_DB_ADMIN_USER")
 	((app_exists)) || made+=("$OPENSIM_DB_USER")
@@ -1079,7 +1079,6 @@ phase_database() {
 		say "  $OPENSIM_DB_ADMIN_USER: $OPENSIM_DB_ADMIN_PASS"
 		say "  $OPENSIM_DB_USER: $OPENSIM_DB_PASS"
 	fi
-	((${#made[@]} == 0)) || ask "Create them?" || die "Stopped: nothing changed in the SQL server."
 	if [[ $admin_exists != 1 || $app_exists != 1 ]]; then
 		local admin_password_sql=${OPENSIM_DB_ADMIN_PASS//\'/\'\'} app_password_sql=${OPENSIM_DB_PASS//\'/\'\'}
 		{
@@ -1157,9 +1156,10 @@ end_installation() {
 			[[ -n "$site" ]] || continue
 			website_possible || { say "  Website: no Caddy nor Apache on this machine, not installed."; continue; }
 			apache_consent "$site" || continue
-			run_step "Website" - site_install "$nick" || die "the website could not be installed (log: $(install_log))"
-			done_line "Website"
+			# The last step of the run the setup counted (its live line said [1/3] and [2/3])
+			run_step "[3/3] Website: $WEB_SERVER" - site_install "$nick" || die "the website could not be installed (log: $(install_log))"
 		done
+		done_line "Done"
 		say ""
 		cat "$end"
 		! as_root test -f "$OPENSIM_RC_PATH" || say "Passwords  $OPENSIM_RC_PATH (root only)"
@@ -1737,7 +1737,22 @@ phase_cleanup() {
 install_opensim_packages() {
 	apt_update || return $?
 	install_packages "${OPENSIM_PACKAGES[@]}" || return $?
+	upgrade_suite || return $?
 	install_with_modules
+}
+
+# The packages of the suite installed, upgraded to the versions of their repository: a rerun is how a fix comes, the other packages of
+# the system are never touched
+upgrade_suite() {
+	local -a ours=()
+	mapfile -t ours < <(dpkg-query -W -f '${db:Status-Abbrev} ${Package}\n' 2>/dev/null | awk '$1 == "ii" { print $2 }' |
+		grep -E '^(opensim-kit|w4os-(cli|engine|site|helpers)|opensim-rest-php|opensim|opensim-[0-9][0-9.]*(-[a-z0-9-]+)?)$')
+	((${#ours[@]})) || return 0
+	PACKAGES_TOTAL=$(LC_ALL=C apt-get -s install --only-upgrade "${ours[@]}" 2>/dev/null | grep -c '^Inst ') || PACKAGES_TOTAL=0
+	((PACKAGES_TOTAL > 0)) || return 0
+	PACKAGES_FROM=$(wc -c <"$(install_log)" | tr -d ' ')
+	run_step "Suite" packages_counter apt_install --only-upgrade "${ours[@]}" || return $?
+	done_line "Suite upgraded ($PACKAGES_TOTAL)"
 }
 
 # The modules asked with --with: their package for each core installed, enabled for the install (EnabledModules of w4os.conf)

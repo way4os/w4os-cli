@@ -131,13 +131,21 @@ show_progress() {
 	if ((size > shown)); then
 		while IFS= read -r line; do
 			[[ $line == "opensim: "* ]] || continue
-			if [[ ${line#opensim: } == "~"* ]]; then
-				# The live line on a terminal, rewritten in place; elsewhere (a log, a script) each one a line
+			# What the engine says while it works is the live line, but its errors and warnings, kept as lines
+			if [[ ${line#opensim: } == "~"* || ! ${line,,} =~ (error|warn|fail|cannot|could not) ]]; then
+				line=${line#opensim: }
+				line=${line#\~}
+				line=${line#"${line%%[![:space:]]*}"}
+				# The step it is in, kept while its items go by: [2/3] Start: kimbe_test.welcome ready (1/1)
+				[[ $line == "["[0-9]*"/"[0-9]*"] "* ]] && stage=${line%%:*}
+				[[ $line == "["[0-9]*"/"[0-9]*"] "* || -z ${stage:-} ]] || line="$stage: $line"
+				started=${started:-$SECONDS}
+				# The live line on a terminal, rewritten in place with the time spent; elsewhere (a log, a script) each one a line
 				if [[ -t 2 ]]; then
-					printf '\r\033[K%s' "opensim: ${line#opensim: ~}" >&2
+					printf '\r\033[K» %s · %d:%02d' "${line:0:$((${COLUMNS:-100} - 12))}" $(((SECONDS - started) / 60)) $(((SECONDS - started) % 60)) >&2
 					pending=1
 				else
-					printf '%s\n' "opensim: ${line#opensim: ~}" >&2
+					printf '%s\n' "opensim: $line" >&2
 				fi
 			else
 				[[ -n $pending ]] && printf '\r\033[K' >&2
@@ -215,6 +223,8 @@ while :; do
 		;;
 	quit)
 		[[ "$setup_mode" != prepare ]] || die "The engine ended preparation without a configuration"
+		# The live line done: its place for what follows
+		[[ -z ${pending:-} ]] || printf '\r\033[K' >&2
 		# Its summary kept for the caller that says it last, after its own steps (kickstart: the website), else said now
 		if [[ -n "${OPENSIM_SETUP_END:-}" ]] && jq -r .message <<<"$screen" >"$OPENSIM_SETUP_END" 2>/dev/null; then
 			exit 0

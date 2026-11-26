@@ -108,7 +108,7 @@ function setup_with_dialog() {
 function test_setup_screens_drawn_and_sent_back_filled() {
 	local out
 	engine_says "$MENU" "$FORM" "$CHECKS" "$REVIEW" "$QUIT"
-	out=$(setup_with 2 1 "My Island" 2 secret123 "" c "" no "")
+	out=$(setup_with 2 1 "My Island" 2 secret123 "" c "" no "" "")
 	assert_contains "Grid name:  Amy" "$out"
 	assert_contains "Written in /etc/opensim/grids/amy." "$out"
 	# The first request asks for the first screen, the others carry the state of the screen before and its answers
@@ -349,10 +349,22 @@ function test_the_options_are_shown_on_one_line_and_kept_with_enter() {
 	local out
 	engine_says "$CHECKS" "$ABORT"
 	out=$(setup_with "") || true
-	assert_contains "Options: [ ] SSL (not implemented)  [x] Hypergrid" "$out"
-	assert_contains "Keep them? [Y] / choose [c]:" "$out"
+	assert_contains "? Options (Enter keeps them, c to choose): [ ] SSL (not implemented)  [x] Hypergrid" "$out"
 	assert_not_contains "Hypergrid [yes]" "$out"
 	assert_equals '{"ssl":false,"hypergrid":true}' "$(request 2 '.answers | tojson')"
+}
+
+function test_the_review_changes_a_line_through_the_engine_then_asks_start() {
+	local out review
+	review='{"data":{"attributes":{"action":"screen","kind":"review","title":"Review","text":"","notice":"","state":"s","buttons":{"next":"Start","back":"Back"},"rows":[{"section":"Grid","label":"Name","value":"Example Grid (example)","name":"name","current":"Example Grid"},{"section":"Grid","label":"Private port","value":"8003","name":"private_port","current":"8003"},{"section":"Simulator","label":"Region","value":"Welcome at 8002,8002"}]}}}'
+	engine_says "$review" "$review" "$ABORT"
+	# The second line changed, then Enter and the start
+	out=$(setup_with 2 8113 "" y) || true
+	assert_contains $'Review\n  Grid\n    1) Name                 Example Grid (example)\n    2) Private port         8003\n  Simulator\n    3) Region               Welcome at 8002,8002' "$out"
+	assert_contains "? Start? [Y/n]" "$out"
+	assert_equals '{"private_port":"8113"}' "$(request 2 '.answers | tojson')"
+	assert_equals 'edit' "$(request 2 '.button')"
+	assert_equals 'next' "$(request 3 '.button')"
 }
 
 function test_a_name_of_the_engine_is_not_mistaken_for_a_name_of_variable() {
@@ -401,7 +413,7 @@ function test_saved_database_admin_credentials_are_sent_with_review_confirmation
 		export OPENSIM_DB_ADMIN_PASS=saved-secret
 	OPENSIM_RC
 	engine_says "$MENU" "$FORM" "$CHECKS" "$REVIEW" "$QUIT"
-	out=$(setup_with 1 "" no yes "")
+	out=$(setup_with 1 "" no yes "" "")
 	assert_equals "localhost" "$(request 5 '.answers.database_host')"
 	assert_equals "opensim" "$(request 5 '.answers.database_user')"
 	assert_equals "app-secret" "$(request 5 '.answers.database_password')"
@@ -568,7 +580,7 @@ function test_wait_warning_is_displayed() {
 	local out review
 	review=$(jq -c '.data.attributes.wait = "Installing, this can take a few minutes…"' <<<"$REVIEW")
 	engine_says "$review" "$QUIT"
-	out=$(setup_with "") || true
+	out=$(setup_with "" "") || true
 	assert_contains "Installing, this can take a few minutes…" "$out"
 
 	## Error: this tests a hardcoded value, tested value must be random, generic or read from tests/.env
@@ -581,7 +593,8 @@ function test_setup_passes_destination_hostname_and_keeps_edited_login_uri() {
     local form
     form=$(jq '.data.attributes.fields = [{name:"login_uri",label:"Login URI",value:"grid.example.test:8002",secret:false}]' <<<"$FORM")
     engine_says "$MENU" "$form" "$QUIT"
-    setup_with 1 1 grid.example.test:18302 '' >/dev/null
+    # One question alone is asked as one: its answer the next line
+    setup_with 1 grid.example.test:18302 >/dev/null
     assert_equals grid.example.test "$(request 2 .answers.hostname)"
     assert_equals grid.example.test:18302 "$(request 3 .answers.login_uri)"
 }

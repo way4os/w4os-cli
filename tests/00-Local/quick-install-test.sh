@@ -872,6 +872,28 @@ function test_with_apache_the_line_in_its_sites_is_asked_before_start_and_never_
 	assert_contains "No site of Apache serves nowhere.example." "$said"
 }
 
+function test_a_rerun_upgrades_the_packages_of_the_suite_alone() {
+	quick_install_load_library || return
+	mkdir -p "$WORK/stubs"
+	printf '#!/usr/bin/env bash\nprintf "ii w4os-cli\\nii w4os-engine\\nii opensim-0.9.3.0-opensimsearch\\nii vim\\nrc w4os-site\\n"\n' >"$WORK/stubs/dpkg-query"
+	cat >"$WORK/stubs/apt-get" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >>"$WORK/apt-calls"
+[[ " \$* " == *" -s "* ]] && printf 'Inst w4os-cli [1] (2)\nInst w4os-engine [1] (2)\n'
+exit 0
+STUB
+	chmod +x "$WORK/stubs/dpkg-query" "$WORK/stubs/apt-get"
+	as_root() { "$@"; }
+	INSTALL_LOG=$WORK/install.log
+	: >"$INSTALL_LOG"
+	local said
+	said=$(PATH="$WORK/stubs:$PATH" upgrade_suite)
+	assert_contains "✓ Suite upgraded (2)" "$said"
+	assert_contains "install -y -qq --only-upgrade w4os-cli w4os-engine opensim-0.9.3.0-opensimsearch" "$(cat "$WORK/apt-calls")"
+	assert_not_contains "vim" "$(cat "$WORK/apt-calls")"
+	assert_not_contains "w4os-site" "$(cat "$WORK/apt-calls")"
+}
+
 function test_a_migration_refused_at_start_changes_nothing() {
 	quick_install_load_library || return
 	legacy_fixture
