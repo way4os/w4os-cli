@@ -136,6 +136,8 @@ show_progress() {
 			line=${line#"${line%%[![:space:]]*}"}
 			if [[ $line == "~"* || ! ${line,,} =~ (error|warn|fail|cannot|could not) ]]; then
 				line=${line#\~}
+				# The mark of a wait the engine gives an item of its step too ([3/4] Start: ~AssetServiceConnector 1/27)
+				line=${line/: \~/: }
 				# The step it is in, kept while its items go by: [2/3] Start: kimbe_test.welcome ready (1/1)
 				[[ $line == "["[0-9]*"/"[0-9]*"] "* ]] && stage=${line%%:*}
 				[[ $line == "["[0-9]*"/"[0-9]*"] "* || -z ${stage:-} ]] || line="$stage: $line"

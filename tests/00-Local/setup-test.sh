@@ -563,6 +563,14 @@ function test_error_is_not_displayed_as_part_of_the_answer() {
 	assert_not_contains "Deprecated" "$out"
 }
 
+function test_the_step_of_the_run_and_its_item_are_said_without_their_marks() {
+	local out
+	engine_says "$QUIT"
+	out=$(ENGINE_NOISE="opensim: ~[3/4] Start: ~AssetServiceConnector 1/27" setup_with 2>&1) || true
+	assert_contains "opensim: [3/4] Start: AssetServiceConnector 1/27" "$out"
+	assert_not_contains "~" "$out"
+}
+
 function test_error_is_displayed_for_invalid_answer() {
 	local out status=0
 	engine_says "not json at all"

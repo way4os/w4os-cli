@@ -768,6 +768,10 @@ case "\$1 \$2" in
 esac
 STUB
 	chmod +x "$clone/bin/opensim"
+	# The plan of the migration, asked of the engine as root (its API), the account the migration runs as
+	mkdir -p "$clone/vendor/w4os/w4os-engine/bin"
+	printf '#!/usr/bin/env bash\nexec "%s/bin/opensim" api "$@"\n' "$clone" >"$clone/vendor/w4os/w4os-engine/bin/w4os-api"
+	chmod +x "$clone/vendor/w4os/w4os-engine/bin/w4os-api"
 	echo '{"data":{"attributes":{"name":"Kimbe Red","uri":"kimbe.example:8002"}}}' >"$WORK/grid.json"
 	as_root() { "$@"; }
 	maptiles_package() { :; }
@@ -966,4 +970,17 @@ function test_a_website_is_done_whether_its_site_quotes_the_name_of_its_grid_or_
 		W4OS_SITE_ROOT=$root OPENSIM_CADDY_ETC=$WORK/caddy site_done kimbe_test && seen+="yes " || seen+="no "
 	done
 	assert_same "yes yes no " "$seen"
+}
+
+function test_a_retry_of_a_migration_whose_grid_is_written_starts_it_and_imports_nothing_again() {
+	quick_install_load_library || return
+	legacy_fixture
+	migration_stub
+	cli=$clone/bin/opensim
+	migration_run w4osdemogrid /old/Robust.HG.ini import --robust /old/Robust.HG.ini --apply --switch
+	: >"$WORK/here"
+	migration_run w4osdemogrid /old/Robust.HG.ini import --robust /old/Robust.HG.ini --apply --switch
+
+	assert_same "import --robust /old/Robust.HG.ini --apply --switch
+import --robust /old/Robust.HG.ini --switch" "$(cat "$WORK/opensim-calls")"
 }

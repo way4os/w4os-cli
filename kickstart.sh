@@ -68,6 +68,9 @@ apt_source_uri_index() {
 	return 1
 }
 
+# How the setup asks its questions: plain (lines, like the rest of the installer) or dialog (its screens); OPENSIM_SETUP_UI chooses
+SETUP_UI=${OPENSIM_SETUP_UI:-plain}
+
 INSTALLER_HOME=${HOME:-/root}
 if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != root ]] && command -v getent >/dev/null 2>&1; then
 	INSTALLER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
@@ -1149,8 +1152,7 @@ end_installation() {
 		before=$(grids_here "$basedir")
 		# The summary of the setup said last, after the website of the grid it made
 		end=$(mktemp) && chmod 666 "$end"
-		# Its questions as lines, like the ones of the installer before them (OPENSIM_SETUP_UI=dialog for the screens of dialog)
-		OPENSIM_SETUP_UI=${OPENSIM_SETUP_UI:-plain} OPENSIM_SETUP_END=$end "$basedir/bin/opensim" "${setup_arguments[@]}" || die "the setup stopped (error $?)"
+		OPENSIM_SETUP_UI=$SETUP_UI OPENSIM_SETUP_END=$end "$basedir/bin/opensim" "${setup_arguments[@]}" || die "the setup stopped (error $?)"
 		for nick in $(comm -13 <(printf '%s\n' "$before") <(grids_here "$basedir")); do
 			cli=$basedir/bin/opensim
 			site=$(as_root "$cli" api GET "/grids/$nick" 2>/dev/null | jq -r '.data.attributes.site // empty' 2>/dev/null)
@@ -1367,7 +1369,7 @@ ask_text() { # "question" default
 # The grid of an install of before the kit migrated here: what is checked, every question, one "Start?", then the steps to the
 # summary; a grid that is here already is said with its summary, one written but not started is started
 migrate_grid() { # robust config, simulator configs...
-	local robust=$1 file nick plan name ascii running=() steps=() step count=0 site= host= prefix= maptiles= free data
+	local robust=$1 file nick plan name ascii running=() steps=() step count=0 site= host= prefix= maptiles= free data api
 	shift
 	nick=$(legacy_nick "$robust")
 	say ""
@@ -1398,13 +1400,17 @@ migrate_grid() { # robust config, simulator configs...
 		migration_summary "$nick" "$site"
 		return 0
 	fi
-	# The checks: its configs, the plan of the engine (what it writes, its data), the room for it, its ports
+	# The checks: its configs, the plan of the engine (what it writes, its data), the room for it, its ports. The plan is made as root,
+	# the account the migration runs as (opensim import --robust --apply): the account of the instances cannot move the folders of
+	# an install another account owns
 	for file in "$robust" "$@"; do
 		as_root test -r "$file" || die "cannot read $file"
 	done
 	done_line "Old config readable ($(($# + 1)) files)"
+	api=${cli%/bin/opensim}/vendor/w4os/w4os-engine/bin/w4os-api
+	[[ -x "$api" ]] || api=w4os-api
 	plan=$(jq -cn --arg file "$robust" '{data: {type: "imports", attributes: {kind: "robust", file: $file, simulators: ($ARGS.positional | map({file: .}))}}}' --args "$@" |
-		as_root "$cli" api POST /setups/imports --data=-) || true
+		as_root "$api" POST /setups/imports --data=-) || true
 	jq -e '.data.attributes' <<<"$plan" >/dev/null 2>&1 || die "$(jq -r '.detail // .title // "the engine did not answer"' <<<"$plan" 2>/dev/null || printf '%s' "$plan")"
 	plan=$(jq -c '.data.attributes' <<<"$plan")
 	if jq -e '(.problems // {}) | length > 0' <<<"$plan" >/dev/null; then
@@ -1474,7 +1480,7 @@ migrate_grid() { # robust config, simulator configs...
 			[[ -z "$site" ]] || import+=(--site "$site")
 			for file in "$@"; do import+=(--simulator "$file"); done
 			STEP_FROM=$(wc -c <"$(install_log)" | tr -d ' ')
-			run_step "[$count/${#steps[@]}] Migration" engine_counter as_root "$cli" "${import[@]}" || die "the migration of $nick stopped (log: $(install_log))"
+			run_step "[$count/${#steps[@]}] Migration" engine_counter migration_run "$nick" "$robust" "${import[@]}" || die "the migration of $nick stopped (log: $(install_log))"
 			done_line "Migrated and started: $nick"
 			;;
 		map)
@@ -1489,6 +1495,17 @@ migrate_grid() { # robust config, simulator configs...
 	done
 	migration_summary "$nick" "$site"
 	say "Old install  $(legacy_install), stopped, kept"
+}
+
+# The import of a migration, or once its grid is written here (a retry after a start that failed), its start alone
+migration_run() { # nick, robust config, import arguments...
+	local nick=$1 robust=$2
+	shift 2
+	if as_root "$cli" api GET "/grids/$nick" 2>/dev/null | jq -e '.data.attributes' >/dev/null 2>&1; then
+		as_root "$cli" import --robust "$robust" --switch
+	else
+		as_root "$cli" "$@"
+	fi
 }
 
 # Whether the website of a grid can be installed here: the site, and Caddy, the web server it is put beside a site of the host with

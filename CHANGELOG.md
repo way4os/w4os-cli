@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- fix (kickstart): a migration planned as root, like its import; a retry once its grid is written starts it; one switch for the setup's UI
 - fix (simulator): what is missing named, a refusal said once in words, never field paths; a plan ends Nothing written. Add --apply.
 - change (web): api --install writes the pools of the API and of the helpers through the engine; OPENSIM_SETUP_UI kept by sudo
 - fix (kickstart): the setup asked as lines, like the rest of the run; a website seen done when its site quotes its grid
