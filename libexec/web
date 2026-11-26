@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # opensim web: show, check, or print web-server snippets for a grid.
 
-USAGE="opensim web [GRID] [show|check|snippet caddy|nginx|apache|api caddy|nginx|apache [--install]|site --install|set PAGE URL] [options]"
-HELP="Show grid web services and who serves each page (the helpers under their base, the site elsewhere), check their URLs, print a server snippet, or set the address of a page (helpers, search, profile, guide, welcome, status, directory). api prints what serves the engine API to the sites of this machine as the user of the instances: a PHP-FPM pool of its own, and a listener on 127.0.0.1 for its paths only (the site then uses engine remote with a key); api caddy --install writes both (the pool in PHP-FPM, the listener in the sites Caddy imports) and reloads them; site --install puts the Quick Start website of the grid at the address its setup chose (the engine API, the site connected to it, its file beside the site of the host). Options: --docroot DIR, --socket PATH, --port N, --web-group GROUP."
+USAGE="opensim web [GRID] [show|check|snippet caddy|nginx|apache|api caddy|nginx|apache [--install]|site --install [--edit-vhosts]|site --vhosts|set PAGE URL] [options]"
+HELP="Show grid web services and who serves each page (the helpers under their base, the site elsewhere), check their URLs, print a server snippet, or set the address of a page (helpers, search, profile, guide, welcome, status, directory). api prints what serves the engine API to the sites of this machine as the user of the instances: a PHP-FPM pool of its own, and a listener on 127.0.0.1 for its paths only (the site then uses engine remote with a key); api caddy --install writes both (the pool in PHP-FPM, the listener in the sites Caddy imports) and reloads them; site --install puts the Quick Start website of the grid at the address its setup chose (the engine API, the site connected to it, its file beside the site of the host; for Apache, one line in each site serving the host, asked, or --edit-vhosts); site --vhosts names those files. Options: --docroot DIR, --socket PATH, --port N, --web-group GROUP."
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 
@@ -98,8 +98,8 @@ web_server() {
 
 # The Quick Start website of a grid in place, at the address the grid keeps (site of the API): the engine API for the sites of this
 # machine, the site connected to it, its file beside the site of the host (never the host's own file)
-install_site() { # grid
-	local grid=$1 detail address host prefix api helpers name server
+install_site() { # grid [edit: the files of the sites of Apache may be given their line]
+	local grid=$1 edit=${2:-} detail address host prefix api helpers name server files
 	detail=$(engine GET "/grids/$grid" 2>/dev/null) || die "there is no grid $grid here"
 	address=$(jq -r '.data.attributes.site // empty' <<<"$detail")
 	name=$(jq -r '.data.attributes.name // empty' <<<"$detail")
@@ -108,6 +108,16 @@ install_site() { # grid
 	server=$(web_server) || die "no Caddy nor Apache on this machine: the Quick Start website is put beside a site of one of them"
 	host=$(sed -E 's#^([a-z]+://[^/:]+).*#\1#' <<<"$address")
 	prefix=$(sed -E 's#^[a-z]+://[^/]+##; s#/$##' <<<"$address")
+	# Apache: one line in each site that serves the host, never without its yes
+	if [[ "$server" == apache ]]; then
+		files=$(w4os-site web apache --host "$host" ${prefix:+--prefix "$prefix"} --vhosts 2>/dev/null | paste -sd, - | sed 's/,/, /g')
+		[[ -n "$files" ]] || die "no site of Apache serves ${host#*://}: the website is put in one of its sites"
+		if [[ -z "$edit" ]]; then
+			[[ -t 0 ]] || die "the website needs one line in $files: give --edit-vhosts"
+			read -r -p "Add one line to $files? [Y/n] " edit
+			[[ -z "$edit" || "$edit" == [yY]* ]] || die "the website is not installed: it needs that line"
+		fi
+	fi
 	install_api "$grid" api "$server" || exit
 	api=$(run web "$grid" api "$server" | sed -n 's/.*api_url \(http:\/\/127\.0\.0\.1:[0-9]*\/api\).*/\1/p' | head -n 1)
 	helpers=$(run web "$grid" show | sed -n 's/^Helpers:[[:space:]]*//p' | head -n 1)
@@ -116,8 +126,20 @@ install_site() { # grid
 	say "✓ Website: $address"
 }
 
+# The files of the sites of Apache the website of a grid would be included by, one a line (for the question), nothing for Caddy
+site_vhosts() { # grid
+	local address
+	address=$(engine GET "/grids/$1" 2>/dev/null | jq -r '.data.attributes.site // empty')
+	[[ -n "$address" && "$(web_server)" == apache ]] || return 0
+	w4os-site web apache --host "$(sed -E 's#^([a-z]+://[^/:]+).*#\1#' <<<"$address")" --prefix "$(sed -E 's#^[a-z]+://[^/]+##; s#/$##' <<<"$address")" --vhosts
+}
+
 if [[ "${2:-}" == site && " $* " == *" --install "* ]]; then
-	install_site "$1"
+	install_site "$1" "$([[ " $* " != *" --edit-vhosts "* ]] || echo yes)"
+	exit
+fi
+if [[ "${2:-}" == site && " $* " == *" --vhosts "* ]]; then
+	site_vhosts "$1"
 	exit
 fi
 

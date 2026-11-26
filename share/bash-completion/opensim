@@ -115,7 +115,7 @@ _opensim()
       esac
       ;;
     web)
-      COMPREPLY=( $(compgen -W "$(_opensim_grids) show check snippet set api caddy nginx apache --grid --docroot --socket --port --web-group --install site" -- "$cur") )
+      COMPREPLY=( $(compgen -W "$(_opensim_grids) show check snippet set api caddy nginx apache --grid --docroot --socket --port --web-group --install site --edit-vhosts --vhosts" -- "$cur") )
       ;;
     next)
       if [ "$COMP_CWORD" = 2 ]; then

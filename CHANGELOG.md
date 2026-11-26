@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- change (web): site --install beside Apache with the yes to one line in its sites (asked, or --edit-vhosts); site --vhosts
 - change (status): a Robust whose services did not load since its start is not up, and its services are said
 - fix (kickstart): a rerun of the fresh path installs a website a failure left, never sets up another grid
 - new (web): GRID site --install puts the Quick Start website of a grid beside Caddy or Apache; api apache --install
