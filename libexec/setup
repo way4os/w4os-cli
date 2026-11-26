@@ -132,10 +132,10 @@ show_progress() {
 		while IFS= read -r line; do
 			[[ $line == "opensim: "* ]] || continue
 			# What the engine says while it works is the live line, but its errors and warnings, kept as lines
-			if [[ ${line#opensim: } == "~"* || ! ${line,,} =~ (error|warn|fail|cannot|could not) ]]; then
-				line=${line#opensim: }
+			line=${line#opensim: }
+			line=${line#"${line%%[![:space:]]*}"}
+			if [[ $line == "~"* || ! ${line,,} =~ (error|warn|fail|cannot|could not) ]]; then
 				line=${line#\~}
-				line=${line#"${line%%[![:space:]]*}"}
 				# The step it is in, kept while its items go by: [2/3] Start: kimbe_test.welcome ready (1/1)
 				[[ $line == "["[0-9]*"/"[0-9]*"] "* ]] && stage=${line%%:*}
 				[[ $line == "["[0-9]*"/"[0-9]*"] "* || -z ${stage:-} ]] || line="$stage: $line"
@@ -150,7 +150,7 @@ show_progress() {
 			else
 				[[ -n $pending ]] && printf '\r\033[K' >&2
 				pending=
-				printf '%s\n' "$line" >&2
+				printf '%s\n' "opensim: $line" >&2
 			fi
 		done < <(tail -c +"$((shown + 1))" "$errors" | head -c "$((size - shown))")
 	fi

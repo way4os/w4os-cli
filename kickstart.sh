@@ -314,9 +314,9 @@ install_log() {
 }
 
 # A long step: the command writes into the log while the live line says the step, what it is at (COUNTER, a function that prints
-# it: 12/27 opensim-0.9.3.0), else a spinner, and the time; a failure says the log and asks to retry or to stop
+# it: 12/27 opensim-0.9.3.0) and the time; a failure says the log and asks to retry or to stop
 run_step() { # label counter|- command...
-	local label=$1 counter=$2 started pid status spin='|/-\' turn=0 at log
+	local label=$1 counter=$2 started pid status at log
 	shift 2
 	log=$(install_log)
 	while :; do
@@ -326,8 +326,8 @@ run_step() { # label counter|- command...
 		while kill -0 "$pid" 2>/dev/null; do
 			at=
 			[[ "$counter" == - ]] || at=$("$counter" 2>/dev/null) || at=
-			[[ -n "$at" ]] || at=${spin:turn++%4:1}
-			live "$label: $at · $(elapsed "$started")"
+			# The time spent shows it goes on; a counter, when there is one, says how far
+			live "$label${at:+: $at} · $(elapsed "$started")"
 			sleep 0.5
 		done
 		status=0
@@ -1163,8 +1163,8 @@ end_installation() {
 				*) apache_consent "$site" || continue ;;
 				esac
 			fi
-			# The last step of the run the setup counted (its live line said [1/3] and [2/3])
-			run_step "[3/3] Website: $WEB_SERVER" - site_install "$nick" || die "the website could not be installed (log: $(install_log))"
+			# The last step of the run the setup counted (its live line said [1/4] to [3/4])
+			run_step "[4/4] Website: ${WEB_SERVER^}" - site_install "$nick" || die "the website could not be installed (log: $(install_log))"
 		done
 		done_line "Done"
 		say ""

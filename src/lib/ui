@@ -318,7 +318,7 @@ ui_checks() {
 		# The choices proposed on one line, kept with Enter; each asked only when the person chooses them
 		_u_picked=
 		for _u_n in "${_u_names[@]}"; do
-			_u_picked+="${_u_picked:+  }$([[ ${!_u_n} == yes ]] && echo '[x]' || echo '[ ]') ${LABEL[$_u_n]}"
+			_u_picked+="${_u_picked:+ }$([[ ${!_u_n} == yes ]] && echo '[x]' || echo '[ ]') ${LABEL[$_u_n]}"
 		done
 		while :; do
 			fe_read "? $_u_title (Enter keeps them, c to choose): $_u_picked " '' || return 2

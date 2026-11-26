@@ -349,7 +349,7 @@ function test_the_options_are_shown_on_one_line_and_kept_with_enter() {
 	local out
 	engine_says "$CHECKS" "$ABORT"
 	out=$(setup_with "") || true
-	assert_contains "? Options (Enter keeps them, c to choose): [ ] SSL (not implemented)  [x] Hypergrid" "$out"
+	assert_contains "? Options (Enter keeps them, c to choose): [ ] SSL (not implemented) [x] Hypergrid" "$out"
 	assert_not_contains "Hypergrid [yes]" "$out"
 	assert_equals '{"ssl":false,"hypergrid":true}' "$(request 2 '.answers | tojson')"
 }
