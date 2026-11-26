@@ -118,6 +118,32 @@ function test_confirmed_setup_is_applied_after_installation() {
 	assert_contains '<setup> <--apply> <'"$config"'>' "$(cat "$calls")"
 }
 
+function test_a_rerun_of_the_fresh_path_installs_a_website_left_and_sets_up_no_other_grid() {
+	quick_install_load_library || return
+	clone=$WORK/project
+	cat >"$WORK/project/bin/opensim" <<'STUB'
+#!/usr/bin/env bash
+case "$*" in
+"api GET /grids") echo '{"data":[{"id":"kimbe_test"}]}' ;;
+"api GET /grids/kimbe_test") echo '{"data":{"attributes":{"name":"Kimbe Test","uri":"kimbe.example:8002","site":"https://kimbe.example/opensim/"}}}' ;;
+*) echo "$*" >>"$CALL_LOG" ;;
+esac
+STUB
+	chmod +x "$WORK/project/bin/opensim"
+	site_done() { return 1; }
+	site_install() { echo "site $*" >>"$CALL_LOG"; }
+	as_root() { "$@"; }
+	RUN_SETUP=yes ASSUME_YES=yes INSTALL_LOG=$WORK/install.log
+	: >"$INSTALL_LOG"
+	uname() { printf 'Darwin\n'; }
+	export CALL_LOG=$WORK/calls
+	local said
+	said=$( (end_installation) )
+	assert_same "site kimbe_test" "$(cat "$WORK/calls")"
+	assert_contains "kimbe_test is here, its website not installed yet." "$said"
+	assert_contains "Website    https://kimbe.example/opensim/" "$said"
+}
+
 function test_unconfirmed_answers_keep_interactive_setup() {
 	quick_install_load_library || return
 	local calls=$WORK/prefill-calls config="$WORK/Setup Answers.json"

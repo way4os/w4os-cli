@@ -166,6 +166,8 @@ function render(Status $status, array $modules = [], ?\W4OS\Engine\Runtime\Runti
     $withoutDatabase = $status->withoutDatabase();
     // A simulator whose process runs but does not answer is hung, or still loading: it is up, not working
     $unresponsive = $status->unresponsive();
+    // A Robust whose services could not be made since its start answers nothing for them: not up
+    $broken = method_exists($status, 'brokenServices') ? $status->brokenServices() : [];
     // The avatars in world, never a NPC: unknown where the databases of a grid cannot be read
     $avatars = $status->avatars(null, $withoutDatabase);
     foreach ($status->instances as $item) {
@@ -182,7 +184,8 @@ function render(Status $status, array $modules = [], ?\W4OS\Engine\Runtime\Runti
                     sprintf('%.1f', $p->memory),
                     (string) $p->rss,
                     (string) ($avatars['instances'][$item->name()] ?? '?') . (in_array($item->name(), $withoutDatabase, true) ? '  [no database]' : '')
-                        . (in_array($item->name(), $unresponsive, true) ? '  [not answering]' : ''),
+                        . (in_array($item->name(), $unresponsive, true) ? '  [not answering]' : '')
+                        . (isset($broken[$item->name()]) ? '  [services not loaded: ' . implode(', ', $broken[$item->name()]) . ']' : ''),
                 ];
     }
     $widths = [];
@@ -200,7 +203,8 @@ function render(Status $status, array $modules = [], ?\W4OS\Engine\Runtime\Runti
         $text .= implode('', $cells) . "\n";
     }
     $t = $status->totals();
-    $line = $status->up() . ' up' . ($status->down() > 0 ? ', ' . $status->down() . ' down' : '')
+    $line = ($status->up() - count($broken)) . ' up' . ($status->down() > 0 ? ', ' . $status->down() . ' down' : '')
+        . ($broken === [] ? '' : ', ' . count($broken) . ' with services not loaded (' . implode(', ', array_keys($broken)) . ')')
         . ($withoutDatabase === [] ? '' : ', ' . count($withoutDatabase) . ' without its database (' . implode(', ', $withoutDatabase) . ')')
         . ($unresponsive === [] ? '' : ', ' . count($unresponsive) . ' not answering (' . implode(', ', $unresponsive) . ')');
 

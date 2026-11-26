@@ -132,7 +132,13 @@ show_progress() {
 		while IFS= read -r line; do
 			[[ $line == "opensim: "* ]] || continue
 			if [[ ${line#opensim: } == "~"* ]]; then
-				[[ -t 2 ]] && printf '\r\033[K%s' "opensim: ${line#opensim: ~}" >&2 && pending=1
+				# The live line on a terminal, rewritten in place; elsewhere (a log, a script) each one a line
+				if [[ -t 2 ]]; then
+					printf '\r\033[K%s' "opensim: ${line#opensim: ~}" >&2
+					pending=1
+				else
+					printf '%s\n' "opensim: ${line#opensim: ~}" >&2
+				fi
 			else
 				[[ -n $pending ]] && printf '\r\033[K' >&2
 				pending=

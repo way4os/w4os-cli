@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+- change (status): a Robust whose services did not load since its start is not up, and its services are said
+- fix (kickstart): a rerun of the fresh path installs a website a failure left, never sets up another grid
 - new (web): GRID site --install puts the Quick Start website of a grid beside Caddy or Apache; api apache --install
 - change (kickstart): the fresh path installs the website after the setup, then its summary; a rerun redoes a website step left
 - fix (web): api caddy --install writes as root, its text made as the account of the instances; a write refused stops it

@@ -1125,9 +1125,25 @@ end_installation() {
 	fi
 	[[ -z "$setup_config_path" ]] || setup_arguments+=("$setup_option" "$setup_config_path")
 	[[ -z "$REGION_CONFIG_FILE" ]] || setup_arguments+=(--region-config "$REGION_CONFIG_FILE")
+	# A grid of a run before whose website was left (an error at that step): that step again, never a setup of another grid
+	local left=() nick
+	cli=$basedir/bin/opensim
+	for nick in $(grids_here "$basedir"); do
+		as_root "$cli" api GET "/grids/$nick" 2>/dev/null | jq -e '.data.attributes.site // empty' >/dev/null 2>&1 && ! site_done "$nick" && left+=("$nick")
+	done
+	if ((${#left[@]})); then
+		for nick in "${left[@]}"; do
+			say "  $nick is here, its website not installed yet."
+			ask "Install it?" || { say "Stopped: nothing changed."; exit 0; }
+			run_step "Website" - site_install "$nick" || die "the website could not be installed (log: $(install_log))"
+			done_line "Website"
+			migration_summary "$nick" "$(as_root "$cli" api GET "/grids/$nick" 2>/dev/null | jq -r '.data.attributes.site // empty')"
+		done
+		exit 0
+	fi
 	if [[ "${RUN_SETUP:-}" =~ ^(yes|true|1)$ ]] || person_here; then
 		say ""
-		local before end nick
+		local before end
 		before=$(grids_here "$basedir")
 		# The summary of the setup said last, after the website of the grid it made
 		end=$(mktemp) && chmod 666 "$end"
