@@ -656,6 +656,8 @@ PACKAGES_FROM=0
 packages_counter() {
 	local said
 	said=$(tail -c +$((PACKAGES_FROM + 1)) "$INSTALL_LOG" 2>/dev/null | grep -E '^(Unpacking|Setting up) ')
+	# Nothing unpacked yet: apt is downloading them
+	[[ -n "$said" ]] || { printf '0/%s downloading' "$PACKAGES_TOTAL"; return 0; }
 	printf '%s/%s %s' "$(grep -c '^Setting up ' <<<"$said")" "$PACKAGES_TOTAL" "$(tail -n 1 <<<"$said" | awk '{ name = $1 == "Setting" ? $3 : $2; sub(/:.*/, "", name); print name }')"
 }
 
@@ -842,7 +844,7 @@ configure_package_sources() {
 			as_root rm -f "$source_file" || return $?
 			source_saved=yes
 		fi
-		install_packages "${missing_bootstrap_packages[@]}" || bootstrap_status=$?
+		PACKAGES_LABEL="Tools" install_packages "${missing_bootstrap_packages[@]}" || bootstrap_status=$?
 		if [[ "$source_saved" == yes ]]; then
 			as_root mv -f "$source_backup" "$source_file" || return $?
 		fi
@@ -893,7 +895,7 @@ phase_dependencies() {
 			if ((${#missing[@]})); then
 				# say "Installing ${missing[*]}"
 				# ask "Install them?" || die cancelled
-				install_packages "${missing[@]}" || return $?
+				PACKAGES_LABEL="Tools" install_packages "${missing[@]}" || return $?
 			fi
 		fi
 		php -r 'exit(PHP_VERSION_ID >= 80200 ? 0 : 1);' || die "PHP 8.2 or newer is needed (this is $(php -r 'echo PHP_VERSION;'))"
@@ -940,7 +942,7 @@ save_database_credentials() {
 }
 
 start_sql_server() {
-	if as_root service mariadb start 2>/dev/null || as_root service mysql start 2>/dev/null; then
+	if as_root service mariadb start >>"$(install_log)" 2>&1 || as_root service mysql start >>"$(install_log)" 2>&1; then
 		return 0
 	fi
 	as_root mysqladmin ping --silent >/dev/null 2>&1 && return 0
@@ -1178,12 +1180,12 @@ phase_dotnet() {
 
 	# No system package of the runtime of a major: Microsoft's installer, its output in the log
 	if ! command -v curl >/dev/null 2>&1 || ! dpkg-query -W -f='${db:Status-Status}' ca-certificates 2>/dev/null | grep -qx installed; then
-		install_packages ca-certificates curl || die "could not install curl for the .NET installer"
+		PACKAGES_LABEL="Tools" install_packages ca-certificates curl || die "could not install curl for the .NET installer"
 	fi
 	if ! ldconfig -p 2>/dev/null | grep -q 'libicuuc\.so'; then
 		local icu_package
 		icu_package=$(apt-cache pkgnames libicu 2>/dev/null | grep -E '^libicu[0-9]+(t64)?$' | sort -V | tail -n 1)
-		[[ -z "$icu_package" ]] || install_packages "$icu_package" || die "could not install $icu_package"
+		[[ -z "$icu_package" ]] || PACKAGES_LABEL=".NET runtime" install_packages "$icu_package" || die "could not install $icu_package"
 	fi
 	local install_script
 	install_script=$(mktemp "${TMPDIR:-/tmp}/dotnet-install.XXXXXX") || return $?
@@ -1298,13 +1300,32 @@ legacy_after_install() {
 	mapfile -t simulators < <(legacy_configs simulator)
 	((${#robusts[@]})) || return 0
 	if [[ "$LEGACY_MODE" == migrate ]]; then
+		# The old instances that run: stopped first, the grid here takes their ports and their database; kept running, the grid is
+		# run in place instead, or nothing is done
+		local -a running=()
+		for file in "${simulators[@]}" "${robusts[@]}"; do
+			[[ -z "$(legacy_pids "$file")" ]] || running+=("$file")
+		done
+		if ((${#running[@]})); then
+			say "  The old instances run: $(for file in "${running[@]}"; do basename "$file" .ini; done | paste -sd, - | sed 's/,/, /g')."
+			if ! ask "Stop them now?"; then
+				say "  The migration needs the old instances stopped (same ports, same database)."
+				choose "[I]n place  [A]bort (I/a):" ia
+				[[ "$CHOICE" == i ]] || { say "Stopped: nothing changed."; exit 0; }
+				LEGACY_MODE=in-place
+				legacy_after_install
+				return
+			fi
+			legacy_stop "${running[@]}"
+		fi
 		# Each grid of the install (one Robust each), with its simulators: migrated here and started, the old install kept
 		for robust in "${robusts[@]}"; do
 			nick=$(legacy_nick "$robust")
 			ask "Migrate $nick now?" || { say "  $nick not migrated."; continue; }
 			import=(import --robust "$robust" --apply --switch)
 			for file in "${simulators[@]}"; do import+=(--simulator "$file"); done
-			run_step "Migration of $nick" - as_root "$cli" "${import[@]}" || die "the migration of $nick stopped (log: $(install_log))"
+			STEP_FROM=$(wc -c <"$(install_log)" | tr -d ' ')
+			run_step "Migration of $nick" engine_counter as_root "$cli" "${import[@]}" || die "the migration of $nick stopped (log: $(install_log))"
 			done_line "Migrated and started: $nick"
 		done
 		return 0
@@ -1322,22 +1343,35 @@ legacy_after_install() {
 	[[ "$LEGACY_RESTART" == yes ]] || { person_here && ask "Restart its instances under the kit now?"; } || return 0
 	# The simulators first, then the Robust: each asked to end (SIGTERM, a Robust with a REST console has no screen), a minute each at
 	# most; found by the config it runs, by the path given or the one it leads to (a link of robust.d to the file of its grid)
-	local down count=0 total=$((${#simulators[@]} + ${#robusts[@]}))
-	for file in "${simulators[@]}" "${robusts[@]}"; do
+	local down
+	legacy_stop "${simulators[@]}" "${robusts[@]}"
+	[[ ! -d /run/systemd/system ]] || run_step "Start under the kit" - as_root systemctl restart opensim || die "opensim.service did not start"
+	# Said to run only once each instance of the grid does
+	down=$("$cli" status 2>/dev/null | awk -v nick="$nick" '($1 == nick || index($1, nick ".") == 1) && $3 == "[down]" { print $1 }')
+	[[ -z "$down" ]] || die "not started under the kit: $(paste -sd, - <<<"$down")"
+	done_line "$nick runs under the kit"
+}
+
+# The old instances that run these configs stopped, the simulators given first: each asked to end (SIGTERM, a Robust with a REST
+# console has no screen), a minute each at most
+legacy_stop() { # config...
+	local file pid count=0
+	for file in "$@"; do
 		count=$((count + 1))
-		live "Stop: $(basename "$file" .ini) ($count/$total)"
+		live "Stop: $(basename "$file" .ini) ($count/$#)"
 		for pid in $(legacy_pids "$file"); do
 			as_root kill -TERM "$pid" 2>/dev/null || continue
 			for _ in $(seq 1 60); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
 			! kill -0 "$pid" 2>/dev/null || die "process $pid ($file) did not stop"
 		done
 	done
-	done_line "Old instances stopped ($total)"
-	[[ ! -d /run/systemd/system ]] || run_step "Start under the kit" - as_root systemctl restart opensim || die "opensim.service did not start"
-	# Said to run only once each instance of the grid does
-	down=$("$cli" status 2>/dev/null | awk -v nick="$nick" '($1 == nick || index($1, nick ".") == 1) && $3 == "[down]" { print $1 }')
-	[[ -z "$down" ]] || die "not started under the kit: $(paste -sd, - <<<"$down")"
-	done_line "$nick runs under the kit"
+	done_line "Old instances stopped ($#)"
+}
+
+# What the engine is at, the last line it said in place since the step started ("opensim: ~[3/6] Data"), for the live line
+STEP_FROM=0
+engine_counter() {
+	tail -c +$((STEP_FROM + 1)) "$INSTALL_LOG" 2>/dev/null | grep '^opensim: ~' | tail -n 1 | sed 's/^opensim: ~//'
 }
 
 # The processes that run a config, one a line: the -inifile of each process as it was given (its real arguments, the quotes a shell
