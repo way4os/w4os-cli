@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # opensim web: show, check, or print web-server snippets for a grid.
 
-USAGE="opensim web [GRID] [show|check|snippet caddy|nginx|apache|api caddy|nginx|apache [--install]|site --install [--edit-vhosts]|site --vhosts|set PAGE URL] [options]"
-HELP="Show grid web services and who serves each page (the helpers under their base, the site elsewhere), check their URLs, print a server snippet, or set the address of a page (helpers, search, profile, guide, welcome, status, directory). api prints what serves the engine API to the sites of this machine as the user of the instances: a PHP-FPM pool of its own, and a listener on 127.0.0.1 for its paths only (the site then uses engine remote with a key); api caddy --install writes both (the pool in PHP-FPM, the listener in the sites Caddy imports) and reloads them; site --install puts the Quick Start website of the grid at the address its setup chose (the engine API, the site connected to it, its file beside the site of the host; for Apache, one line in each site serving the host, asked, or --edit-vhosts); site --vhosts names those files. Options: --docroot DIR, --socket PATH, --port N, --web-group GROUP."
+USAGE="opensim web [GRID] [show|check|snippet caddy|nginx|apache|api caddy|nginx|apache [--install]|site --install [--address URL] [--edit-vhosts]|site --vhosts|set PAGE URL] [options]"
+HELP="Show grid web services and who serves each page (the helpers under their base, the site elsewhere), check their URLs, print a server snippet, or set the address of a page (helpers, search, profile, guide, welcome, status, directory). api prints what serves the engine API to the sites of this machine as the user of the instances: a PHP-FPM pool of its own, and a listener on 127.0.0.1 for its paths only (the site then uses engine remote with a key); api caddy --install writes both (the pool in PHP-FPM, the listener in the sites Caddy imports) and reloads them; site --install puts the Quick Start website of the grid at the address its setup chose (--address another one, kept alone: no other address of the grid follows it) (the engine API, the site connected to it, its file beside the site of the host; for Apache, one line in each site serving the host, asked, or --edit-vhosts); site --vhosts names those files. Options: --docroot DIR, --socket PATH, --port N, --web-group GROUP."
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 
@@ -150,6 +150,16 @@ site_vhosts() { # grid
 }
 
 if [[ "${2:-}" == site && " $* " == *" --install "* ]]; then
+	# Another address for the website: its own setting, kept before it is installed there
+	address=
+	for ((i = 1; i <= $#; i++)); do
+		[[ "${!i}" == --address ]] && { j=$((i + 1)); address=${!j:-}; [[ -n "$address" ]] || die "--address requires a URL"; }
+		[[ "${!i}" == --address=* ]] && address=${!i#--address=}
+	done
+	if [[ -n "$address" ]]; then
+		reply=$(engine POST "/grids/$(jq -rn --arg v "$1" '$v | @uri')/address" --data=- <<<"$(jq -cn --arg w "$address" '{data: {type: "address", attributes: {website: $w, mode: "apply"}}}')") || true
+		why=$(jq -er 'select(.status? >= 400) | .detail // .title' <<<"$reply" 2>/dev/null) && die "$why"
+	fi
 	install_site "$1" "$([[ " $* " != *" --edit-vhosts "* ]] || echo yes)"
 	exit
 fi

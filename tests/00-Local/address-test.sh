@@ -68,6 +68,17 @@ function test_applies_with_apply_a_port_as_a_number_and_says_what_to_restart() {
 	assert_not_contains "Nothing written" "$out"
 }
 
+function test_changes_the_address_of_the_website_alone() {
+	engine_says '{"data":{"type":"address","id":"demo","attributes":{"mode":"apply","from":{"website":"https://w4os.org/"},"to":{"website":"https://www.w4os.org/opensim/"},"changes":[{"file":"/etc/opensim/grids/demo/demo.conf","line":0,"before":"SiteAddress = https://w4os.org/","after":"SiteAddress = https://www.w4os.org/opensim/"}],"rows":[],"applied":true}}}'
+
+	out=$("$OPENSIM" address demo --website https://www.w4os.org/opensim/ --apply 2>&1)
+
+	assert_same '{"data":{"type":"address","attributes":{"mode":"apply","website":"https://www.w4os.org/opensim/"}}}' "$(cat "$ENGINE_LOG")"
+	assert_contains "website: https://w4os.org/ -> https://www.w4os.org/opensim/" "$out"
+	assert_not_contains "site: " "$(grep -v '^website' <<<"$out")"
+	assert_not_contains "restart" "$out"
+}
+
 function test_says_what_the_engine_refuses() {
 	engine_says "$REFUSED"
 
@@ -82,7 +93,7 @@ function test_needs_a_grid_and_something_that_changes() {
 	engine_says "$PLANNED"
 
 	assert_contains "usage: opensim address" "$("$OPENSIM" address 2>&1)"
-	assert_contains "give the --host, the --port or the --site" "$("$OPENSIM" address demo 2>&1)"
+	assert_contains "give the --host, the --port, the --site or the --website" "$("$OPENSIM" address demo 2>&1)"
 	assert_contains "--port takes a number" "$("$OPENSIM" address demo --port eighty 2>&1)"
 	assert_file_not_exists "$ENGINE_CALLS"
 }

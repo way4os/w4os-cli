@@ -218,7 +218,7 @@ run_setup() {
 		esac
 		if [[ -n "$input_file" && "$input_file" != - ]]; then
 			[[ -r "$input_file" ]] || die "cannot read prepared setup: $input_file"
-			as_system_user "$CLI_ROOT/libexec/setup" "${arguments[@]}" <"$input_file"
+			setup_client "${arguments[@]}" <"$input_file"
 			return $?
 		fi
 	done
@@ -261,9 +261,19 @@ run_setup() {
 			*) arguments[index+1]=$destination ;;
 		esac
 	done
-	as_system_user "$CLI_ROOT/libexec/setup" "${arguments[@]}" || status=$?
+	setup_client "${arguments[@]}" || status=$?
 	[[ -z "$input_dir" ]] || as_system_user rm -rf -- "$input_dir" || true
 	return "$status"
+}
+
+# The setup's client: run by root, it stays root (the steps of root of the run are its own: the website) and only the engine runs as
+# the system user, whose files it writes; else all of it as the system user
+setup_client() {
+	if [[ $(id -u) -eq 0 ]]; then
+		OPENSIM_SETUP_ENGINE_AS=$system_user "$CLI_ROOT/libexec/setup" "$@"
+	else
+		as_system_user "$CLI_ROOT/libexec/setup" "$@"
+	fi
 }
 
 # Apply a setup file through the engine (POST /setups/files): its text, plan or apply; shows the plan or what was written

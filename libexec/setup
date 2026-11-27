@@ -21,6 +21,10 @@ HELP="Shows the setup questions and applies the confirmed settings.
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 source "$CLI_ROOT/src/lib/ui"
+# Its client run by root (setup_client): the engine as the system user, whose files it writes
+if [[ -n "${OPENSIM_SETUP_ENGINE_AS:-}" && $(id -u) -eq 0 ]]; then
+	engine() { system_user=$OPENSIM_SETUP_ENGINE_AS as_system_user "$OPENSIM_API" "$@"; }
+fi
 
 setup_config=${OPENSIM_SETUP_CONFIG_FILE:-}
 setup_config_explicit=no
@@ -239,6 +243,11 @@ root_step() { # name, args (JSON), label
 		local edit=
 		[[ "$(jq -r '.edit_vhosts // false' <<<"$args")" != true ]] || edit=--edit-vhosts
 		as_root "$CLI_ROOT/bin/opensim" web "$grid" site --install $edit </dev/null || return 1
+		;;
+	restart-service)
+		step_line "$label: opensim.service"
+		[[ -d /run/systemd/system ]] || { echo "restart-service: no systemd here: opensim start starts the grids"; return 1; }
+		systemctl restart opensim || { echo "opensim.service did not restart: systemctl status opensim"; return 1; }
 		;;
 	*)
 		echo "unknown step $name: refused"

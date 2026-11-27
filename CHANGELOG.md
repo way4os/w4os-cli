@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+- new (address): --website changes the address of the Quick Start website alone; web site --install --address too
+- fix (setup): run by root, its client stays root for its steps of root, the engine runs as the system user
 - change (kickstart): in place and the website of a new grid are the setup's; --restart and --edit-vhosts are its answers
 - change (kickstart): every migration is the engine's scenario; --migrate --yes runs it without anybody, --config its answers
 - new (setup): --unattended and --config-keys for the scenario of an install of before the kit; its exit code said
