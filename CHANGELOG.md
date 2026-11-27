@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- fix (setup): dialog in ASCII without a UTF-8 locale; a long row shortened in the middle, shown whole; labels bounded
 - fix (kickstart): what it starts never keeps the terminal (SQL server without systemd, fd 8): the prompt comes back at once
 - change (web): site --install names the modules of Apache it enables with the line it asks
 - new (address): --website changes the address of the Quick Start website alone; web site --install --address too

@@ -520,6 +520,44 @@ function test_screen_title_describes_the_current_step() {
 	assert_contains "bindkey formfield ENTER form_NEXT" "$log"
 }
 
+function test_a_review_row_longer_than_its_panel_is_shortened_in_the_middle_and_shown_whole_by_change() {
+	local long review
+	make_fake_dialog
+	long='${Const|EtcDirectory}/assets/AssetSets.xml → /usr/share/opensim/0.9.3.0/bin/assets/AssetSets.xml'
+	review=$(jq -c --arg v "$long" '.data.attributes.rows += [{"section":"corrected","label":"AssetLoaderArgs","value":$v}]' <<<"$REVIEW")
+	engine_says "$review" "$QUIT"
+	# Change on the long row (r4: it names nothing, it is only shown, whole), then Install
+	printf '%s\n' '0:r4' '0:' '3:' >"$DIALOG_ANSWERS"
+	LC_ALL=C.UTF-8 setup_with_dialog >/dev/null || true
+
+	assert_contains "AssetLoaderArgs: \${Const|EtcDire…/0.9.3.0/bin/assets/AssetSets.xml" "$(grep -- '--menu' "$DIALOG_LOG" | head -1)"
+	assert_contains "--msgbox AssetLoaderArgs: $long" "$(cat "$DIALOG_LOG")"
+}
+
+function test_dialog_is_given_ascii_when_the_locale_is_not_utf8() {
+	local review
+	make_fake_dialog
+	review=$(jq -c '.data.attributes.rows += [{"section":"corrected","label":"Old","value":"a → b"}]' <<<"$REVIEW")
+	engine_says "$review" "$QUIT"
+	printf '%s\n' '3:' >"$DIALOG_ANSWERS"
+	LC_ALL=C LANG=C setup_with_dialog >/dev/null || true
+
+	assert_contains "Old: a -> b" "$(cat "$DIALOG_LOG")"
+	assert_not_contains "→" "$(cat "$DIALOG_LOG")"
+}
+
+function test_a_long_label_of_a_form_list_leaves_its_value_readable() {
+	local form
+	make_fake_dialog
+	form='{"data":{"attributes":{"action":"screen","kind":"form","title":"Migration","text":"","notice":"","fields":[{"name":"vhosts","label":"Add one line to /etc/apache2/sites-available/w4os.org-le-ssl.conf and enable the modules proxy, proxy_fcgi of Apache","value":"yes","secret":false,"readonly":false,"options":{"yes":"Yes","no":"No"}},{"name":"website","label":"Website address","value":"https://w4os.org/opensim/","secret":false,"readonly":false}],"buttons":{"next":"OK","back":"Back"},"state":"s2"}}}'
+	engine_says "$form" "$QUIT"
+	printf '%s\n' '3:' >"$DIALOG_ANSWERS"
+	LC_ALL=C.UTF-8 setup_with_dialog >/dev/null || true
+
+	assert_contains "Website address                     https://w4os.org/opensim/" "$(grep -- '--menu' "$DIALOG_LOG" | head -1)"
+	assert_not_contains "proxy_fcgi of Apache  Yes" "$(grep -- '--menu' "$DIALOG_LOG" | head -1 | sed 's/--item-help.*//')"
+}
+
 function test_cancel_button_is_back_and_escape_is_quit() {
 	make_fake_dialog
 	engine_says "$MENU" "$FORM" "$CHECKS" "$ABORT"
