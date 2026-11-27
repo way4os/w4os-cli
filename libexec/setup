@@ -207,7 +207,7 @@ root_step() { # name, args (JSON), label
 		grid=$(jq -r '.grid // empty' <<<"$args")
 		if [[ -n "$option" ]]; then
 			[[ "$option" == map-warp3d && "$grid" =~ ^[a-z0-9_-]+$ ]] || { echo "install-packages: not an option of the scenario: $option"; return 1; }
-			run enable "$grid" "$option" || return 1
+			"$CLI_ROOT/bin/opensim" enable "$grid" "$option" || return 1
 		fi
 		;;
 	install-website)
