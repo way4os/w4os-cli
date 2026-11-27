@@ -964,7 +964,8 @@ start_sql_server() {
 
 phase_database() {
 	[[ $(uname -s) == Linux ]] || die "The database server installs on Debian and Ubuntu"
-	configure_package_sources || return $?
+	# The sources of our packages are not for a clone, which installs none of them
+	[[ -n "${clone:-}" && -z "${APT_SOURCE_DIR:-}" ]] || configure_package_sources || return $?
 	if database_server_installed; then
 		done_line "Database server (kept)"
 	else
@@ -1056,7 +1057,8 @@ end_installation() {
 		if [[ -z "$REGION_CONFIG_FILE" ]] && jq -e ' .version == 1 and (.answers | type == "object") and (.setup | type == "object")' "$setup_config" >/dev/null 2>&1; then
 			setup_option=--apply
 		fi
-		if [[ $(uname -s) == Linux ]]; then
+		# Kept for the account of the suite when root installs; a person's own config stays where it is, theirs to read
+		if [[ $(uname -s) == Linux && $(id -u) -eq 0 ]]; then
 			as_root mkdir -p /etc/opensim || die "could not create /etc/opensim"
 			as_root install -m 600 "$setup_config" /etc/opensim/setup.json || die "could not install the setup config"
 			if getent passwd opensim >/dev/null 2>&1; then

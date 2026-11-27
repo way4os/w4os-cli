@@ -223,7 +223,17 @@ root_step() { # name, args (JSON), label
 		;;
 	give-ownership)
 		step_line "$label"
-		as_root php "$(dirname "$(realpath "$OPENSIM_API")")/opensim-layout.php" || return 1
+		# From a clone (no package made an account): the folders are the caller's, who owns the clone and runs the instances;
+		# root alone gets the account of the suite, which must then be able to read the clone
+		local owner=
+		[[ "$CLI_ROOT" == /usr/* ]] || owner=${SUDO_USER:-$(id -un)}
+		[[ "$owner" != root ]] || owner=
+		as_root env W4OS_AUTOLOAD="${W4OS_AUTOLOAD:-}" ${owner:+OPENSIM_SYSTEM_USER="$owner"} php "$(dirname "$(realpath "$OPENSIM_API")")/opensim-layout.php" || return 1
+		if [[ -z "$owner" && "$CLI_ROOT" != /usr/* ]]; then
+			owner=$(run system-user 2>/dev/null) || owner=
+			[[ -z "$owner" ]] || as_root sudo -u "$owner" test -x "$CLI_ROOT/bin/opensim" 2>/dev/null ||
+				{ echo "The account $owner cannot read this clone ($CLI_ROOT): put it where it can, or run the install from your own account"; return 1; }
+		fi
 		;;
 	install-dotnet)
 		# The .NET runtime the cores target, by the command that knows what each system has
