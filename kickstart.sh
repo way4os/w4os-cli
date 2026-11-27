@@ -24,19 +24,19 @@
 #           --tools               only the command line and the engine, light (no core, no database, no website): to work on
 #                                 a grid installed otherwise (opensim import --accounts FILE --robust ROBUST_INI)
 #           --cleanup             remove an existing OpenSim installation first (asks for confirmation)
-#           --in-place            beside an install of before the kit (/opt/opensim): run its grids where they are, under the
-#                                 service of the kit; its own start (its cron) set aside, reversibly
-#           --migrate             beside an install of before the kit: its grids migrated into the layout of the kit, its own
-#                                 start set aside, the old install kept
-#           --new                 beside an install of before the kit: a new grid, the old install left as it is
+#           --in-place            beside a pre-existing install (/opt/opensim): run its grids where they are, under the
+#                                 opensim service; its own start (its cron) set aside, reversibly
+#           --migrate             beside a pre-existing install: its grids migrated into the layout of w4os, its own start
+#                                 set aside, the old install kept
+#           --new                 beside a pre-existing install: a new grid, the old install left as it is
 #           --restart             with --in-place: stop its running instances and start them again under the service
-#           --show-passwords      show the passwords of the SQL accounts in the plan (masked by default)
+#           --show-passwords      show the passwords of the database users in the review (masked by default)
 #           --setup               run `opensim setup` after the full or OpenSim install
 #           --dependencies        install quick-install's own dependencies
-#           --mariadb | --mysql   install/configure the requested SQL server
+#           --mariadb | --mysql   install/configure the requested database server
 #           --dotnet              install the .NET runtime the installed cores target (and libgdiplus)
 #           --opensim             install OpenSimulator and its management packages (or prepare the clone)
-#           --with MODULE         an OpenSimulator module the kit does not install (gloebit): its package for each core, enabled
+#           --with MODULE         an OpenSimulator module w4os does not install (gloebit): its package for each core, enabled
 #           --remote SSH_TARGET   run this installation on a server over SSH
 #           --podman              install in a persistent Podman container
 #           --connection NAME     use a configured Podman connection; local|none forces local Podman
@@ -907,45 +907,12 @@ phase_dependencies() {
 			fi
 		fi
 		php -r 'exit(PHP_VERSION_ID >= 80200 ? 0 : 1);' || die "PHP 8.2 or newer is needed (this is $(php -r 'echo PHP_VERSION;'))"
-		if [[ ! -f "$clone/vendor/autoload.php" ]]; then
+		if composer_needed; then
 			say "Installing the PHP libraries (composer)..."
 			(cd "$clone" && composer install --no-dev --no-interaction --prefer-dist) || return $?
 		fi
 	else
 		configure_package_sources || return $?
-	fi
-}
-
-opensim_rc_file() {
-	printf '%s\n' "$OPENSIM_RC_PATH"
-}
-
-shell_quote() {
-	local value=${1//\'/\'\\\'\'}
-	printf "'%s'" "$value"
-}
-
-save_database_credentials() {
-	local rc user_group tmp
-	rc=$(opensim_rc_file)
-	mkdir -p "$(dirname "$rc")" || return $?
-	tmp=$(mktemp "${rc}.XXXXXX") || return $?
-	if [[ -e "$rc" ]]; then
-		grep -Ev '^export OPENSIM_DB_(HOST|ADMIN_USER|ADMIN_PASS|USER|PASS)=' "$rc" >"$tmp" || true
-	fi
-	mv "$tmp" "$rc" || return $?
-	chmod 600 "$rc" || return $?
-	cat <<-OPENSIM_RC >>"$rc" || return $?
-		# OpenSim database accounts, created by kickstart.sh
-		export OPENSIM_DB_HOST=$(shell_quote "${OPENSIM_DB_HOST:-localhost}")
-		export OPENSIM_DB_ADMIN_USER=$(shell_quote "$OPENSIM_DB_ADMIN_USER")
-		export OPENSIM_DB_ADMIN_PASS=$(shell_quote "$OPENSIM_DB_ADMIN_PASS")
-		export OPENSIM_DB_USER=$(shell_quote "$OPENSIM_DB_USER")
-		export OPENSIM_DB_PASS=$(shell_quote "$OPENSIM_DB_PASS")
-	OPENSIM_RC
-	if [[ -n "${SUDO_USER:-}" && ${SUDO_USER} != root ]]; then
-		user_group=$(id -gn "$SUDO_USER")
-		chown "$SUDO_USER:$user_group" "$rc" || return $?
 	fi
 }
 
@@ -989,40 +956,8 @@ start_sql_server() {
 	return 1
 }
 
-# Where the password of an SQL account comes from, by its variable: the rc file of the kit, the environment, or none (made here)
-password_source() { # variable
-	if [[ -z "${!1:-}" ]]; then
-		echo generated
-	elif [[ -f "$OPENSIM_RC_PATH" ]] && grep -q "^export $1=" "$OPENSIM_RC_PATH"; then
-		echo "from $OPENSIM_RC_PATH"
-	else
-		echo "given (environment)"
-	fi
-}
-
-# Whether an SQL account logs in with a password, on the server of this machine
-sql_login() { # name password
-	MYSQL_PWD=$2 "$sql_client" -u "$1" -h localhost -Nse 'SELECT 1' >/dev/null 2>&1
-}
-
-# The hosts an SQL account of this name has, one a line, none when there is no such account (on any host)
-sql_account_hosts() { # name
-	as_root "$sql_client" -Nse "SELECT Host FROM mysql.user WHERE User='$1'" 2>/dev/null
-}
-
-# A name of SQL account no host has: the one given followed by _w4os, then _w4os2...
-free_sql_account() { # name
-	local candidate=${1}_w4os number=1
-	while [[ -n "$(sql_account_hosts "$candidate")" ]]; do
-		number=$((number + 1))
-		candidate=${1}_w4os$number
-		((number < 20)) || return 1
-	done
-	printf '%s\n' "$candidate"
-}
-
 phase_database() {
-	[[ $(uname -s) == Linux ]] || die "SQL server installation is available on Debian and Ubuntu"
+	[[ $(uname -s) == Linux ]] || die "The database server installs on Debian and Ubuntu"
 	configure_package_sources || return $?
 	if database_server_installed; then
 		done_line "Database server (kept)"
@@ -1034,76 +969,10 @@ phase_database() {
 		esac
 		PACKAGES_LABEL="Database server" install_packages "$server_package" || die "could not install $server_package"
 	fi
-	start_sql_server || die "could not start the SQL server"
-	command -v mysql >/dev/null 2>&1 || command -v mariadb >/dev/null 2>&1 || die "SQL client is unavailable after server installation"
+	start_sql_server || die "could not start the database server"
+	command -v mysql >/dev/null 2>&1 || command -v mariadb >/dev/null 2>&1 || die "The database client is unavailable after the server installation"
 
-	local had_admin_pass=0 had_app_pass=0 had_admin_user=0 had_app_user=0
-	[[ -n "${OPENSIM_DB_ADMIN_PASS:-}" ]] && had_admin_pass=1
-	[[ -n "${OPENSIM_DB_PASS:-}" ]] && had_app_pass=1
-	[[ -n "${OPENSIM_DB_ADMIN_USER:-}" ]] && had_admin_user=1
-	[[ -n "${OPENSIM_DB_USER:-}" ]] && had_app_user=1
-	OPENSIM_DB_ADMIN_USER=${OPENSIM_DB_ADMIN_USER:-opensim_admin}
-	OPENSIM_DB_USER=${OPENSIM_DB_USER:-opensim}
-	[[ $OPENSIM_DB_ADMIN_USER =~ ^[a-zA-Z0-9_]+$ && $OPENSIM_DB_USER =~ ^[a-zA-Z0-9_]+$ ]] || die "SQL account names may contain only letters, digits, and underscores"
-	local admin_exists=0 app_exists=0 sql_client
-	sql_client=$(command -v mariadb || command -v mysql)
-	sql_account_hosts "$OPENSIM_DB_ADMIN_USER" >/dev/null || die "cannot access the local SQL server as administrator"
-	# An account of the name on any host is there already: never made again for localhost, where it would take the local
-	# logins of the one of another install (an existing grid on 'opensim'@'%') and break them
-	if [[ -n "$(sql_account_hosts "$OPENSIM_DB_ADMIN_USER")" ]]; then
-		if ((had_admin_pass)); then
-			admin_exists=1
-		elif ((had_admin_user)); then
-			die "SQL account $OPENSIM_DB_ADMIN_USER already exists; set OPENSIM_DB_ADMIN_PASS in ~/.opensimrc to preserve its password"
-		else
-			OPENSIM_DB_ADMIN_USER=$(free_sql_account "$OPENSIM_DB_ADMIN_USER") || die "cannot inspect SQL accounts"
-			say "  SQL account opensim_admin exists (another install's): the kit uses $OPENSIM_DB_ADMIN_USER"
-		fi
-	fi
-	if [[ -n "$(sql_account_hosts "$OPENSIM_DB_USER")" ]]; then
-		if ((had_app_pass)); then
-			app_exists=1
-		elif ((had_app_user)); then
-			die "SQL account $OPENSIM_DB_USER already exists; set OPENSIM_DB_PASS in ~/.opensimrc to preserve its password"
-		else
-			OPENSIM_DB_USER=$(free_sql_account "$OPENSIM_DB_USER") || die "cannot inspect SQL accounts"
-			say "  SQL account opensim exists (another install's): the kit uses $OPENSIM_DB_USER"
-		fi
-	fi
-	local admin_source app_source
-	admin_source=$(password_source OPENSIM_DB_ADMIN_PASS)
-	app_source=$(password_source OPENSIM_DB_PASS)
-	OPENSIM_DB_ADMIN_PASS=${OPENSIM_DB_ADMIN_PASS:-$(openssl rand -hex 32)}
-	OPENSIM_DB_PASS=${OPENSIM_DB_PASS:-$(openssl rand -hex 32)}
-	# Nini ends a value at a double quote: OpenSim could not read it from its configs
-	[[ "$OPENSIM_DB_PASS" != *'"'* ]] || die "OPENSIM_DB_PASS has a double quote: OpenSim cannot read a database password with one from its configs"
-	# An account that exists is used only with its own password: never changed to fit the one given
-	((admin_exists == 0)) || sql_login "$OPENSIM_DB_ADMIN_USER" "$OPENSIM_DB_ADMIN_PASS" || die "SQL account $OPENSIM_DB_ADMIN_USER: its password ($admin_source) is refused"
-	((app_exists == 0)) || sql_login "$OPENSIM_DB_USER" "$OPENSIM_DB_PASS" || die "SQL account $OPENSIM_DB_USER: its password ($app_source) is refused"
-	# One line, the passwords on request: the accounts are made, the person was asked to install
-	local -a made=()
-	((admin_exists)) || made+=("$OPENSIM_DB_ADMIN_USER")
-	((app_exists)) || made+=("$OPENSIM_DB_USER")
-	if ((${#made[@]})); then
-		say "  SQL accounts: $OPENSIM_DB_ADMIN_USER, $OPENSIM_DB_USER (passwords generated)"
-	else
-		say "  SQL accounts: $OPENSIM_DB_ADMIN_USER, $OPENSIM_DB_USER (existing)"
-	fi
-	if [[ -n "$SHOW_PASSWORDS" ]] || { ((${#made[@]})) && ask_no "Show the passwords now?"; }; then
-		say "  $OPENSIM_DB_ADMIN_USER: $OPENSIM_DB_ADMIN_PASS"
-		say "  $OPENSIM_DB_USER: $OPENSIM_DB_PASS"
-	fi
-	if [[ $admin_exists != 1 || $app_exists != 1 ]]; then
-		local admin_password_sql=${OPENSIM_DB_ADMIN_PASS//\'/\'\'} app_password_sql=${OPENSIM_DB_PASS//\'/\'\'}
-		{
-			printf '%s\n' "SET SESSION sql_mode='NO_BACKSLASH_ESCAPES';"
-			[[ $admin_exists == 1 ]] || printf "CREATE USER '%s'@'localhost' IDENTIFIED BY '%s'; GRANT ALL PRIVILEGES ON *.* TO '%s'@'localhost' WITH GRANT OPTION;\n" "$OPENSIM_DB_ADMIN_USER" "$admin_password_sql" "$OPENSIM_DB_ADMIN_USER"
-			[[ $app_exists == 1 ]] || printf "CREATE USER '%s'@'localhost' IDENTIFIED BY '%s'; GRANT ALL PRIVILEGES ON *.* TO '%s'@'localhost';\n" "$OPENSIM_DB_USER" "$app_password_sql" "$OPENSIM_DB_USER"
-			printf 'FLUSH PRIVILEGES;\n'
-		} | as_root "$sql_client" || die "could not create the OpenSim SQL accounts"
-	fi
-	save_database_credentials || return $?
-	done_line "Database"
+	# Its users are the setup's: the DB admin user asked first, the one of a grid once its name is known
 }
 
 # Installation completed: the grids of an install of before migrated or run in place, else the assistant (opensim setup) in the same
@@ -1154,12 +1023,12 @@ end_installation() {
 		say ""
 		if [[ "${LEGACY_INTERACTIVE:-}" == yes ]]; then
 			# The terminal of the questions (fd 8) kept from what it starts: the setup opens its own
-			as_root env OPENSIM_SETUP_UI="$SETUP_UI" OPENSIM_SETUP_END="$end" "$cli" "${legacy[@]}" 8<&- || status=$?
+			as_root env OPENSIM_RC="$OPENSIM_RC_PATH" OPENSIM_SETUP_UI="$SETUP_UI" OPENSIM_SETUP_END="$end" "$cli" "${legacy[@]}" 8<&- || status=$?
 		else
 			# Nobody there (or --yes): every answer at once, the ones of --config, the defaults of the scenario for the others; each
 			# line of its run in the log too
 			legacy+=(--unattended --config "$(answers_with "$setup_config" "{\"existing\":\"${LEGACY_CHOICE:-migrate}\"}" restart LEGACY_RESTART vhosts EDIT_VHOSTS)")
-			{ as_root env OPENSIM_SETUP_UI=lines OPENSIM_SETUP_END="$end" "$cli" "${legacy[@]}" </dev/null 2>&1 8<&-; echo "status $?" >"$end.status"; } | tee -a "$(install_log)"
+			{ as_root env OPENSIM_RC="$OPENSIM_RC_PATH" OPENSIM_SETUP_UI=lines OPENSIM_SETUP_END="$end" "$cli" "${legacy[@]}" </dev/null 2>&1 8<&-; echo "status $?" >"$end.status"; } | tee -a "$(install_log)"
 			status=$(sed -n 's/^status //p' "$end.status" 2>/dev/null)
 			rm -f "$end.status"
 		fi
@@ -1192,12 +1061,13 @@ end_installation() {
 	fi
 	[[ -z "$setup_config_path" ]] || setup_arguments+=("$setup_option" "$setup_config_path")
 	[[ -z "$REGION_CONFIG_FILE" ]] || setup_arguments+=(--region-config "$REGION_CONFIG_FILE")
+	[[ -z "$SHOW_PASSWORDS" ]] || setup_arguments+=(--show-passwords)
 	if [[ "${RUN_SETUP:-}" =~ ^(yes|true|1)$ ]] || person_here; then
 		say ""
 		local end
 		# The summary of the setup said last, with the line of the passwords; its website is its last step (as root, by its name)
 		end=$(mktemp) && chmod 666 "$end"
-		OPENSIM_SETUP_UI=$SETUP_UI OPENSIM_SETUP_END=$end "$basedir/bin/opensim" "${setup_arguments[@]}" 8<&- || die "the setup stopped (error $?)"
+		OPENSIM_RC=$OPENSIM_RC_PATH OPENSIM_SETUP_UI=$SETUP_UI OPENSIM_SETUP_END=$end "$basedir/bin/opensim" "${setup_arguments[@]}" 8<&- || die "the setup stopped (error $?)"
 		done_line "Done"
 		say ""
 		setup_summary "$end"
@@ -1273,6 +1143,22 @@ system_line() {
 	printf '%s' "${name:-Linux}${memory:+, $memory}${free:+, $free}"
 }
 
+# Whether the PHP libraries of a clone are to be installed or upgraded (composer)
+composer_needed() {
+	[[ ! -f "$clone/vendor/autoload.php" || "$clone/composer.lock" -nt "$clone/vendor/composer/installed.json" ]]
+}
+
+# The one question before the setup: the installer's own libraries from a clone, else the packages it needs
+opening_question() {
+	if [[ -n "$clone" ]] && composer_needed; then
+		say "Composer dependencies upgrade is needed by the installer."
+		ask "Execute composer install?"
+	else
+		say "This will install the packages required by the installer."
+		ask "Install w4os-engine?"
+	fi
+}
+
 # The install of before the kit on this machine (opensim-debian, in /opt/opensim): its folder, nothing when there is none
 legacy_install() {
 	if [[ -f "$LEGACY_ROOT/lib/os-helpers" ]] || { [[ -f "$LEGACY_CRON" ]] && grep -q "$LEGACY_ROOT" "$LEGACY_CRON" 2>/dev/null; }; then
@@ -1309,8 +1195,7 @@ legacy_gate() {
 	[[ -n "$root" ]] || return 0
 	# The choice is the engine's scenario (opensim setup --legacy, once the kit is installed); only a run without anybody gives it here
 	if [[ -z "$LEGACY_MODE" ]] && person_here; then
-		# The install found is said by the first screen of the scenario
-		ask "An install of before the kit is in $root. Install the kit, then choose what to do with it?" || { say "Stopped: nothing changed."; exit 0; }
+		# The install found is listed by the first screen of the setup
 		LEGACY_MODE=scenario LEGACY_INTERACTIVE=yes
 		legacy_set_aside
 		return 0
@@ -1429,9 +1314,9 @@ phase_cleanup() {
 		if [[ -e "$path" || -L "$path" ]]; then folders+=("$path"); fi
 	done
 	if database_server_installed; then
-		sql_client=$(command -v mariadb || command -v mysql) || die "SQL client is unavailable; cannot inspect OpenSim databases"
+		sql_client=$(command -v mariadb || command -v mysql) || die "The database client is unavailable; cannot inspect OpenSim databases"
 		prefix=$(hostname -s)
-		database_rows=$(as_root "$sql_client" -Nse 'SHOW DATABASES' 2>/dev/null) || die "cannot inspect SQL databases for cleanup"
+		database_rows=$(as_root "$sql_client" -Nse 'SHOW DATABASES' 2>/dev/null) || die "cannot inspect the databases for cleanup"
 		while IFS= read -r db; do
 			if [[ "$db" == "$prefix"* ]]; then databases+=("$db"); fi
 		done <<<"$database_rows"
@@ -1739,16 +1624,20 @@ if [[ "$RUN_CLEANUP" == yes ]]; then
 	[[ $(uname -s) == Linux ]] || die "cleanup is available on Debian and Ubuntu only"
 	phase_cleanup
 fi
-say "OpenSim kit installer"
+say "w4os installer"
 install_log >/dev/null
 [[ $(uname -s) != Linux ]] || done_line "System: $(system_line)"
-# An install of before the kit: never beside it silently (both would read /etc/opensim and start the same grids); its choice is the
-# question of the install, else the install is asked for
-if [[ $(uname -s) == Linux && "$RUN_CLEANUP" != yes && -n "$(legacy_install)" ]]; then
-	legacy_gate
-elif [[ "$INSTALL_PHASE" == all ]] && ! ask "Install OpenSim (kit, database, website)?"; then
+# Without apt (not Debian or Ubuntu): from a clone of the repository only
+[[ -n "$clone" ]] || command -v apt-get >/dev/null 2>&1 ||
+	die "w4os installs on Debian and Ubuntu; elsewhere, from a clone of its repository: git clone https://github.com/way4os/w4os-cli.git"
+# The one question before the setup, whose scenario says what is here and asks the rest
+if [[ "$INSTALL_PHASE" == all ]] && ! opening_question; then
 	say "Stopped: nothing changed."
 	exit 0
+fi
+# A pre-existing install: never beside it silently (both would read /etc/opensim and start the same grids); its choice is the setup's
+if [[ $(uname -s) == Linux && "$RUN_CLEANUP" != yes && -n "$(legacy_install)" ]]; then
+	legacy_gate
 fi
 
 case "$INSTALL_PHASE" in

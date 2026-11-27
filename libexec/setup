@@ -8,7 +8,7 @@ HELP="Shows the setup questions and applies the confirmed settings.
   --prepare FILE  save answers privately without creating the installation
   --apply FILE    apply a prepared configuration without further questions
   --region-config FILE  adopt an existing Region.ini in a simulator setup
-  --legacy        beside an install of before the kit (/opt/opensim), its scenario: migrate it, run it in place, or a new grid
+  --legacy        beside a pre-existing install (/opt/opensim): with --unattended or --config-keys, its scenario without screens
   --unattended    with --legacy, nobody there: the answers of --config, a default for each one missing, no screen; exit 0 done,
                   1 a step failed, 2 an answer refused (nothing done)
   --config-keys   with --legacy, the answers --config takes for it: name, values, default, what it is
@@ -95,14 +95,11 @@ if [[ -n "$apply_file" ]]; then
 		else . end |
 		{data: {type: "steps", attributes: {mode: "apply", configuration: .}}}
 	'
-	setup_apply_request() {
-		jq -ce --rawfile admin_user <(printf '%s' "${OPENSIM_DB_ADMIN_USER:-}") --rawfile admin_password <(printf '%s' "${OPENSIM_DB_ADMIN_PASS:-}") "$apply_filter"
-	}
 	if [[ "$apply_file" == - ]]; then
-		apply_request=$(setup_apply_request) || die "cannot read prepared setup from standard input"
+		apply_input=$(cat) || die "cannot read prepared setup from standard input"
 	else
 		[[ -r "$apply_file" ]] || die "cannot read prepared setup: $apply_file"
-		apply_request=$(setup_apply_request <"$apply_file") || die "invalid prepared setup JSON"
+		apply_input=$(<"$apply_file")
 	fi
 fi
 setup_prefill='{}'
@@ -200,7 +197,7 @@ root_step() { # name, args (JSON), label
 		step_line "$label: start at boot set aside"
 		while IFS= read -r file; do
 			[[ -n "$file" ]] || continue
-			[[ " $LEGACY_STARTERS " == *" $file "* ]] || { echo "set-aside-starters: not a starter of an install of before the kit: $file"; return 1; }
+			[[ " $LEGACY_STARTERS " == *" $file "* ]] || { echo "set-aside-starters: not a starter of the pre-existing install: $file"; return 1; }
 			[[ ! -e "$file" ]] || mv -- "$file" "$file.w4os-disabled" || return 1
 		done < <(jq -r '(.files // [])[]' <<<"$args")
 		[[ ! -d /run/systemd/system ]] || systemctl daemon-reload || true
@@ -208,7 +205,7 @@ root_step() { # name, args (JSON), label
 	stop-old-instances)
 		while IFS= read -r config; do
 			[[ -n "$config" ]] || continue
-			[[ "$config" == "${W4OS_LEGACY_ROOT:-/opt/opensim}"/etc/*.ini && -f "$config" ]] || { echo "stop-old-instances: not a config of the install of before the kit: $config"; return 1; }
+			[[ "$config" == "${W4OS_LEGACY_ROOT:-/opt/opensim}"/etc/*.ini && -f "$config" ]] || { echo "stop-old-instances: not a config of the pre-existing install: $config"; return 1; }
 			target=$(readlink -f -- "$config")
 			step_line "$label: $(basename "$config" .ini)"
 			for pid in $(legacy_pids "$target"); do
@@ -244,6 +241,24 @@ root_step() { # name, args (JSON), label
 		[[ "$(jq -r '.edit_vhosts // false' <<<"$args")" != true ]] || edit=--edit-vhosts
 		as_root "$CLI_ROOT/bin/opensim" web "$grid" site --install $edit </dev/null || return 1
 		;;
+	db-admin)
+		# The DB admin user: one that logs in kept as it is, else made when no account has its name (on any host), never changed;
+		# then kept for the commands (OPENSIM_RC, else ~/.opensimrc)
+		local user password client quoted
+		user=$(jq -r '.user // empty' <<<"$args")
+		password=$(jq -r '.password // empty' <<<"$args")
+		[[ "$user" =~ ^[A-Za-z0-9_]{1,32}$ && -n "$password" ]] || { echo "db-admin: not a user: $user"; return 1; }
+		step_line "$label: $user"
+		client=$(command -v mariadb || command -v mysql) || { echo "No database client here (mariadb or mysql)."; return 1; }
+		if ! MYSQL_PWD=$password "$client" -u "$user" -h localhost -Nse 'SELECT 1' >/dev/null 2>&1; then
+			as_root "$client" -Nse 'SELECT 1' >/dev/null 2>&1 || { echo "No access to the database server as root."; return 1; }
+			[[ -z "$(as_root "$client" -Nse "SELECT Host FROM mysql.user WHERE User='$user'" 2>/dev/null)" ]] || { echo "$user exists: its password is needed."; return 1; }
+			quoted=${password//\'/\'\'}
+			printf "SET SESSION sql_mode='NO_BACKSLASH_ESCAPES'; CREATE USER '%s'@'localhost' IDENTIFIED BY '%s'; GRANT ALL PRIVILEGES ON *.* TO '%s'@'localhost' WITH GRANT OPTION; FLUSH PRIVILEGES;\n" "$user" "$quoted" "$user" |
+				as_root "$client" >/dev/null 2>&1 || { echo "$user could not be made."; return 1; }
+		fi
+		keep_db_admin "$user" "$password" || { echo "$user made, not kept in ${OPENSIM_RC:-$HOME/.opensimrc}."; return 1; }
+		;;
 	restart-service)
 		step_line "$label: opensim.service"
 		[[ -d /run/systemd/system ]] || { echo "restart-service: no systemd here: opensim start starts the grids"; return 1; }
@@ -254,6 +269,18 @@ root_step() { # name, args (JSON), label
 		return 1
 		;;
 	esac
+}
+
+# The DB admin user kept for the commands: its lines in the rc file (OPENSIM_RC, else ~/.opensimrc) replaced, the file the person's
+# who ran sudo, read by them only
+keep_db_admin() { # user, password
+	local rc=${OPENSIM_RC:-$HOME/.opensimrc} tmp
+	tmp=$(mktemp "$rc.XXXXXX") || return 1
+	[[ ! -e "$rc" ]] || grep -Ev '^export OPENSIM_DB_(HOST|ADMIN_USER|ADMIN_PASS)=' "$rc" >"$tmp" || true
+	printf 'export OPENSIM_DB_HOST=localhost\nexport OPENSIM_DB_ADMIN_USER=%q\nexport OPENSIM_DB_ADMIN_PASS=%q\n' "$1" "$2" >>"$tmp"
+	chmod 600 "$tmp" && mv -f "$tmp" "$rc" || return 1
+	[[ -z "${SUDO_USER:-}" || "$SUDO_USER" == root ]] || chown "$SUDO_USER:$(id -gn "$SUDO_USER")" "$rc"
+	export OPENSIM_DB_ADMIN_USER=$1 OPENSIM_DB_ADMIN_PASS=$2
 }
 
 # The processes that run a config (resolved): the -inifile each was given, quotes taken off, relative to its folder
@@ -282,6 +309,23 @@ fail_engine() {
 	die "The engine does not answer as it should: ${what:-$1}$(grep -v '^opensim: ' "$errors" | sed 's/^/\n  /')"
 }
 
+# A prepared configuration applied by root: its DB admin user (else OPENSIM_DB_ADMIN_USER, else opensim_admin) made or checked by its
+# step first, a server of this machine being there
+if [[ -n "$apply_file" ]]; then
+	sql_client=$(command -v mariadb || command -v mysql || true)
+	if [[ $(id -u) -eq 0 && -n "$sql_client" ]]; then
+		admin_args=$(jq -c --arg user "${OPENSIM_DB_ADMIN_USER:-opensim_admin}" --arg password "${OPENSIM_DB_ADMIN_PASS:-$(openssl rand -hex 16)}" \
+			'{user: ((.answers.admin_user // "") | if . == "" then $user else . end), password: ((.answers.admin_password // "") | if . == "" then $password else . end)}' <<<"$apply_input") ||
+			die "invalid prepared setup JSON"
+		if ! MYSQL_PWD=$(jq -r .password <<<"$admin_args") "$sql_client" -u "$(jq -r .user <<<"$admin_args")" -h localhost -Nse 'SELECT 1' >/dev/null 2>&1; then
+			admin_said=$(root_step db-admin "$admin_args" "DB admin user" 3>/dev/null) || die "$(tail -n 1 <<<"$admin_said")"
+		fi
+		export OPENSIM_DB_ADMIN_USER OPENSIM_DB_ADMIN_PASS
+		OPENSIM_DB_ADMIN_USER=$(jq -r .user <<<"$admin_args") OPENSIM_DB_ADMIN_PASS=$(jq -r .password <<<"$admin_args")
+	fi
+	apply_request=$(jq -ce --rawfile admin_user <(printf '%s' "${OPENSIM_DB_ADMIN_USER:-}") --rawfile admin_password <(printf '%s' "${OPENSIM_DB_ADMIN_PASS:-}") "$apply_filter" <<<"$apply_input") ||
+		die "invalid prepared setup JSON"
+fi
 adoption_required=$(jq -r '(.existing_region // "") != ""' <<<"$setup_prefill")
 if [[ -n "$apply_request" ]]; then
 	adoption_required=$(jq -r '.data.attributes.configuration | (.answers.existing_region // .setup.simulators[0].regions[0].source // "") != ""' <<<"$apply_request")

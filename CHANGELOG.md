@@ -2,6 +2,9 @@
 
 ### Unreleased
 
+- change (kickstart): one question before the setup (composer from a clone, else the packages); no database user made there
+- new (setup): the root step db-admin makes the DB admin user when no account has its name, keeps it in the rc file
+- fix (kickstart): no "SQL account" or kit as an actor in what it says; not on Debian or Ubuntu, a clone is suggested
 - fix (setup): dialog in ASCII without a UTF-8 locale; a long row shortened in the middle, shown whole; labels bounded
 - fix (kickstart): what it starts never keeps the terminal (SQL server without systemd, fd 8): the prompt comes back at once
 - change (web): site --install names the modules of Apache it enables with the line it asks

@@ -605,9 +605,36 @@ function test_a_step_of_root_is_run_by_its_name_only_any_other_refused() {
 	assert_equals failed "$(request 2 .button)"
 	assert_contains "unknown step rm-rf: refused" "$(request 2 .answers.error_text)"
 	assert_equals failed "$(request 3 .button)"
-	assert_contains "not a starter of an install of before the kit: /etc/passwd" "$(request 3 .answers.error_text)"
+	assert_contains "not a starter of the pre-existing install: /etc/passwd" "$(request 3 .answers.error_text)"
 	assert_equals next "$(request 4 .button)"
 	assert_file_exists "$starter.w4os-disabled"
+}
+
+function test_the_db_admin_user_is_made_when_no_account_has_its_name_kept_one_refused_without_its_password() {
+	local out bin=$WORK/sqlbin
+	mkdir -p "$bin"
+	# A server where kept_admin exists (its password kept-secret) and new_admin does not
+	cat >"$bin/mariadb" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == -u ]]; then [[ "\$2" == kept_admin && "\${MYSQL_PWD:-}" == kept-secret ]]; exit; fi
+if [[ "\$1" == -Nse ]]; then [[ "\$2" != *"User='kept_admin'"* ]] || echo localhost; exit 0; fi
+cat >>"$WORK/made.sql"
+STUB
+	printf '#!/usr/bin/env bash\n"$@"\n' >"$bin/sudo"
+	chmod +x "$bin/mariadb" "$bin/sudo"
+	STEP='{"data":{"attributes":{"action":"step","step":{"name":"db-admin","root":true,"label":"DB admin user","number":1,"count":1,"args":{"user":"%s","password":"%s"}},"labels":["DB admin user"],"state":"s9"}}}'
+	engine_says "$(printf "$STEP" new_admin "new'secret")" "$(printf "$STEP" kept_admin wrong)" "$(printf "$STEP" kept_admin kept-secret)" "$QUIT"
+	out=$(PATH="$bin:$PATH" OPENSIM_RC="$WORK/rc" setup_with 2>&1) || true
+
+	assert_equals next "$(request 2 .button)"
+	assert_contains "CREATE USER 'new_admin'@'localhost' IDENTIFIED BY 'new''secret'; GRANT ALL PRIVILEGES ON *.* TO 'new_admin'@'localhost' WITH GRANT OPTION;" "$(cat "$WORK/made.sql")"
+	assert_equals failed "$(request 3 .button)"
+	assert_contains "kept_admin exists: its password is needed." "$(request 3 .answers.error_text)"
+	assert_equals next "$(request 4 .button)"
+	assert_not_contains "kept_admin" "$(cat "$WORK/made.sql")"
+	assert_contains "export OPENSIM_DB_ADMIN_USER=kept_admin" "$(cat "$WORK/rc")"
+	assert_not_contains "new_admin" "$(cat "$WORK/rc")"
+	assert_same 600 "$(stat -c %a "$WORK/rc" 2>/dev/null || stat -f %Lp "$WORK/rc")"
 }
 
 function test_the_legacy_scenario_is_asked_on_the_first_request_only() {

@@ -358,26 +358,6 @@ function test_custom_apt_source_does_not_fetch_magiiic_signing_key() {
 	assert_equals no "$key_downloaded"
 }
 
-function test_database_passwords_are_quoted_as_sql_literals() {
-	quick_install_load_library || return
-	local sql=$WORK/accounts.sql
-	configure_package_sources() { return 0; }
-	database_server_installed() { return 0; }
-	start_sql_server() { return 0; }
-	save_database_credentials() { return 0; }
-	uname() { printf 'Linux\n'; }
-	as_root() { "$@"; }
-	mariadb() {
-		if [[ "${1:-}" == -Nse ]]; then return 0; else cat >"$sql"; fi
-	}
-	OPENSIM_DB_ADMIN_USER=example_admin OPENSIM_DB_ADMIN_PASS="ad'min"
-	OPENSIM_DB_USER=example_user OPENSIM_DB_PASS="p'ass\\word"
-	phase_database
-	assert_contains "SET SESSION sql_mode='NO_BACKSLASH_ESCAPES';" "$(cat "$sql")"
-	assert_contains "IDENTIFIED BY 'ad''min';" "$(cat "$sql")"
-	assert_contains "IDENTIFIED BY 'p''ass\\word';" "$(cat "$sql")"
-}
-
 function test_dotnet_phase_requests_libgdiplus_directly_from_apt_when_missing() {
 	quick_install_load_library || return
 	recover_dpkg_configuration() { return 0; }
@@ -568,53 +548,6 @@ function test_an_install_that_fails_otherwise_is_not_tried_again() {
 	assert_same "env LC_ALL=C apt-get install -y -qq w4os-nothing" "$(cat "$calls")"
 }
 
-function test_the_sql_account_of_an_existing_grid_is_never_shadowed_by_one_for_localhost() {
-	quick_install_load_library || return
-	local sql=$WORK/accounts.sql
-	configure_package_sources() { return 0; }
-	database_server_installed() { return 0; }
-	start_sql_server() { return 0; }
-	save_database_credentials() { return 0; }
-	uname() { printf 'Linux\n'; }
-	as_root() { "$@"; }
-	# The grid of another install logs in as 'opensim'@'%'
-	mariadb() {
-		if [[ "${1:-}" == -Nse ]]; then
-			[[ "$2" != *"User='opensim'"* ]] || printf '%%\n'
-			return 0
-		fi
-		cat >"$sql"
-	}
-	unset OPENSIM_DB_USER OPENSIM_DB_PASS OPENSIM_DB_ADMIN_USER OPENSIM_DB_ADMIN_PASS
-
-	local said
-	said=$(phase_database; printf 'user=%s\n' "$OPENSIM_DB_USER")
-
-	assert_not_contains "CREATE USER 'opensim'@" "$(cat "$sql")"
-	assert_contains "CREATE USER 'opensim_w4os'@'localhost'" "$(cat "$sql")"
-	assert_contains "user=opensim_w4os" "$said"
-	assert_contains "SQL account opensim exists (another install's): the kit uses opensim_w4os" "$said"
-}
-
-function test_an_account_name_asked_for_that_exists_needs_its_password() {
-	quick_install_load_library || return
-	configure_package_sources() { return 0; }
-	database_server_installed() { return 0; }
-	start_sql_server() { return 0; }
-	save_database_credentials() { return 0; }
-	uname() { printf 'Linux\n'; }
-	as_root() { "$@"; }
-	mariadb() { [[ "${1:-}" == -Nse && "$2" == *"User='grid_user'"* ]] && printf '%%\n'; return 0; }
-	unset OPENSIM_DB_PASS OPENSIM_DB_ADMIN_USER OPENSIM_DB_ADMIN_PASS
-	OPENSIM_DB_USER=grid_user PGM=kickstart.sh
-
-	local said status=0
-	said=$(phase_database 2>&1) || status=$?
-
-	assert_same 1 "$status"
-	assert_contains "SQL account grid_user already exists; set OPENSIM_DB_PASS" "$said"
-}
-
 # An install of before the kit in a temporary folder: its helpers, its cron, a unit of its own, a Robust and a simulator
 function legacy_fixture() {
 	LEGACY_ROOT=$WORK/opt/opensim LEGACY_CRON=$WORK/cron.hourly/opensim LEGACY_UNITS="$WORK/systemd/opensim.service"
@@ -649,58 +582,41 @@ function test_no_install_of_before_the_kit_changes_nothing() {
 	legacy_gate
 }
 
-function test_the_sql_accounts_are_shown_before_anything_is_changed_their_passwords_masked() {
+function test_the_database_step_installs_the_server_alone_its_users_being_the_setups() {
 	quick_install_load_library || return
-	local sql=$WORK/accounts.sql
 	configure_package_sources() { return 0; }
 	database_server_installed() { return 0; }
 	start_sql_server() { return 0; }
-	save_database_credentials() { return 0; }
 	uname() { printf 'Linux\n'; }
 	as_root() { "$@"; }
-	mariadb() {
-		if [[ "${1:-}" == -Nse ]]; then
-			[[ "$2" != *"User='opensim'"* ]] || printf '%%\n'
-			return 0
-		fi
-		cat >"$sql"
-	}
+	mariadb() { echo "mariadb $*" >>"$WORK/sql-calls"; cat >/dev/null; }
 	unset OPENSIM_DB_USER OPENSIM_DB_PASS OPENSIM_DB_ADMIN_USER OPENSIM_DB_ADMIN_PASS
-	OPENSIM_RC_PATH=$WORK/no-rc SHOW_PASSWORDS=
+	OPENSIM_RC_PATH=$WORK/no-rc TTY_IN=/dev/null TTY_OUT=$WORK/screen TTY_OPEN= ASSUME_YES=
 
-	local said shown
-	said=$(phase_database)
-	shown=$(SHOW_PASSWORDS=yes OPENSIM_DB_PASS=visible-secret OPENSIM_DB_USER=kit_user phase_database)
+	local said
+	said=$(phase_database 2>&1)
 
-	assert_contains "SQL accounts: opensim_admin, opensim_w4os (passwords generated)" "$said"
-	assert_contains "SQL account opensim exists (another install's): the kit uses opensim_w4os" "$said"
-	assert_not_contains "visible-secret" "$said"
-	assert_contains "kit_user: visible-secret" "$shown"
+	assert_same "✓ Database server (kept)" "$said"
+	assert_file_not_exists "$WORK/sql-calls"
+	assert_file_not_exists "$WORK/no-rc"
+	assert_file_not_exists "$WORK/screen"
 }
 
-function test_an_existing_sql_account_is_used_only_with_its_own_password() {
+function test_the_one_question_before_the_setup_is_what_the_installer_needs() {
 	quick_install_load_library || return
-	configure_package_sources() { return 0; }
-	database_server_installed() { return 0; }
-	start_sql_server() { return 0; }
-	save_database_credentials() { return 0; }
-	uname() { printf 'Linux\n'; }
-	as_root() { "$@"; }
-	# The account opensim exists; its own password is grid-secret
-	mariadb() {
-		if [[ "${1:-}" == -Nse ]]; then [[ "$2" != *"User='opensim'"* ]] || printf '%%\n'; return 0; fi
-		if [[ "${1:-}" == -u ]]; then [[ "${MYSQL_PWD:-}" == grid-secret ]]; return; fi
-		cat >/dev/null
-	}
-	unset OPENSIM_DB_ADMIN_USER OPENSIM_DB_ADMIN_PASS
-	OPENSIM_RC_PATH=$WORK/no-rc PGM=kickstart.sh OPENSIM_DB_USER=opensim
+	local answers=$WORK/answers screen=$WORK/screen packages composer
+	printf 'y\ny\n' >"$answers"
+	TTY_IN=$answers TTY_OUT=$screen TTY_OPEN= ASSUME_YES=
+	clone=
+	packages=$(opening_question)
+	clone=$WORK/clone
+	mkdir -p "$clone"
+	composer=$(opening_question)
 
-	local refused status=0
-	refused=$(OPENSIM_DB_PASS=wrong phase_database 2>&1) || status=$?
-
-	assert_same 1 "$status"
-	assert_contains "SQL account opensim: its password (given (environment)) is refused" "$refused"
-	assert_successful_code "$(OPENSIM_DB_PASS=grid-secret phase_database >/dev/null 2>&1; echo $?)"
+	assert_same "This will install the packages required by the installer." "$packages"
+	assert_same "Composer dependencies upgrade is needed by the installer." "$composer"
+	assert_contains "? Install w4os-engine? [Y/n] " "$(cat "$screen")"
+	assert_contains "? Execute composer install? [Y/n] " "$(cat "$screen")"
 }
 
 function test_a_question_is_always_shown_takes_its_default_on_enter_and_asks_again_a_wrong_letter() {
@@ -718,22 +634,20 @@ function test_a_question_is_always_shown_takes_its_default_on_enter_and_asks_aga
 	assert_same 3 "$(grep -o '? [A-Z][a-z]*?' "$screen" | wc -l | tr -d ' ')"
 }
 
-function test_beside_an_install_of_before_the_kit_the_kit_is_installed_then_the_engine_asks_what_to_do_with_it() {
+function test_beside_a_pre_existing_install_nothing_more_is_asked_the_setup_lists_it() {
 	quick_install_load_library || return
 	legacy_fixture
 	LEGACY_MODE=
 	local answers=$WORK/answers screen=$WORK/screen
-	printf 'y\n' >"$answers"
+	: >"$answers"
 	TTY_IN=$answers TTY_OUT=$screen TTY_OPEN= ASSUME_YES=
 	as_root() { "$@"; }
 
 	legacy_gate >"$WORK/said"
 
-	# The choice is the scenario's (opensim setup --legacy); before the kit, only the unit that would hide its own set aside
+	# The choice is the setup's; before it, only the unit that would hide the opensim service set aside
 	assert_same scenario "$LEGACY_MODE"
-	assert_contains "Install the kit, then choose what to do with it? [Y/n]" "$(cat "$screen")"
-	# The install found is said once, by the scenario
-	assert_not_contains "Found an existing install" "$(cat "$screen" "$WORK/said")"
+	assert_same "" "$(cat "$screen" "$WORK/said")"
 	assert_file_exists "$LEGACY_CRON"
 	assert_file_exists "$WORK/systemd/opensim.service.w4os-disabled"
 }
