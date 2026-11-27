@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- fix (setup): a migration stays run by root after its folders are made (its data are another account's)
 - fix (setup): the terminal is not given to the engine: the instances a setup starts by itself no longer keep it
 - new (setup): the root step set-folders writes the folders changed in a review in w4os.conf and makes them
 - fix (setup): without the unit of the packages the grids are started by the command (restart-service from a clone)
