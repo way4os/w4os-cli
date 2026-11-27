@@ -696,7 +696,7 @@ STUB
 
 function test_a_step_or_a_screen_done_leaves_its_line() {
 	local out
-	STEP='{"data":{"attributes":{"action":"step","step":{"name":"restart-service","root":true,"label":"Folders","done":"Folders","number":1,"count":1,"args":{}},"labels":["Folders"],"state":"s9"}}}'
+	STEP='{"data":{"attributes":{"action":"step","step":{"name":"install-packages","root":true,"label":"Folders","done":"Folders","number":1,"count":1,"args":{"packages":["not-ours"]}},"labels":["Folders"],"state":"s9"}}}'
 	engine_says "$STEP" "$(jq -c '.data.attributes.done = "OpenSimulator 0.9.3.0"' <<<"$QUIT")"
 	out=$(setup_with 2>&1) || true
 

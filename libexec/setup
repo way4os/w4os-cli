@@ -281,9 +281,15 @@ root_step() { # name, args (JSON), label
 		keep_db_admin "$user" "$password" || { echo "$user made, not kept in ${OPENSIM_RC:-$HOME/.opensimrc}."; return 1; }
 		;;
 	restart-service)
-		step_line "$label: opensim.service"
-		[[ -d /run/systemd/system ]] || { echo "restart-service: no systemd here: opensim start starts the grids"; return 1; }
-		systemctl restart opensim || { echo "opensim.service did not restart: systemctl status opensim"; return 1; }
+		# Without the unit of the packages (an install from a clone, a machine without systemd) the grids are started as they are
+		# by the command: nothing starts them at boot then
+		if [[ -d /run/systemd/system ]] && systemctl cat opensim.service >/dev/null 2>&1; then
+			step_line "$label: opensim.service"
+			as_root systemctl restart opensim || { echo "opensim.service did not restart: systemctl status opensim"; return 1; }
+		else
+			step_line "$label: opensim start"
+			"$CLI_ROOT/bin/opensim" start </dev/null >/dev/null 2>&1 || { echo "the grids did not start: opensim start"; return 1; }
+		fi
 		;;
 	*)
 		echo "unknown step $name: refused"

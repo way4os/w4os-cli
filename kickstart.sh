@@ -1010,7 +1010,7 @@ file_owner() { # file
 setup_summary() { # file of the summary
 	local said
 	said=$(cat "$1" 2>/dev/null)
-	rm -f "$1"
+	rm -f "$1" 2>/dev/null || as_root rm -f "$1"
 	[[ -n "$said" ]] || return 0
 	{
 		grep -v '^Website    not installed' <<<"$said"
@@ -1030,8 +1030,9 @@ end_installation() {
 		local -a legacy=(setup --legacy)
 		cli=${clone:+$clone/bin/opensim}
 		[[ -n "$cli" ]] || cli=/usr/share/w4os-cli/bin/opensim
-		# The summary kept to be said last: its line of the passwords before why the website is not there, which ends it
-		end=$(mktemp) && chmod 666 "$end"
+		# The summary kept to be said last: its line of the passwords before why the website is not there, which ends it; a file
+		# of root, who runs this setup and writes it (never one of another account in a shared folder)
+		end=$(as_root mktemp) && as_root chmod 666 "$end"
 		say ""
 		if [[ "${LEGACY_INTERACTIVE:-}" == yes ]]; then
 			# The terminal of the questions (fd 8) kept from what it starts: the setup opens its own

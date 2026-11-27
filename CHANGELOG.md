@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- fix (setup): without the unit of the packages the grids are started by the command (restart-service from a clone)
 - fix (setup): a step done leaves its line; the live line of a request is cleared before its screen
 - fix (kickstart): the line of the passwords says whose the file is
 - fix (kickstart): from a clone, composer alone is asked and no package of ours is installed; the setup has the core and .NET
