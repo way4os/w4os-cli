@@ -716,6 +716,17 @@ function test_the_folders_changed_in_a_review_are_given_to_the_layout_as_root_it
 	assert_contains "✓ Folders" "$out"
 }
 
+function test_a_menu_of_dialog_is_wide_enough_for_its_longest_entry() {
+	local menu
+	make_fake_dialog
+	menu=$(jq -c '.data.attributes.items[0].label = "Migrate folders to w4os standard structure (recommended)"' <<<"$MENU")
+	engine_says "$menu" "$QUIT"
+	printf '%s\n' '0:grid' >"$DIALOG_ANSWERS"
+	setup_with_dialog >/dev/null || true
+
+	assert_contains "--menu   10 66 3 grid Migrate folders to w4os standard structure (recommended)" "$(cat "$DIALOG_LOG")"
+}
+
 function test_a_step_or_a_screen_done_leaves_its_line() {
 	local out
 	STEP='{"data":{"attributes":{"action":"step","step":{"name":"install-packages","root":true,"label":"Folders","done":"Folders","number":1,"count":1,"args":{"packages":["not-ours"]}},"labels":["Folders"],"state":"s9"}}}'
