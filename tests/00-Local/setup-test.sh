@@ -610,6 +610,33 @@ function test_a_step_of_root_is_run_by_its_name_only_any_other_refused() {
 	assert_file_exists "$starter.w4os-disabled"
 }
 
+function test_the_old_instances_of_a_location_given_are_stopped_its_configs_alone() {
+	local bin=$WORK/home/ada/opensim/bin proc=$WORK/proc pid
+	mkdir -p "$bin" "$WORK/nocore"
+	: >"$bin/OpenSim.dll"
+	: >"$bin/OpenSim.ini"
+	: >"$WORK/nocore/OpenSim.ini"
+	# A simulator of the location, started in its folder with no -inifile: a process of the test itself
+	sleep 300 &
+	pid=$!
+	mkdir -p "$proc/$pid"
+	printf 'dotnet\0OpenSim.dll\0' >"$proc/$pid/cmdline"
+	ln -s "$bin" "$proc/$pid/cwd"
+	STEP='{"data":{"attributes":{"action":"step","step":{"name":"stop-old-instances","root":true,"label":"Stop","number":1,"count":4,"args":{"configs":["%s"],"location":{"bin":"%s","robust":""}}},"labels":["Stop"],"state":"s9"}}}'
+	engine_says "$(printf "$STEP" "$WORK/nocore/OpenSim.ini" "$WORK/nocore")" "$(printf "$STEP" "$WORK/nocore/OpenSim.ini" "$bin")" "$(printf "$STEP" "$bin/OpenSim.ini" "$bin")" "$QUIT"
+	W4OS_LEGACY_PROC=$proc setup_with >/dev/null 2>&1 || true
+	local alive=no
+	kill -0 "$pid" 2>/dev/null && alive=yes
+	kill "$pid" 2>/dev/null || true
+
+	assert_equals failed "$(request 2 .button)"
+	assert_contains "not an OpenSim bin folder: $WORK/nocore" "$(request 2 .answers.error_text)"
+	assert_equals failed "$(request 3 .button)"
+	assert_contains "not a config of the pre-existing install: $WORK/nocore/OpenSim.ini" "$(request 3 .answers.error_text)"
+	assert_equals next "$(request 4 .button)"
+	assert_same no "$alive"
+}
+
 function test_the_db_admin_user_is_made_when_no_account_has_its_name_kept_one_refused_without_its_password() {
 	local out bin=$WORK/sqlbin
 	mkdir -p "$bin"

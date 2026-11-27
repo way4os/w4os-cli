@@ -203,9 +203,15 @@ root_step() { # name, args (JSON), label
 		[[ ! -d /run/systemd/system ]] || systemctl daemon-reload || true
 		;;
 	stop-old-instances)
+		# A config of the install of this machine, or of the location given: the OpenSim.ini of its bin folder (a core there), its Robust file
+		local bin robust
+		bin=$(jq -r '.location.bin // empty' <<<"$args")
+		robust=$(jq -r '.location.robust // empty' <<<"$args")
+		[[ -z "$bin" || -f "$bin/OpenSim.dll" || -f "$bin/OpenSim.exe" ]] || { echo "stop-old-instances: not an OpenSim bin folder: $bin"; return 1; }
 		while IFS= read -r config; do
 			[[ -n "$config" ]] || continue
-			[[ "$config" == "${W4OS_LEGACY_ROOT:-/opt/opensim}"/etc/*.ini && -f "$config" ]] || { echo "stop-old-instances: not a config of the pre-existing install: $config"; return 1; }
+			[[ -f "$config" && ( "$config" == "${W4OS_LEGACY_ROOT:-/opt/opensim}"/etc/*.ini || ( -n "$bin" && ( "$config" == "$bin/OpenSim.ini" || "$config" == "$robust" ) && "$config" == *.ini ) ) ]] ||
+				{ echo "stop-old-instances: not a config of the pre-existing install: $config"; return 1; }
 			target=$(readlink -f -- "$config")
 			step_line "$label: $(basename "$config" .ini)"
 			for pid in $(legacy_pids "$target"); do
@@ -293,7 +299,14 @@ legacy_pids() { # config, resolved
 			if [[ "$arg" == -inifile=* ]]; then value=${arg#-inifile=}; elif [[ "$previous" == -inifile ]]; then value=$arg; fi
 			previous=$arg
 		done <"$proc/cmdline" 2>/dev/null
-		[[ -n "$value" ]] || continue
+		# Given none, a core reads the config of its folder named after it
+		if [[ -z "$value" ]]; then
+			case $(tr '\0' '\n' <"$proc/cmdline" 2>/dev/null) in
+			*Robust.dll* | *Robust.exe*) value=Robust.ini ;;
+			*OpenSim.dll* | *OpenSim.exe*) value=OpenSim.ini ;;
+			*) continue ;;
+			esac
+		fi
 		value=${value#[\'\"]}
 		value=${value%[\'\"]}
 		[[ "$value" == /* ]] || { cwd=$(readlink -- "$proc/cwd" 2>/dev/null) || continue; value=$cwd/$value; }

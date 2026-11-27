@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- new (setup): stop-old-instances takes the configs of a location given, a core started without -inifile found
 - change (kickstart): one question before the setup (composer from a clone, else the packages); no database user made there
 - new (setup): the root step db-admin makes the DB admin user when no account has its name, keeps it in the rc file
 - fix (kickstart): no "SQL account" or kit as an actor in what it says; not on Debian or Ubuntu, a clone is suggested
