@@ -885,31 +885,37 @@ configure_package_sources() {
 
 phase_dependencies() {
 	if [[ -n "$clone" ]]; then
+		local missing=() tool
 		if [[ $(uname -s) == Darwin ]]; then
-			command -v brew >/dev/null 2>&1 || die "Homebrew is needed on macOS: https://brew.sh"
-			for tool in php composer screen jq; do
-				command -v "$tool" >/dev/null 2>&1 ||
-					brew install "$tool" || return $?
+			# Nothing installed by itself on macOS: what is missing is named
+			for tool in php composer screen jq curl tar; do
+				command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
 			done
+			((${#missing[@]} == 0)) || die "missing on this Mac: ${missing[*]}. Install them (with Homebrew for instance: brew install ${missing[*]}), then run this again"
 		else
-			local missing=()
 			command -v php >/dev/null 2>&1 || missing+=("${PHP_PACKAGES[@]}")
+			# The engine draws with ImageMagick: not a dependency of php itself
+			php -m 2>/dev/null | grep -qi '^imagick$' || missing+=(php-imagick)
 			command -v composer >/dev/null 2>&1 || missing+=(composer)
-			for tool in curl git unzip screen jq; do
+			for tool in curl git unzip screen jq sudo; do
 				command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
 			done
 			command -v mysql >/dev/null 2>&1 || command -v mariadb >/dev/null 2>&1 ||
 				missing+=(default-mysql-client)
 			if ((${#missing[@]})); then
-				# say "Installing ${missing[*]}"
-				# ask "Install them?" || die cancelled
 				PACKAGES_LABEL="Tools" install_packages "${missing[@]}" || return $?
 			fi
 		fi
 		php -r 'exit(PHP_VERSION_ID >= 80200 ? 0 : 1);' || die "PHP 8.2 or newer is needed (this is $(php -r 'echo PHP_VERSION;'))"
 		if composer_needed; then
-			say "Installing the PHP libraries (composer)..."
-			(cd "$clone" && composer install --no-dev --no-interaction --prefer-dist) || return $?
+			# A clone in development mode takes its libraries from its neighbours: said when they are not beside it
+			local neighbour absent=()
+			while IFS= read -r neighbour; do
+				[[ -z "$neighbour" || -d "$clone/$neighbour" ]] || absent+=("$neighbour")
+			done < <(jq -r '.repositories[]? | select(.type == "path") | .url' "$clone/composer.json" 2>/dev/null)
+			((${#absent[@]} == 0)) || die "this clone takes its libraries from the clones beside it, and these are missing: ${absent[*]} (from $clone). Clone them there, or install from a release"
+			run_step "PHP libraries (composer)" - bash -c 'cd "$1" && composer install --no-dev --no-interaction --prefer-dist' composer "$clone" || die "composer install failed: its output is in $(install_log)"
+			done_line "PHP libraries (composer)"
 		fi
 	else
 		configure_package_sources || return $?
@@ -1156,7 +1162,9 @@ composer_needed() {
 
 # The one question before the setup: the installer's own libraries from a clone, else the packages it needs
 opening_question() {
-	if [[ -n "$clone" ]] && composer_needed; then
+	if [[ -n "$clone" && -z "$APT_SOURCE_DIR" ]]; then
+		# A clone carries the install by itself: its libraries by composer, the one thing asked; nothing when they are there
+		composer_needed || return 0
 		say "Composer dependencies upgrade is needed by the installer."
 		ask "Execute composer install?"
 	else
@@ -1398,14 +1406,9 @@ install_with_modules() {
 
 phase_opensim() {
 	if [[ -n "$clone" && -z "$APT_SOURCE_DIR" ]]; then
-		if [[ $(uname -s) == Linux ]]; then
-			configure_package_sources || return $?
-			install_opensim_packages || die "could not install OpenSim packages"
-			phase_dotnet || die ".NET phase failed"
-		fi
-		say "Use OpenSim from clone $clone"
+		# A clone carries the install by itself, no package of ours: the core and the .NET runtime it targets are steps of the setup
 		php -r 'exit(PHP_VERSION_ID >= 80200 ? 0 : 1);' || die "PHP 8.2 or newer is needed"
-		[[ -f "$clone/vendor/autoload.php" ]] || (cd "$clone" && composer install --no-dev --no-interaction --prefer-dist)
+		done_line "w4os from the clone $clone"
 		end_installation
 		return 0
 	fi

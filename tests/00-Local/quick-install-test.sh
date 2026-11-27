@@ -394,10 +394,29 @@ function test_dotnet_runtime_detection_accepts_apt_candidate_with_pipefail() {
 	unset -f apt-cache
 }
 
-function test_clone_install_requests_all_packages_when_cli_and_engine_are_installed() {
+function test_a_clone_installs_no_package_of_ours_its_core_and_runtime_being_steps_of_the_setup() {
+	quick_install_load_library || return
+	local calls=$WORK/install-calls ended=$WORK/ended
+	clone=$WORK/project
+	APT_SOURCE_DIR=
+	uname() { printf 'Linux\n'; }
+	configure_package_sources() { echo sources >>"$calls"; }
+	install_packages() { printf '%s\n' "$*" >>"$calls"; }
+	phase_dotnet() { echo dotnet >>"$calls"; }
+	end_installation() { : >"$ended"; }
+
+	local said
+	said=$(phase_opensim)
+
+	assert_file_not_exists "$calls"
+	assert_file_exists "$ended"
+	assert_same "✓ w4os from the clone $clone" "$said"
+}
+
+function test_the_packages_install_requests_all_packages_when_cli_and_engine_are_installed() {
 	quick_install_load_library || return
 	local calls=$WORK/install-calls
-	clone=$WORK/project
+	clone=
 	APT_SOURCE_DIR=
 	OPENSIM_KIT_APT_DIST=charm
 	uname() { printf 'Linux\n'; }
@@ -609,14 +628,58 @@ function test_the_one_question_before_the_setup_is_what_the_installer_needs() {
 	TTY_IN=$answers TTY_OUT=$screen TTY_OPEN= ASSUME_YES=
 	clone=
 	packages=$(opening_question)
-	clone=$WORK/clone
+	clone=$WORK/clone APT_SOURCE_DIR=
 	mkdir -p "$clone"
 	composer=$(opening_question)
+	# Its libraries there and up to date: nothing to ask, a clone installs no package of ours
+	mkdir -p "$clone/vendor/composer"
+	: >"$clone/composer.lock"
+	: >"$clone/vendor/autoload.php"
+	: >"$clone/vendor/composer/installed.json"
+	local nothing
+	nothing=$(opening_question; echo "status=$?")
 
 	assert_same "This will install the packages required by the installer." "$packages"
 	assert_same "Composer dependencies upgrade is needed by the installer." "$composer"
 	assert_contains "? Install w4os-engine? [Y/n] " "$(cat "$screen")"
 	assert_contains "? Execute composer install? [Y/n] " "$(cat "$screen")"
+	assert_same "status=0" "$nothing"
+	assert_same 1 "$(grep -c 'Execute composer install' "$screen")"
+}
+
+function test_a_clone_whose_neighbours_are_missing_says_which_before_composer() {
+	quick_install_load_library || return
+	clone=$WORK/alone/w4os-cli PGM=kickstart.sh
+	mkdir -p "$clone" "$WORK/alone/bash-tools"
+	printf '%s\n' '{"repositories":[{"type":"path","url":"../bash-tools/"},{"type":"path","url":"../opensim-engine/"},{"type":"vcs","url":"https://example.org/x.git"}]}' >"$clone/composer.json"
+	uname() { printf 'Linux\n'; }
+	install_packages() { return 0; }
+	composer() { echo "composer $*" >>"$WORK/composer-calls"; }
+	php() { [[ "$1" == -m ]] && echo imagick; return 0; }
+
+	local said status=0
+	said=$(phase_dependencies 2>&1) || status=$?
+
+	assert_same 1 "$status"
+	assert_contains "this clone takes its libraries from the clones beside it, and these are missing: ../opensim-engine/ (from $clone)" "$said"
+	assert_file_not_exists "$WORK/composer-calls"
+}
+
+function test_on_macos_a_missing_tool_is_named_and_nothing_is_installed() {
+	quick_install_load_library || return
+	clone=$WORK/clone PGM=kickstart.sh
+	mkdir -p "$clone"
+	uname() { printf 'Darwin\n'; }
+	brew() { echo "brew $*" >>"$WORK/brew-calls"; }
+	command() { [[ "$1" == -v && ( "$2" == screen || "$2" == jq ) ]] && return 1; builtin command "$@"; }
+
+	local said status=0
+	said=$(phase_dependencies 2>&1) || status=$?
+	unset -f command
+
+	assert_same 1 "$status"
+	assert_contains "missing on this Mac: screen jq. Install them (with Homebrew for instance: brew install screen jq), then run this again" "$said"
+	assert_file_not_exists "$WORK/brew-calls"
 }
 
 function test_a_question_is_always_shown_takes_its_default_on_enter_and_asks_again_a_wrong_letter() {

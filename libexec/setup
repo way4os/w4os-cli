@@ -223,7 +223,12 @@ root_step() { # name, args (JSON), label
 		;;
 	give-ownership)
 		step_line "$label"
-		php "$(dirname "$(realpath "$OPENSIM_API")")/opensim-layout.php" || return 1
+		as_root php "$(dirname "$(realpath "$OPENSIM_API")")/opensim-layout.php" || return 1
+		;;
+	install-dotnet)
+		# The .NET runtime the cores target, by the command that knows what each system has
+		step_line "$label"
+		as_root "$CLI_ROOT/bin/opensim" install-dotnet -y </dev/null || return 1
 		;;
 	install-packages)
 		while IFS= read -r package; do
@@ -430,6 +435,11 @@ while :; do
 		if [[ "$(jq -r .step.root <<<"$screen")" == true ]]; then
 			step_status=0
 			step_said=$(root_step "$(jq -r .step.name <<<"$screen")" "$(jq -c '.step.args // {}' <<<"$screen")" "$(jq -r '"[\(.step.number)/\(.step.count)] \(.step.label)"' <<<"$screen")" 2>&1) || step_status=$?
+			# The folders made: the engine runs from here as the account they were given to (none before them)
+			if ((step_status == 0)) && [[ "$(jq -r .step.name <<<"$screen")" == give-ownership && $(id -u) -eq 0 && -z "${OPENSIM_SETUP_ENGINE_AS:-}" ]]; then
+				OPENSIM_SETUP_ENGINE_AS=$(run system-user 2>/dev/null) || OPENSIM_SETUP_ENGINE_AS=
+				[[ -z "$OPENSIM_SETUP_ENGINE_AS" ]] || engine() { system_user=$OPENSIM_SETUP_ENGINE_AS as_system_user "$OPENSIM_API" "$@"; }
+			fi
 			# Its live line, written by the step in a subshell, cleared here: the next screen takes its place
 			[[ ! -t 3 ]] || printf '\r\033[K' >&3
 			pending=

@@ -246,9 +246,11 @@ function outcome(array $results): int
 
 $args = array_slice($argv, 1);
 $command = array_shift($args) ?? '';
-// The user the instances run as, empty when the install has none (the commands then run as whoever calls them)
+// The user the instances run as, empty when the install has none or names one this machine does not have (the commands then run as
+// whoever calls them)
 if ($command === 'system-user') {
-    echo \W4OS\Engine\Config\Layout::resolve()->systemUser(), "\n";
+    $layout = \W4OS\Engine\Config\Layout::resolve();
+    echo method_exists($layout, 'runAs') ? $layout->runAs() : $layout->systemUser(), "\n";
     exit(0);
 }
 // A grid named comes with its simulators, its Robust alone with --robust (--simulators, of before, says the default)

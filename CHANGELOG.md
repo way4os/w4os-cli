@@ -2,6 +2,9 @@
 
 ### Unreleased
 
+- fix (kickstart): from a clone, composer alone is asked and no package of ours is installed; the setup has the core and .NET
+- fix (kickstart): on macOS nothing is installed by Homebrew, a missing tool is named; missing neighbour clones are named
+- fix (cli): the commands run as the caller when the config names an account this machine does not have
 - change (setup): a stop asked at a screen said in one line, exit 4, kickstart adds nothing; a menu in lines titled above
 - fix (setup): a secret shown as one mask in dialog as in lines, kept when it comes back unchanged
 - new (setup): stop-old-instances takes the configs of a location given, a core started without -inifile found
