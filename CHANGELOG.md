@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- change (kickstart): the install found said once, by the scenario; a migration's summary ends with where its passwords are
 - change (setup): an install of before the kit handed to the engine's scenario (setup --legacy), its steps of root by name
 - change (setup): dialog the default at a terminal when installed, lines else; its review a panel changed line by line
 - change (kickstart): a migration asks everything, reviews it, then runs the steps of the script; nothing done before Start

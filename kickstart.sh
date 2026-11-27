@@ -1117,6 +1117,8 @@ end_installation() {
 		if ((status == 3)) && [[ "$said" == *"handoff: in-place"* ]]; then
 			LEGACY_MODE=in-place
 		else
+			# The summary of a migration done ends with where its passwords are, as the one of a new grid
+			((status != 0)) || [[ "$said" != *"✓ Done"* ]] || ! as_root test -f "$OPENSIM_RC_PATH" || say "Passwords  $OPENSIM_RC_PATH (root only)"
 			exit "$status"
 		fi
 	fi
@@ -1302,8 +1304,8 @@ legacy_gate() {
 	[[ -n "$root" ]] || return 0
 	# The choice is the engine's scenario (opensim setup --legacy, once the kit is installed); only a run without anybody gives it here
 	if [[ -z "$LEGACY_MODE" ]] && person_here; then
-		say "  $(legacy_summary "$root")"
-		ask "Install the kit, then choose what to do with it?" || { say "Stopped: nothing changed."; exit 0; }
+		# The install found is said by the first screen of the scenario
+		ask "An install of before the kit is in $root. Install the kit, then choose what to do with it?" || { say "Stopped: nothing changed."; exit 0; }
 		LEGACY_MODE=scenario
 		legacy_set_aside units
 		return 0

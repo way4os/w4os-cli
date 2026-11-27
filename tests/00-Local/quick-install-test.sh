@@ -144,6 +144,23 @@ STUB
 	assert_contains "Website    https://kimbe.example/opensim/" "$said"
 }
 
+function test_a_migration_done_by_the_scenario_ends_with_where_its_passwords_are() {
+	quick_install_load_library || return
+	clone=$WORK/project
+	cat >"$WORK/project/bin/opensim" <<'STUB'
+#!/usr/bin/env bash
+[[ "$*" == "setup --legacy" ]] && printf '✓ Done\n\nGrid       Kimbe Test (kimbe_test)\n'
+STUB
+	chmod +x "$WORK/project/bin/opensim"
+	as_root() { "$@"; }
+	LEGACY_MODE=scenario OPENSIM_RC_PATH=$WORK/opensimrc
+	: >"$OPENSIM_RC_PATH"
+	local said
+	said=$( (end_installation) 2>&1)
+	assert_contains "Grid       Kimbe Test (kimbe_test)" "$said"
+	assert_contains "Passwords  $WORK/opensimrc (root only)" "$said"
+}
+
 function test_unconfirmed_answers_keep_interactive_setup() {
 	quick_install_load_library || return
 	local calls=$WORK/prefill-calls config="$WORK/Setup Answers.json"
@@ -746,11 +763,13 @@ function test_beside_an_install_of_before_the_kit_the_kit_is_installed_then_the_
 	TTY_IN=$answers TTY_OUT=$screen TTY_OPEN= ASSUME_YES=
 	as_root() { "$@"; }
 
-	legacy_gate >/dev/null
+	legacy_gate >"$WORK/said"
 
 	# The choice is the scenario's (opensim setup --legacy); before the kit, only the unit that would hide its own set aside
 	assert_same scenario "$LEGACY_MODE"
-	assert_contains "? Install the kit, then choose what to do with it? [Y/n]" "$(cat "$screen")"
+	assert_contains "Install the kit, then choose what to do with it? [Y/n]" "$(cat "$screen")"
+	# The install found is said once, by the scenario
+	assert_not_contains "Found an existing install" "$(cat "$screen" "$WORK/said")"
 	assert_file_exists "$LEGACY_CRON"
 	assert_file_exists "$WORK/systemd/opensim.service.w4os-disabled"
 }
