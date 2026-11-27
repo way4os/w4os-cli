@@ -187,9 +187,9 @@ step_line() { # text
 LEGACY_STARTERS=${OPENSIM_LEGACY_STARTERS:-/etc/cron.hourly/opensim /etc/systemd/system/opensim.service /etc/init.d/opensim}
 root_step() { # name, args (JSON), label
 	local name=$1 args=$2 label=$3 file pid config grid package option target
-	step_line "$label"
 	case $name in
 	set-aside-starters)
+		step_line "$label: start at boot set aside"
 		while IFS= read -r file; do
 			[[ -n "$file" ]] || continue
 			[[ " $LEGACY_STARTERS " == *" $file "* ]] || { echo "set-aside-starters: not a starter of an install of before the kit: $file"; return 1; }
@@ -202,8 +202,8 @@ root_step() { # name, args (JSON), label
 			[[ -n "$config" ]] || continue
 			[[ "$config" == "${W4OS_LEGACY_ROOT:-/opt/opensim}"/etc/*.ini && -f "$config" ]] || { echo "stop-old-instances: not a config of the install of before the kit: $config"; return 1; }
 			target=$(readlink -f -- "$config")
+			step_line "$label: $(basename "$config" .ini)"
 			for pid in $(legacy_pids "$target"); do
-				step_line "$label: $(basename "$config" .ini)"
 				kill -TERM "$pid" 2>/dev/null || continue
 				for _ in $(seq 1 60); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
 				! kill -0 "$pid" 2>/dev/null || { echo "process $pid ($config) did not stop"; return 1; }
@@ -211,6 +211,7 @@ root_step() { # name, args (JSON), label
 		done < <(jq -r '(.configs // [])[]' <<<"$args")
 		;;
 	give-ownership)
+		step_line "$label"
 		php "$(dirname "$(realpath "$OPENSIM_API")")/opensim-layout.php" || return 1
 		;;
 	install-packages)
