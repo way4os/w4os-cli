@@ -737,19 +737,20 @@ function test_a_question_is_always_shown_takes_its_default_on_enter_and_asks_aga
 	assert_same 3 "$(grep -o '? [A-Z][a-z]*?' "$screen" | wc -l | tr -d ' ')"
 }
 
-function test_beside_an_install_of_before_the_kit_the_choice_is_asked_and_a_new_grid_leaves_it_starting() {
+function test_beside_an_install_of_before_the_kit_the_kit_is_installed_then_the_engine_asks_what_to_do_with_it() {
 	quick_install_load_library || return
 	legacy_fixture
 	LEGACY_MODE=
 	local answers=$WORK/answers screen=$WORK/screen
-	printf 'n\n' >"$answers"
+	printf 'y\n' >"$answers"
 	TTY_IN=$answers TTY_OUT=$screen TTY_OPEN= ASSUME_YES=
 	as_root() { "$@"; }
 
 	legacy_gate >/dev/null
 
-	assert_same new "$LEGACY_MODE"
-	assert_contains "[M]igrate  [I]n place  [N]ew grid beside it  [A]bort (M/i/n/a):" "$(cat "$screen")"
+	# The choice is the scenario's (opensim setup --legacy); before the kit, only the unit that would hide its own set aside
+	assert_same scenario "$LEGACY_MODE"
+	assert_contains "? Install the kit, then choose what to do with it? [Y/n]" "$(cat "$screen")"
 	assert_file_exists "$LEGACY_CRON"
 	assert_file_exists "$WORK/systemd/opensim.service.w4os-disabled"
 }

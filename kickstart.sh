@@ -1106,6 +1106,20 @@ phase_database() {
 end_installation() {
 	local basedir opensim_path setup_config=${OPENSIM_SETUP_CONFIG_FILE:-$SETUP_CONFIG_FILE} setup_config_path= setup_option=--config
 	local -a setup_arguments=(setup)
+	# An install of before the kit: the scenario of the engine, as root (its steps of root are the command line's); in place is still
+	# run here, when it hands it over
+	if [[ "$LEGACY_MODE" == scenario ]]; then
+		local said status=0
+		cli=${clone:+$clone/bin/opensim}
+		[[ -n "$cli" ]] || cli=/usr/share/w4os-cli/bin/opensim
+		say ""
+		said=$(OPENSIM_SETUP_UI=$SETUP_UI as_root "$cli" setup --legacy | tee /dev/stderr) || status=$?
+		if ((status == 3)) && [[ "$said" == *"handoff: in-place"* ]]; then
+			LEGACY_MODE=in-place
+		else
+			exit "$status"
+		fi
+	fi
 	if [[ "$LEGACY_MODE" == migrate || "$LEGACY_MODE" == in-place ]] && [[ $(uname -s) == Linux ]]; then
 		legacy_after_install
 		exit 0
@@ -1286,6 +1300,14 @@ legacy_gate() {
 	local root
 	root=$(legacy_install)
 	[[ -n "$root" ]] || return 0
+	# The choice is the engine's scenario (opensim setup --legacy, once the kit is installed); only a run without anybody gives it here
+	if [[ -z "$LEGACY_MODE" ]] && person_here; then
+		say "  $(legacy_summary "$root")"
+		ask "Install the kit, then choose what to do with it?" || { say "Stopped: nothing changed."; exit 0; }
+		LEGACY_MODE=scenario
+		legacy_set_aside units
+		return 0
+	fi
 	if [[ -z "$LEGACY_MODE" ]]; then
 		say "  $(legacy_summary "$root")"
 		person_here || die "an existing install in $root: give --migrate, --in-place or --new"

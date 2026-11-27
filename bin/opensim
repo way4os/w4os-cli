@@ -148,6 +148,8 @@ setup)
 	for argument in "$@"; do
 		case "$argument" in
 		--prepare | --prepare=*) exec "$libexec/setup" "$@" ;;
+		# An install of before the kit: its scenario runs its steps of root here, as the caller (kickstart, as root)
+		--legacy) exec "$libexec/setup" "$@" ;;
 		esac
 	done
 	# The package installer creates the system layout as root; setup then runs as the system user.

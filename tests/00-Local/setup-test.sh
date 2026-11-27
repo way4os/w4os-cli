@@ -572,6 +572,34 @@ function test_the_step_of_the_run_and_its_item_are_said_without_their_marks() {
 	assert_not_contains "~" "$out"
 }
 
+function test_a_step_of_root_is_run_by_its_name_only_any_other_refused() {
+	local starter=$WORK/cron-opensim out
+	: >"$starter"
+	STEP='{"data":{"attributes":{"action":"step","step":{"name":"%s","root":true,"label":"Stop","number":1,"count":8,"args":{"files":["%s"]}},"labels":["Stop"],"state":"s9"}}}'
+	engine_says "$(printf "$STEP" rm-rf "$starter")" "$(printf "$STEP" set-aside-starters /etc/passwd)" "$(printf "$STEP" set-aside-starters "$starter")" "$QUIT"
+	out=$(OPENSIM_LEGACY_STARTERS="$starter" setup_with 2>&1) || true
+
+	assert_equals failed "$(request 2 .button)"
+	assert_contains "unknown step rm-rf: refused" "$(request 2 .answers.error_text)"
+	assert_equals failed "$(request 3 .button)"
+	assert_contains "not a starter of an install of before the kit: /etc/passwd" "$(request 3 .answers.error_text)"
+	assert_equals next "$(request 4 .button)"
+	assert_file_exists "$starter.w4os-disabled"
+}
+
+function test_the_legacy_scenario_is_asked_on_the_first_request_only() {
+	engine_says "$MENU" "$QUIT"
+	setup_with "" >/dev/null 2>&1 || true
+	local plain=$(request 1 .existing)
+	engine_says "$MENU" "$QUIT"
+	printf '\n\n' >"$WORK/answers"
+	( export FE_INPUT_FD=; "$OPENSIM" setup --legacy <"$WORK/answers" >/dev/null 2>&1 ) || true
+
+	assert_equals null "$plain"
+	assert_equals true "$(request 1 .existing)"
+	assert_equals null "$(request 2 .existing)"
+}
+
 function test_error_is_displayed_for_invalid_answer() {
 	local out status=0
 	engine_says "not json at all"

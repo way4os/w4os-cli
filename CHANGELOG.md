@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- change (setup): an install of before the kit handed to the engine's scenario (setup --legacy), its steps of root by name
 - change (setup): dialog the default at a terminal when installed, lines else; its review a panel changed line by line
 - change (kickstart): a migration asks everything, reviews it, then runs the steps of the script; nothing done before Start
 - fix (web): the sockets of the pools given to the group Apache runs as (its envvars); PHP-FPM restarted when a pool changes

@@ -2,7 +2,7 @@
 # opensim setup: the engine gives the screens (it is the scenario), this draws the one it gets, sends it back filled with the button that
 # was pressed, and does the action it answers: another screen, the same one with what is wrong, quit with a message, abort with an error.
 
-USAGE="opensim setup [-hqv] [--config FILE] [--prepare FILE] [--apply FILE] [--region-config FILE] [--existing] [--oar FILE | --dump FILE] [--show-passwords]"
+USAGE="opensim setup [-hqv] [--config FILE] [--prepare FILE] [--apply FILE] [--region-config FILE] [--existing] [--oar FILE | --dump FILE] [--show-passwords] [--legacy]"
 HELP="Shows the setup questions and applies the confirmed settings.
   --config FILE   prefill answers from a JSON configuration
   --prepare FILE  save answers privately without creating the installation
@@ -42,6 +42,8 @@ while (($#)); do
 		--region-config=*) region_config=${1#*=}; [[ -n "$region_config" ]] || die "opensim setup --region-config requires an INI file"; shift ;;
 		--existing) region_content=$(jq -c '. + {existing: "yes"}' <<<"$region_content"); shift ;;
 		--show-passwords) region_content=$(jq -c '. + {show_passwords: true}' <<<"$region_content"); shift ;;
+		# An install of before the kit on this machine: its scenario first (run as root: its steps of root are this command's)
+		--legacy) setup_legacy=yes; shift ;;
 		--oar | --dump)
 			(($# > 1)) && [[ "$2" != -* ]] || die "opensim setup $1 requires a file"
 			[[ -r "$2" ]] || die "cannot read $2"
@@ -138,6 +140,10 @@ show_progress() {
 				line=${line#\~}
 				# The mark of a wait the engine gives an item of its step too ([3/4] Start: ~AssetServiceConnector 1/27)
 				line=${line/: \~/: }
+				# A step of a run the engine names (Backup: database x), numbered by the labels of the run it gave (STEP_LABELS)
+				if [[ -n "${STEP_LABELS:-}" && $line != "["* ]] && grep -qxF -- "${line%%:*}" <<<"$STEP_LABELS"; then
+					line="[$(grep -nxF -- "${line%%:*}" <<<"$STEP_LABELS" | cut -d: -f1)/$(grep -c . <<<"$STEP_LABELS")] $line"
+				fi
 				# The step it is in, kept while its items go by: [2/3] Start: kimbe_test.welcome ready (1/1)
 				[[ $line == "["[0-9]*"/"[0-9]*"] "* ]] && stage=${line%%:*}
 				[[ $line == "["[0-9]*"/"[0-9]*"] "* || -z ${stage:-} ]] || line="$stage: $line"
@@ -159,6 +165,83 @@ show_progress() {
 	shown=$size
 	return 0
 }
+# A step of root of the scenario of the engine, by its NAME, from this closed list only, with the arguments it checks: never a command,
+# a path or a package it is handed otherwise; any other name is refused. The live line says it with its label ([1/8] Stop).
+LEGACY_STARTERS=${OPENSIM_LEGACY_STARTERS:-/etc/cron.hourly/opensim /etc/systemd/system/opensim.service /etc/init.d/opensim}
+root_step() { # name, args (JSON), label
+	local name=$1 args=$2 label=$3 file pid config grid package option target
+	printf '\r\033[K» %s' "$label" >&2
+	pending=1
+	case $name in
+	set-aside-starters)
+		while IFS= read -r file; do
+			[[ -n "$file" ]] || continue
+			[[ " $LEGACY_STARTERS " == *" $file "* ]] || { echo "set-aside-starters: not a starter of an install of before the kit: $file"; return 1; }
+			[[ ! -e "$file" ]] || mv -- "$file" "$file.w4os-disabled" || return 1
+		done < <(jq -r '(.files // [])[]' <<<"$args")
+		[[ ! -d /run/systemd/system ]] || systemctl daemon-reload || true
+		;;
+	stop-old-instances)
+		while IFS= read -r config; do
+			[[ -n "$config" ]] || continue
+			[[ "$config" == "${W4OS_LEGACY_ROOT:-/opt/opensim}"/etc/*.ini && -f "$config" ]] || { echo "stop-old-instances: not a config of the install of before the kit: $config"; return 1; }
+			target=$(readlink -f -- "$config")
+			for pid in $(legacy_pids "$target"); do
+				printf '\r\033[K» %s: %s' "$label" "$(basename "$config" .ini)" >&2
+				kill -TERM "$pid" 2>/dev/null || continue
+				for _ in $(seq 1 60); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+				! kill -0 "$pid" 2>/dev/null || { echo "process $pid ($config) did not stop"; return 1; }
+			done
+		done < <(jq -r '(.configs // [])[]' <<<"$args")
+		;;
+	give-ownership)
+		php "$(dirname "$(realpath "$OPENSIM_API")")/opensim-layout.php" || return 1
+		;;
+	install-packages)
+		while IFS= read -r package; do
+			[[ "$package" =~ ^(opensim-[0-9.]+-maptiles|w4os-site)$ ]] || { echo "install-packages: not a package of the scenario: $package"; return 1; }
+			printf '\r\033[K» %s: %s' "$label" "$package" >&2
+			DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$package" >/dev/null || return 1
+		done < <(jq -r '(.packages // [])[]' <<<"$args")
+		option=$(jq -r '.option // empty' <<<"$args")
+		grid=$(jq -r '.grid // empty' <<<"$args")
+		if [[ -n "$option" ]]; then
+			[[ "$option" == map-warp3d && "$grid" =~ ^[a-z0-9_-]+$ ]] || { echo "install-packages: not an option of the scenario: $option"; return 1; }
+			run enable "$grid" "$option" || return 1
+		fi
+		;;
+	install-website)
+		grid=$(jq -r '.grid // empty' <<<"$args")
+		[[ "$grid" =~ ^[a-z0-9_-]+$ ]] || { echo "install-website: not a grid: $grid"; return 1; }
+		printf '\r\033[K» %s: %s' "$label" "$grid" >&2
+		"$CLI_ROOT/bin/opensim" web "$grid" site --install ${OPENSIM_EDIT_VHOSTS:+--edit-vhosts} || return 1
+		;;
+	*)
+		echo "unknown step $name: refused"
+		return 1
+		;;
+	esac
+}
+
+# The processes that run a config (resolved): the -inifile each was given, quotes taken off, relative to its folder
+legacy_pids() { # config, resolved
+	local proc arg value previous cwd
+	for proc in "${W4OS_LEGACY_PROC:-/proc}"/[0-9]*; do
+		[[ -r "$proc/cmdline" ]] || continue
+		value= previous=
+		while IFS= read -r -d '' arg; do
+			if [[ "$arg" == -inifile=* ]]; then value=${arg#-inifile=}; elif [[ "$previous" == -inifile ]]; then value=$arg; fi
+			previous=$arg
+		done <"$proc/cmdline" 2>/dev/null
+		[[ -n "$value" ]] || continue
+		value=${value#[\'\"]}
+		value=${value%[\'\"]}
+		[[ "$value" == /* ]] || { cwd=$(readlink -- "$proc/cwd" 2>/dev/null) || continue; value=$cwd/$value; }
+		[[ "$(readlink -f -- "$value")" == "$1" ]] && basename "$proc"
+	done
+	return 0
+}
+
 # Before the start of a setup that makes a website beside Apache: the one line it needs in each site serving its host, asked with
 # the other questions; the answer kept beside the summary for kickstart ($OPENSIM_SETUP_END.vhosts: yes, no, or nothing for Caddy)
 setup_before_start() { # rows of the review
@@ -205,6 +288,8 @@ while :; do
 	request=$(jq -c --rawfile state <(printf '%s' "$state") --arg button "$button" --arg mode "$setup_mode" --slurpfile prefill <(printf '%s' "$setup_prefill") --argjson occupied_ports "${setup_occupied_ports:-null}" \
 		'{data: {type: "steps", attributes: ({state: $state, button: $button, answers: (. + ($prefill[0] | {existing_region,hostname,oar,dump,show_passwords} | with_entries(select(.value != null)))), mode: $mode} + (if $occupied_ports == null then {} else {occupied_ports: $occupied_ports} end))}}' <<<"$answers")
 	[[ -z "$apply_request" ]] || request=$apply_request
+	# The first request asks for the scenario of an install of before the kit, when there is one
+	[[ -z "${setup_legacy:-}" || -n "$state" ]] || request=$(jq -c '.data.attributes.existing = true' <<<"$request")
 	# What the engine tells while it works (lines starting with "opensim: ") is shown as it comes. Its answer goes to a file and its
 	# error output to another that is read while it runs: the instances it starts keep both open, a pipe would never end
 	: >"$errors"
@@ -259,6 +344,30 @@ while :; do
 		fi
 		jq -r .message <<<"$screen"
 		exit 0
+		;;
+	step)
+		# A step of the run: the engine's, done at the next request (its live line then), or one of root, run here by its name
+		state=$(jq -r .state <<<"$screen")
+		STEP_LABELS=$(jq -r '(.labels // [])[]' <<<"$screen")
+		answers='{}'
+		button=next
+		if [[ "$(jq -r .step.root <<<"$screen")" == true ]]; then
+			step_status=0
+			step_said=$(root_step "$(jq -r .step.name <<<"$screen")" "$(jq -c '.step.args // {}' <<<"$screen")" "$(jq -r '"[\(.step.number)/\(.step.count)] \(.step.label)"' <<<"$screen")" 2>&1) || step_status=$?
+			[[ -z ${pending:-} ]] || { printf '\r\033[K' >&2; pending=; }
+			if ((step_status != 0)); then
+				button=failed
+				answers=$(jq -cn --arg text "$(tail -n 3 <<<"$step_said")" '{error_text: $text}')
+			fi
+		else
+			stage=$(jq -r '"[\(.step.number)/\(.step.count)] \(.step.label)"' <<<"$screen")
+		fi
+		;;
+	handoff)
+		# What this command runs itself still (in place): said to its caller, which runs it
+		[[ -z ${pending:-} ]] || printf '\r\033[K' >&2
+		printf 'handoff: %s\n' "$(jq -r .path <<<"$screen")"
+		exit 3
 		;;
 	abort) die "$(jq -r .error <<<"$screen")" ;;
 	*) die "The engine asks for an action this command does not know: $(jq -r .action <<<"$screen")" ;;
