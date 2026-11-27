@@ -214,7 +214,10 @@ root_step() { # name, args (JSON), label
 		grid=$(jq -r '.grid // empty' <<<"$args")
 		[[ "$grid" =~ ^[a-z0-9_-]+$ ]] || { echo "install-website: not a grid: $grid"; return 1; }
 		printf '\r\033[K» %s: %s' "$label" "$grid" >&2
-		"$CLI_ROOT/bin/opensim" web "$grid" site --install ${OPENSIM_EDIT_VHOSTS:+--edit-vhosts} || return 1
+		# The yes to its line in the sites of Apache is the scenario's (asked before Start): a step never asks
+		local edit=
+		[[ "$(jq -r '.edit_vhosts // false' <<<"$args")" != true ]] || edit=--edit-vhosts
+		"$CLI_ROOT/bin/opensim" web "$grid" site --install $edit </dev/null || return 1
 		;;
 	*)
 		echo "unknown step $name: refused"
