@@ -127,9 +127,12 @@ install_site() { # grid [edit: the files of the sites of Apache may be given the
 	if [[ "$server" == apache ]]; then
 		files=$(w4os-site web apache --host "$host" ${prefix:+--prefix "$prefix"} --vhosts 2>/dev/null | paste -sd, - | sed 's/,/, /g')
 		[[ -n "$files" ]] || die "no site of Apache serves ${host#*://}: the website is put in one of its sites"
+		# The modules of Apache it enables, said with the line: a change of the host
+		local modules
+		modules=$(w4os-site web apache --host "$host" ${prefix:+--prefix "$prefix"} --modules 2>/dev/null | paste -sd, - | sed 's/,/, /g')
 		if [[ -z "$edit" ]]; then
-			[[ -t 0 ]] || die "the website needs one line in $files: give --edit-vhosts"
-			read -r -p "Add one line to $files? [Y/n] " edit
+			[[ -t 0 ]] || die "the website needs one line in $files${modules:+ and the modules $modules of Apache}: give --edit-vhosts"
+			read -r -p "Add one line to $files${modules:+ and enable the modules $modules of Apache}? [Y/n] " edit
 			[[ -z "$edit" || "$edit" == [yY]* ]] || die "the website is not installed: it needs that line"
 		fi
 	fi
