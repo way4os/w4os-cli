@@ -1,6 +1,6 @@
 ## Changelog
 
-### Unreleased
+### 3.0.0-beta.15
 
 - fix (setup): dialog in ASCII without a UTF-8 locale; a long row shortened in the middle, shown whole; labels bounded
 - fix (kickstart): what it starts never keeps the terminal (SQL server without systemd, fd 8): the prompt comes back at once
