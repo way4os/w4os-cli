@@ -417,7 +417,9 @@ while :; do
 		if [[ "$(jq -r .step.root <<<"$screen")" == true ]]; then
 			step_status=0
 			step_said=$(root_step "$(jq -r .step.name <<<"$screen")" "$(jq -c '.step.args // {}' <<<"$screen")" "$(jq -r '"[\(.step.number)/\(.step.count)] \(.step.label)"' <<<"$screen")" 2>&1) || step_status=$?
-			[[ -z ${pending:-} ]] || { printf '\r\033[K' >&2; pending=; }
+			# Its live line, written by the step in a subshell, cleared here: the next screen takes its place
+			[[ ! -t 3 ]] || printf '\r\033[K' >&3
+			pending=
 			if ((step_status != 0)); then
 				button=failed
 				answers=$(jq -cn --arg text "$(tail -n 3 <<<"$step_said")" '{error_text: $text}')
