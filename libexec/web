@@ -76,7 +76,7 @@ install_api() { # grid, then the options of web (api caddy|apache)
 		if [[ "$server" == caddy ]]; then
 			caddy reload --config "$etc/Caddyfile" --adapter caddyfile >/dev/null 2>&1
 		else
-			apache2ctl graceful >/dev/null 2>&1
+			apache2ctl graceful </dev/null >/dev/null 2>&1
 		fi || die "the web server did not reload with $file"
 	fi
 	# Answered, a key asked (401) or given: the pool and the listener are there; nothing, or 502, is no API

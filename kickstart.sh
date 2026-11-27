@@ -949,8 +949,10 @@ save_database_credentials() {
 	fi
 }
 
+# The server started without systemd (a container) is left running: never on the terminal (its input /dev/null, its outputs the log),
+# which it would keep open after the run
 start_sql_server() {
-	if as_root service mariadb start >>"$(install_log)" 2>&1 || as_root service mysql start >>"$(install_log)" 2>&1; then
+	if as_root service mariadb start </dev/null >>"$(install_log)" 2>&1 || as_root service mysql start </dev/null >>"$(install_log)" 2>&1; then
 		return 0
 	fi
 	as_root mysqladmin ping --silent >/dev/null 2>&1 && return 0
@@ -974,7 +976,7 @@ start_sql_server() {
 	log_file=${TMP:-/tmp/quick-install}.mariadb.log
 	log 'Starting MariaDB as its service user in the container'
 	as_root start-stop-daemon --start --background --chuid mysql \
-		--exec "$(command -v mariadbd-safe)" -- --datadir="$datadir" >>"$log_file" 2>&1 || return 1
+		--exec "$(command -v mariadbd-safe)" -- --datadir="$datadir" </dev/null >>"$log_file" 2>&1 || return 1
 	local attempt
 	for attempt in {1..30}; do
 		as_root mysqladmin ping --silent >/dev/null 2>&1 && return 0

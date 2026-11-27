@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- fix (kickstart): the database server started without systemd never keeps the terminal: the prompt comes back at once
 - change (web): site --install names the modules of Apache it enables with the line it asks
 - new (address): --website changes the address of the Quick Start website alone; web site --install --address too
 - fix (setup): run by root, its client stays root for its steps of root, the engine runs as the system user

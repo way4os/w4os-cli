@@ -161,6 +161,21 @@ function test_a_migration_without_anybody_that_fails_exits_with_the_code_of_the_
 	assert_not_contains "Passwords" "$said"
 }
 
+function test_the_sql_server_started_without_systemd_never_keeps_the_terminal() {
+	quick_install_load_library || return
+	mkdir -p "$WORK/stubs"
+	# The server the init script leaves running: its input is what the start was given
+	printf '#!/usr/bin/env bash\nreadlink -f /proc/self/fd/0 >"%s/service-stdin"\n' "$WORK" >"$WORK/stubs/service"
+	chmod +x "$WORK/stubs/service"
+	as_root() { "$@"; }
+	INSTALL_LOG=$WORK/install.log
+	: >"$INSTALL_LOG" >"$WORK/terminal"
+
+	PATH="$WORK/stubs:$PATH" start_sql_server <"$WORK/terminal"
+
+	assert_same /dev/null "$(cat "$WORK/service-stdin")"
+}
+
 function test_unconfirmed_answers_keep_interactive_setup() {
 	quick_install_load_library || return
 	local calls=$WORK/prefill-calls config="$WORK/Setup Answers.json"
