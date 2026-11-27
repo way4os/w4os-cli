@@ -1033,6 +1033,8 @@ end_installation() {
 			rm -f "$end.status"
 		fi
 		setup_summary "$end"
+		# Stopped at the person's request (4): said by the setup, not an error
+		((status != 4)) || exit 0
 		exit "$status"
 	fi
 
@@ -1067,7 +1069,11 @@ end_installation() {
 		local end
 		# The summary of the setup said last, with the line of the passwords; its website is its last step (as root, by its name)
 		end=$(mktemp) && chmod 666 "$end"
-		OPENSIM_RC=$OPENSIM_RC_PATH OPENSIM_SETUP_UI=$SETUP_UI OPENSIM_SETUP_END=$end "$basedir/bin/opensim" "${setup_arguments[@]}" 8<&- || die "the setup stopped (error $?)"
+		local status=0
+		OPENSIM_RC=$OPENSIM_RC_PATH OPENSIM_SETUP_UI=$SETUP_UI OPENSIM_SETUP_END=$end "$basedir/bin/opensim" "${setup_arguments[@]}" 8<&- || status=$?
+		# Stopped at the person's request (4): said by the setup, not an error
+		((status != 4)) || exit 0
+		((status == 0)) || die "the setup stopped (error $status)"
 		done_line "Done"
 		say ""
 		setup_summary "$end"
@@ -1632,7 +1638,7 @@ install_log >/dev/null
 	die "w4os installs on Debian and Ubuntu; elsewhere, from a clone of its repository: git clone https://github.com/way4os/w4os-cli.git"
 # The one question before the setup, whose scenario says what is here and asks the rest
 if [[ "$INSTALL_PHASE" == all ]] && ! opening_question; then
-	say "Stopped: nothing changed."
+	say "Stopped at your request: nothing changed."
 	exit 0
 fi
 # A pre-existing install: never beside it silently (both would read /etc/opensim and start the same grids); its choice is the setup's

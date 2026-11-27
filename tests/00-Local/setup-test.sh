@@ -558,6 +558,36 @@ function test_a_long_label_of_a_form_list_leaves_its_value_readable() {
 	assert_not_contains "proxy_fcgi of Apache  Yes" "$(grep -- '--menu' "$DIALOG_LOG" | head -1 | sed 's/--item-help.*//')"
 }
 
+function test_a_secret_shows_one_mask_in_dialog_whatever_its_length_and_comes_back_unchanged_when_kept() {
+	local form secret=0123456789abcdef0123456789abcdef
+	make_fake_dialog
+	form=$(jq -c --arg secret "$secret" '.data.attributes.fields[1].value = $secret' <<<"$FORM")
+	engine_says "$form" "$QUIT"
+	printf '%s\n' '0:Amy\n********' >"$DIALOG_ANSWERS"
+	setup_with_dialog >/dev/null || true
+
+	assert_contains "Password 2 1 ******** " "$(grep -- '--mixedform' "$DIALOG_LOG" | head -1)"
+	assert_not_contains "$secret" "$(cat "$DIALOG_LOG")"
+	assert_equals "$secret" "$(request 2 .answers.password)"
+}
+
+function test_a_menu_in_plain_text_has_its_title_above_its_entries_and_a_short_prompt() {
+	local out
+	engine_says "$MENU" "$QUIT"
+	out=$(setup_with "" 2>&1) || true
+
+	assert_contains "$(printf 'OpenSim setup\n  1) Grid\n  2) Standalone\n  3) Speculoos (not implemented)\nChoose [1-3]: ')" "$out"
+}
+
+function test_a_stop_asked_by_the_person_is_said_in_one_line_not_as_an_error() {
+	local out status=0
+	engine_says '{"data":{"attributes":{"action":"abort","code":4,"stopped":true,"error":"Stopped at your request. The DB admin user opensim_admin stays, kept for the next run."}}}'
+	out=$(setup_with 2>&1) || status=$?
+
+	assert_exit_code 4 '' "$status"
+	assert_same "Stopped at your request. The DB admin user opensim_admin stays, kept for the next run." "$out"
+}
+
 function test_cancel_button_is_back_and_escape_is_quit() {
 	make_fake_dialog
 	engine_says "$MENU" "$FORM" "$CHECKS" "$ABORT"

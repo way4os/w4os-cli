@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+- change (setup): a stop asked at a screen said in one line, exit 4, kickstart adds nothing; a menu in lines titled above
+- fix (setup): a secret shown as one mask in dialog as in lines, kept when it comes back unchanged
 - new (setup): stop-old-instances takes the configs of a location given, a core started without -inifile found
 - change (kickstart): one question before the setup (composer from a clone, else the packages); no database user made there
 - new (setup): the root step db-admin makes the DB admin user when no account has its name, keeps it in the rc file

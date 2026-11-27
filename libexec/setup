@@ -10,7 +10,7 @@ HELP="Shows the setup questions and applies the confirmed settings.
   --region-config FILE  adopt an existing Region.ini in a simulator setup
   --legacy        beside a pre-existing install (/opt/opensim): with --unattended or --config-keys, its scenario without screens
   --unattended    with --legacy, nobody there: the answers of --config, a default for each one missing, no screen; exit 0 done,
-                  1 a step failed, 2 an answer refused (nothing done)
+                  1 a step failed, 2 an answer refused (nothing done); 4 is a stop asked at a screen
   --config-keys   with --legacy, the answers --config takes for it: name, values, default, what it is
   --show-passwords  show the passwords of the database accounts in the review (masked by default; Show passwords there too)
   --existing      take over the region the grid has of the name given (restored, or moved from another server): its UUID,
@@ -449,6 +449,11 @@ while :; do
 		;;
 	abort)
 		[[ -z ${pending:-} ]] || printf '\r\033[K' >&2
+		# A stop the person asked for: its line as it is, not an error (exit 4)
+		if [[ "$(jq -r '.stopped // false' <<<"$screen")" == true ]]; then
+			printf '%s\n' "$(jq -r .error <<<"$screen")" >&2
+			exit 4
+		fi
 		error "$(jq -r .error <<<"$screen")"
 		exit "$(jq -r '.code // 1' <<<"$screen")"
 		;;

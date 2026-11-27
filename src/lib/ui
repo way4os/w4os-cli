@@ -18,6 +18,8 @@ FE_INPUT_FD=${FE_INPUT_FD:-}
 FE_SCREEN=${FE_SCREEN:-/dev/tty}
 FE_UI=
 FE_ANSWER=
+# The mask of a secret, the same in dialog and in lines, whatever its length
+FE_MASK='********'
 
 fe_dialog_fits_terminal() {
 	[[ $1 =~ ^[0-9]+$ ]] && (( $1 >= 78 ))
@@ -152,7 +154,9 @@ ui_menu() {
 		height=$((${#keys[@]} + 7 + $(fe_lines "$text")))
 		fe_dialog "$title" ${default:+--default-item "$default"} --no-tags --menu "${text:- }" "$height" 60 "${#keys[@]}" "${items[@]}" || return $?
 	else
-		[[ -n "$text" ]] && printf '\n%s\n' "$text" >&2
+		# As a form: its title, its text, its entries, then a short prompt
+		printf '\n%s\n' "$title" >&2
+		[[ -n "$text" ]] && printf '%s\n' "$text" >&2
 		for i in "${!keys[@]}"; do
 			printf '  %d) %s\n' "$((i + 1))" "${labels[$i]}" >&2
 		done
@@ -161,7 +165,7 @@ ui_menu() {
 			[[ "${keys[$i]}" == "$default" ]] && line=$((i + 1))
 		done
 		while :; do
-			fe_read "$title [$line]: " "$line" || return 2
+			fe_read "Choose [1-${#keys[@]}]: " "$line" || return 2
 			fe_special || return $?
 			if [[ $FE_ANSWER =~ ^[0-9]+$ ]] && ((FE_ANSWER >= 1 && FE_ANSWER <= ${#keys[@]})); then
 				FE_ANSWER=${keys[FE_ANSWER - 1]}
@@ -183,7 +187,7 @@ fe_lines() {
 
 # ui_form "Title" "Text" NAME...: all the questions at once. (The locals are named so that they cannot hide a variable of a form.)
 ui_form() {
-	local _u_title=$1 _u_text=$2 _u_n _u_i _u_w=0 _u_items=() _u_values=()
+	local _u_title=$1 _u_text=$2 _u_n _u_i _u_w=0 _u_items=() _u_values=() _u_shown
 	shift 2
 	local _u_names=("$@")
 	fe_choose_ui
@@ -194,13 +198,19 @@ ui_form() {
 		for _u_n in "${_u_names[@]}"; do ((${#LABEL[$_u_n]} > _u_w)) && _u_w=${#LABEL[$_u_n]}; done
 		for _u_i in "${!_u_names[@]}"; do
 			_u_n=${_u_names[$_u_i]}
-			_u_items+=("${LABEL[$_u_n]}" "$((_u_i + 1))" 1 "${!_u_n}" "$((_u_i + 1))" "$((_u_w + 2))" 40 200 "$([[ -n "${READONLY[$_u_n]:-}" ]] && echo 2 || echo "${SECRET[$_u_n]:-0}")")
+			_u_shown=${!_u_n}
+			# A secret given: the same mask as everywhere, whatever its length
+			[[ -z "${SECRET[$_u_n]:-}" || -z "$_u_shown" ]] || _u_shown=$FE_MASK
+			_u_items+=("${LABEL[$_u_n]}" "$((_u_i + 1))" 1 "$_u_shown" "$((_u_i + 1))" "$((_u_w + 2))" 40 200 "$([[ -n "${READONLY[$_u_n]:-}" ]] && echo 2 || echo "${SECRET[$_u_n]:-0}")")
 		done
 		# Enter goes to the next field (fe_dialogrc): the buttons are reached with Tab, said at the bottom of the box
 		fe_dialog "$_u_title" --hline "Enter: next field, Tab: buttons" --insecure --mixedform "${_u_text:- }" "$((${#_u_names[@]} + 8 + $(grep -c '' <<<"$_u_text")))" 72 "${#_u_names[@]}" "${_u_items[@]}" || return $?
 		mapfile -t _u_values <<<"$FE_ANSWER"
 		for _u_i in "${!_u_names[@]}"; do
-			printf -v "${_u_names[$_u_i]}" '%s' "${_u_values[$_u_i]:-}"
+			_u_n=${_u_names[$_u_i]}
+			# The mask back as it was shown: the secret kept
+			[[ -n "${SECRET[$_u_n]:-}" && "${_u_values[$_u_i]:-}" == "$FE_MASK" ]] && continue
+			printf -v "$_u_n" '%s' "${_u_values[$_u_i]:-}"
 		done
 	else
 		ui_form_plain "$_u_title" "$_u_text" "${_u_names[@]}"
@@ -212,10 +222,11 @@ ui_form_plain() {
 	local _u_title=$1 _u_text=$2 _u_n _u_i _u_shown _u_status
 	shift 2
 	local _u_names=("$@")
-	[[ -n "$_u_text" ]] && printf '\n%s\n' "$_u_text" >&2
-	# One question alone is asked as one, its proposal ready to be kept with Enter or changed
+	# One question alone is asked as one, under its title, its proposal ready to be kept with Enter or changed
 	_u_n=${_u_names[0]}
 	if ((${#_u_names[@]} == 1)) && [[ -z "${OPTIONS[$_u_n]:-}" && -z "${SECRET[$_u_n]:-}" && -z "${READONLY[$_u_n]:-}" ]]; then
+		printf '\n%s\n' "$_u_title" >&2
+		[[ -n "$_u_text" ]] && printf '%s\n' "$_u_text" >&2
 		fe_read "? ${LABEL[$_u_n]}: " "${!_u_n}" || return 2
 		fe_special || return $?
 		printf -v "$_u_n" '%s' "$FE_ANSWER"
@@ -223,6 +234,7 @@ ui_form_plain() {
 	fi
 	while :; do
 		printf '\n%s\n' "$_u_title" >&2
+		[[ -n "$_u_text" ]] && printf '%s\n' "$_u_text" >&2
 		for _u_i in "${!_u_names[@]}"; do
 			_u_n=${_u_names[$_u_i]}
 			_u_shown=$(fe_shown "$_u_n")
@@ -262,7 +274,7 @@ fe_has_choices() {
 fe_shown() {
 	local _u_n=$1 _u_key _u_label
 	if [[ -n "${SECRET[$_u_n]:-}" && -n "${!_u_n}" ]]; then
-		printf '********'
+		printf '%s' "$FE_MASK"
 		return
 	fi
 	if [[ -n "${OPTIONS[$_u_n]:-}" ]]; then
