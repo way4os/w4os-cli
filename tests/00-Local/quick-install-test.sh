@@ -138,7 +138,8 @@ STUB
 
 	assert_same 0 "$status"
 	assert_contains "setup --legacy --unattended --config " "$(cat "$WORK/calls")"
-	assert_contains "Passwords  $WORK/opensimrc (root only)" "$said"
+	# Whose the file of the passwords is, said
+	assert_contains "Passwords  $WORK/opensimrc ($(id -un) only)" "$said"
 	# Why the website is not there ends what is said and the log, where a script finds it
 	assert_same "Website    not installed (no answer for vhosts)" "$(tail -n 1 <<<"$said")"
 	assert_same "Website    not installed (no answer for vhosts)" "$(tail -n 1 "$INSTALL_LOG")"

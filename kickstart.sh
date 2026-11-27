@@ -1001,6 +1001,11 @@ answers_with() { # file, JSON object, [name variable]...
 	printf '%s' "$out"
 }
 
+# The account a file belongs to (GNU stat, else the BSD one of macOS), root when it cannot be told
+file_owner() { # file
+	as_root stat -c %U "$1" 2>/dev/null || as_root stat -f %Su "$1" 2>/dev/null || printf root
+}
+
 # The summary of the setup, its line of the passwords before why the website is not there, which ends it (and the log)
 setup_summary() { # file of the summary
 	local said
@@ -1009,7 +1014,7 @@ setup_summary() { # file of the summary
 	[[ -n "$said" ]] || return 0
 	{
 		grep -v '^Website    not installed' <<<"$said"
-		! as_root test -f "$OPENSIM_RC_PATH" || printf 'Passwords  %s (root only)\n' "$OPENSIM_RC_PATH"
+		! as_root test -f "$OPENSIM_RC_PATH" || printf 'Passwords  %s (%s only)\n' "$OPENSIM_RC_PATH" "$(file_owner "$OPENSIM_RC_PATH")"
 		grep '^Website    not installed' <<<"$said" || true
 	} | tee -a "$(install_log)"
 }

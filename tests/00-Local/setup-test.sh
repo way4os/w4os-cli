@@ -694,6 +694,18 @@ STUB
 	assert_same 600 "$(stat -c %a "$WORK/rc" 2>/dev/null || stat -f %Lp "$WORK/rc")"
 }
 
+function test_a_step_or_a_screen_done_leaves_its_line() {
+	local out
+	STEP='{"data":{"attributes":{"action":"step","step":{"name":"restart-service","root":true,"label":"Folders","done":"Folders","number":1,"count":1,"args":{}},"labels":["Folders"],"state":"s9"}}}'
+	engine_says "$STEP" "$(jq -c '.data.attributes.done = "OpenSimulator 0.9.3.0"' <<<"$QUIT")"
+	out=$(setup_with 2>&1) || true
+
+	# A step that fails leaves none
+	assert_equals failed "$(request 2 .button)"
+	assert_not_contains "✓ Folders" "$out"
+	assert_contains "✓ OpenSimulator 0.9.3.0" "$out"
+}
+
 function test_the_legacy_scenario_is_asked_on_the_first_request_only() {
 	engine_says "$MENU" "$QUIT"
 	setup_with "" >/dev/null 2>&1 || true

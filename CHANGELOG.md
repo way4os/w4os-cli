@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+- fix (setup): a step done leaves its line; the live line of a request is cleared before its screen
+- fix (kickstart): the line of the passwords says whose the file is
 - fix (kickstart): from a clone, composer alone is asked and no package of ours is installed; the setup has the core and .NET
 - fix (kickstart): on macOS nothing is installed by Homebrew, a missing tool is named; missing neighbour clones are named
 - fix (cli): the commands run as the caller when the config names an account this machine does not have

@@ -405,8 +405,16 @@ while :; do
 		setup_prefill_type=
 		continue
 	fi
+	# What the engine did with this request, left as a line (✓ OpenSimulator 0.9.3.0) before what follows
+	done_said=$(jq -r '.done // empty' <<<"$screen")
+	if [[ -n "$done_said" ]]; then
+		[[ -z ${pending:-} ]] || { printf '\r\033[K' >&2; pending=; }
+		printf '✓ %s\n' "$done_said" >&2
+	fi
 	case "$(jq -r .action <<<"$screen")" in
 	screen)
+		# The live line of the request done: its place for the screen
+		[[ -z ${pending:-} ]] || { printf '\r\033[K' >&2; pending=; }
 		[[ -z "$apply_file" ]] || die "The engine could not apply the prepared configuration: $(jq -r '.notice // empty' <<<"$screen")"
 		case "$(jq -r .kind <<<"$screen")" in
 			# A value of the configuration, false and 0 too (jq's // would take false for nothing): a boolean as yes or no, and a
@@ -453,6 +461,9 @@ while :; do
 			# Its live line, written by the step in a subshell, cleared here: the next screen takes its place
 			[[ ! -t 3 ]] || printf '\r\033[K' >&3
 			pending=
+			# A step that stands alone (the folders, the runtime) leaves its line once done
+			done_said=$(jq -r '.step.done // empty' <<<"$screen")
+			((step_status != 0)) || [[ -z "$done_said" ]] || printf '✓ %s\n' "$done_said" >&3
 			if ((step_status != 0)); then
 				button=failed
 				answers=$(jq -cn --arg text "$(tail -n 3 <<<"$step_said")" '{error_text: $text}')
