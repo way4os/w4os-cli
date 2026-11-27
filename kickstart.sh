@@ -950,12 +950,12 @@ save_database_credentials() {
 }
 
 # The server started without systemd (a container) is left running: never on the terminal, which it would keep open after the run
-# (the prompt would not come back): in a session of its own (it cannot open the terminal of the run, /dev/tty), its input /dev/null,
-# its outputs the log
+# (the prompt would not come back): in a session of its own, without the terminal of the questions (fd 8), its input /dev/null, its
+# outputs the log
 start_sql_server() {
 	local detach=()
 	command -v setsid >/dev/null 2>&1 && detach=(setsid -w)
-	if as_root "${detach[@]}" service mariadb start </dev/null >>"$(install_log)" 2>&1 || as_root "${detach[@]}" service mysql start </dev/null >>"$(install_log)" 2>&1; then
+	if as_root "${detach[@]}" service mariadb start </dev/null >>"$(install_log)" 2>&1 8<&- || as_root "${detach[@]}" service mysql start </dev/null >>"$(install_log)" 2>&1 8<&-; then
 		return 0
 	fi
 	as_root mysqladmin ping --silent >/dev/null 2>&1 && return 0
@@ -979,7 +979,7 @@ start_sql_server() {
 	log_file=${TMP:-/tmp/quick-install}.mariadb.log
 	log 'Starting MariaDB as its service user in the container'
 	as_root "${detach[@]}" start-stop-daemon --start --background --chuid mysql \
-		--exec "$(command -v mariadbd-safe)" -- --datadir="$datadir" </dev/null >>"$log_file" 2>&1 || return 1
+		--exec "$(command -v mariadbd-safe)" -- --datadir="$datadir" </dev/null >>"$log_file" 2>&1 8<&- || return 1
 	local attempt
 	for attempt in {1..30}; do
 		as_root mysqladmin ping --silent >/dev/null 2>&1 && return 0
@@ -1153,12 +1153,13 @@ end_installation() {
 		end=$(mktemp) && chmod 666 "$end"
 		say ""
 		if [[ "${LEGACY_INTERACTIVE:-}" == yes ]]; then
-			as_root env OPENSIM_SETUP_UI="$SETUP_UI" OPENSIM_SETUP_END="$end" "$cli" "${legacy[@]}" || status=$?
+			# The terminal of the questions (fd 8) kept from what it starts: the setup opens its own
+			as_root env OPENSIM_SETUP_UI="$SETUP_UI" OPENSIM_SETUP_END="$end" "$cli" "${legacy[@]}" 8<&- || status=$?
 		else
 			# Nobody there (or --yes): every answer at once, the ones of --config, the defaults of the scenario for the others; each
 			# line of its run in the log too
 			legacy+=(--unattended --config "$(answers_with "$setup_config" "{\"existing\":\"${LEGACY_CHOICE:-migrate}\"}" restart LEGACY_RESTART vhosts EDIT_VHOSTS)")
-			{ as_root env OPENSIM_SETUP_UI=lines OPENSIM_SETUP_END="$end" "$cli" "${legacy[@]}" </dev/null 2>&1; echo "status $?" >"$end.status"; } | tee -a "$(install_log)"
+			{ as_root env OPENSIM_SETUP_UI=lines OPENSIM_SETUP_END="$end" "$cli" "${legacy[@]}" </dev/null 2>&1 8<&-; echo "status $?" >"$end.status"; } | tee -a "$(install_log)"
 			status=$(sed -n 's/^status //p' "$end.status" 2>/dev/null)
 			rm -f "$end.status"
 		fi
@@ -1196,7 +1197,7 @@ end_installation() {
 		local end
 		# The summary of the setup said last, with the line of the passwords; its website is its last step (as root, by its name)
 		end=$(mktemp) && chmod 666 "$end"
-		OPENSIM_SETUP_UI=$SETUP_UI OPENSIM_SETUP_END=$end "$basedir/bin/opensim" "${setup_arguments[@]}" || die "the setup stopped (error $?)"
+		OPENSIM_SETUP_UI=$SETUP_UI OPENSIM_SETUP_END=$end "$basedir/bin/opensim" "${setup_arguments[@]}" 8<&- || die "the setup stopped (error $?)"
 		done_line "Done"
 		say ""
 		setup_summary "$end"

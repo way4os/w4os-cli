@@ -170,16 +170,21 @@ function test_the_sql_server_started_without_systemd_never_keeps_the_terminal() 
 #!/usr/bin/env bash
 readlink -f /proc/\$\$/fd/0 >"$WORK/service-stdin"
 awk -v pid=\$\$ '{ print (\$6 == pid ? "own" : "inherited") }' /proc/\$\$/stat >"$WORK/service-session"
+[[ -e /proc/\$\$/fd/8 ]] && echo kept >"$WORK/service-fd8" || echo closed >"$WORK/service-fd8"
 STUB
 	chmod +x "$WORK/stubs/service"
 	as_root() { "$@"; }
 	INSTALL_LOG=$WORK/install.log
 	: >"$INSTALL_LOG" >"$WORK/terminal"
 
+	# The terminal kickstart asks its questions on (fd 8) is never given to the server
+	exec 8<"$WORK/terminal"
 	PATH="$WORK/stubs:$PATH" start_sql_server <"$WORK/terminal"
+	exec 8<&-
 
 	assert_same /dev/null "$(cat "$WORK/service-stdin")"
 	assert_same own "$(cat "$WORK/service-session")"
+	assert_same closed "$(cat "$WORK/service-fd8")"
 }
 
 function test_unconfirmed_answers_keep_interactive_setup() {
