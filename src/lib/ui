@@ -372,9 +372,13 @@ ui_review() {
 		# A panel like the others: a line chosen (arrows, Tab to the buttons) and changed with Change, then Start; the list scrolls
 		# when it does not fit (a terminal of 24 lines has 15 for it)
 		local _u_status _u_start=${FE_OK:-Start} _u_show=${FE_EXTRA:-} _u_tag _u_value
+		# As tall as the terminal lets it be (two lines kept), then the list scrolls
+		local _u_rows_max
+		_u_rows_max=$(stty size <"$FE_TTY" 2>/dev/null | cut -d' ' -f1)
+		[[ "$_u_rows_max" =~ ^[0-9]+$ ]] && ((_u_rows_max >= 15)) || _u_rows_max=24
 		_u_lines=$((${#_u_items[@]} / 2))
 		_u_above=$(fe_lines "$_u_text_above")
-		_u_height=$((_u_lines + 7 + _u_above > 22 ? 22 : _u_lines + 7 + _u_above))
+		_u_height=$((_u_lines + 7 + _u_above > _u_rows_max - 2 ? _u_rows_max - 2 : _u_lines + 7 + _u_above))
 		while :; do
 			_u_status=0
 			FE_OK=Change FE_EXTRA=$_u_start FE_HELP=$_u_show fe_dialog "$_u_title" --scrollbar --no-tags --menu "${_u_text_above:- }" "$_u_height" 78 "$((_u_height - 7 - _u_above))" "${_u_items[@]}" || _u_status=$?
@@ -397,7 +401,8 @@ ui_review() {
 				while IFS=$'\x1f' read -r _u_key _u_choice; do _u_menu+=("$_u_key" "$_u_choice"); done < <(jq -r 'to_entries[] | "\(.key)\u001f\(.value)"' <<<"${_u_choices[$_u_i]}")
 				FE_OK= FE_CANCEL=Back FE_EXTRA= FE_HELP= ui_menu _u_value "${_u_labels[$_u_i]}" '' "${_u_currents[$_u_i]}" "${_u_menu[@]}" || continue
 			else
-				FE_OK= FE_CANCEL=Back FE_EXTRA= FE_HELP= fe_dialog "${_u_labels[$_u_i]}" --inputbox "${_u_labels[$_u_i]}" 8 70 "${_u_currents[$_u_i]}" || continue
+				# Its name once, as the title of the panel (dialog wants a text: a space)
+				FE_OK= FE_CANCEL=Back FE_EXTRA= FE_HELP= fe_dialog "${_u_labels[$_u_i]}" --inputbox " " 7 70 "${_u_currents[$_u_i]}" || continue
 				_u_value=$FE_ANSWER
 			fi
 			REVIEW_EDITS=$(jq -cn --arg name "${_u_names[$_u_i]}" --arg value "$_u_value" '{($name): $value}')

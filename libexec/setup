@@ -165,12 +165,14 @@ show_progress() {
 	shown=$size
 	return 0
 }
+# The live line of a step of root, on the error output as it is when the step runs (what the step says is kept, said on a failure)
+exec 3>&2
 # A step of root of the scenario of the engine, by its NAME, from this closed list only, with the arguments it checks: never a command,
 # a path or a package it is handed otherwise; any other name is refused. The live line says it with its label ([1/8] Stop).
 LEGACY_STARTERS=${OPENSIM_LEGACY_STARTERS:-/etc/cron.hourly/opensim /etc/systemd/system/opensim.service /etc/init.d/opensim}
 root_step() { # name, args (JSON), label
 	local name=$1 args=$2 label=$3 file pid config grid package option target
-	printf '\r\033[K» %s' "$label" >&2
+	printf '\r\033[K» %s' "$label" >&3
 	pending=1
 	case $name in
 	set-aside-starters)
@@ -187,7 +189,7 @@ root_step() { # name, args (JSON), label
 			[[ "$config" == "${W4OS_LEGACY_ROOT:-/opt/opensim}"/etc/*.ini && -f "$config" ]] || { echo "stop-old-instances: not a config of the install of before the kit: $config"; return 1; }
 			target=$(readlink -f -- "$config")
 			for pid in $(legacy_pids "$target"); do
-				printf '\r\033[K» %s: %s' "$label" "$(basename "$config" .ini)" >&2
+				printf '\r\033[K» %s: %s' "$label" "$(basename "$config" .ini)" >&3
 				kill -TERM "$pid" 2>/dev/null || continue
 				for _ in $(seq 1 60); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
 				! kill -0 "$pid" 2>/dev/null || { echo "process $pid ($config) did not stop"; return 1; }
@@ -200,7 +202,7 @@ root_step() { # name, args (JSON), label
 	install-packages)
 		while IFS= read -r package; do
 			[[ "$package" =~ ^(opensim-[0-9.]+-maptiles|w4os-site)$ ]] || { echo "install-packages: not a package of the scenario: $package"; return 1; }
-			printf '\r\033[K» %s: %s' "$label" "$package" >&2
+			printf '\r\033[K» %s: %s' "$label" "$package" >&3
 			DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$package" >/dev/null || return 1
 		done < <(jq -r '(.packages // [])[]' <<<"$args")
 		option=$(jq -r '.option // empty' <<<"$args")
@@ -213,7 +215,7 @@ root_step() { # name, args (JSON), label
 	install-website)
 		grid=$(jq -r '.grid // empty' <<<"$args")
 		[[ "$grid" =~ ^[a-z0-9_-]+$ ]] || { echo "install-website: not a grid: $grid"; return 1; }
-		printf '\r\033[K» %s: %s' "$label" "$grid" >&2
+		printf '\r\033[K» %s: %s' "$label" "$grid" >&3
 		# The yes to its line in the sites of Apache is the scenario's (asked before Start): a step never asks
 		local edit=
 		[[ "$(jq -r '.edit_vhosts // false' <<<"$args")" != true ]] || edit=--edit-vhosts
