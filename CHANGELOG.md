@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- change (setup): run by root, the DB admin user is kept in /etc/w4os/database-admin.rc, for root alone; the summary names it
 - fix (setup): a menu of dialog is as wide as its longest entry needs
 - fix (setup): a migration stays run by root after its folders are made (its data are another account's)
 - fix (setup): the terminal is not given to the engine: the instances a setup starts by itself no longer keep it

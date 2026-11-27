@@ -648,6 +648,25 @@ function test_the_one_question_before_the_setup_is_what_the_installer_needs() {
 	assert_same 1 "$(grep -c 'Execute composer install' "$screen")"
 }
 
+function test_the_summary_names_the_files_of_the_machine_that_keep_the_passwords_and_who_reads_them() {
+	quick_install_load_library || return
+	as_root() { "$@"; }
+	INSTALL_LOG=$WORK/install.log OPENSIM_RC_PATH=$WORK/opensimrc W4OS_MACHINE_RC_DIR=$WORK/w4os
+	: >"$INSTALL_LOG"
+	: >"$OPENSIM_RC_PATH"
+	mkdir -p "$W4OS_MACHINE_RC_DIR"
+	: >"$W4OS_MACHINE_RC_DIR/database.rc"
+	: >"$W4OS_MACHINE_RC_DIR/database-admin.rc"
+	printf 'Grid       Kimbe Test (kimbe_test)\n' >"$WORK/end"
+
+	local said
+	said=$(setup_summary "$WORK/end")
+
+	assert_contains "Passwords  $W4OS_MACHINE_RC_DIR/database.rc (root and $(id -un))" "$said"
+	assert_contains "           $W4OS_MACHINE_RC_DIR/database-admin.rc (root only)" "$said"
+	assert_not_contains "$WORK/opensimrc" "$said"
+}
+
 function test_a_clone_whose_neighbours_are_missing_says_which_before_composer() {
 	quick_install_load_library || return
 	clone=$WORK/alone/w4os-cli PGM=kickstart.sh

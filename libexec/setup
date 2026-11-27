@@ -295,7 +295,7 @@ root_step() { # name, args (JSON), label
 			printf "SET SESSION sql_mode='NO_BACKSLASH_ESCAPES'; CREATE USER '%s'@'localhost' IDENTIFIED BY '%s'; GRANT ALL PRIVILEGES ON *.* TO '%s'@'localhost' WITH GRANT OPTION; FLUSH PRIVILEGES;\n" "$user" "$quoted" "$user" |
 				as_root "$client" >/dev/null 2>&1 || { echo "$user could not be made."; return 1; }
 		fi
-		keep_db_admin "$user" "$password" || { echo "$user made, not kept in ${OPENSIM_RC:-$HOME/.opensimrc}."; return 1; }
+		keep_db_admin "$user" "$password" || { echo "$user made, its password not kept."; return 1; }
 		;;
 	restart-service)
 		# Without the unit of the packages (an install from a clone, a machine without systemd) the grids are started as they are
@@ -315,15 +315,23 @@ root_step() { # name, args (JSON), label
 	esac
 }
 
-# The DB admin user kept for the commands: its lines in the rc file (OPENSIM_RC, else ~/.opensimrc) replaced, the file the person's
-# who ran sudo, read by them only
+# The DB admin user kept for the commands. Run by root: in the file of the machine root alone reads (database-admin.rc beside
+# w4os.conf): the account of the instances never has it. Else in the person's own rc file (OPENSIM_RC, else ~/.opensimrc), theirs
 keep_db_admin() { # user, password
-	local rc=${OPENSIM_RC:-$HOME/.opensimrc} tmp
+	local rc=${OPENSIM_RC:-$HOME/.opensimrc} tmp machine=${W4OS_MACHINE_RC_DIR:-/etc/w4os}
+	if [[ $(id -u) -eq 0 ]]; then
+		rc=$machine/database-admin.rc
+		mkdir -p "$machine" || return 1
+	fi
 	tmp=$(mktemp "$rc.XXXXXX") || return 1
 	[[ ! -e "$rc" ]] || grep -Ev '^export OPENSIM_DB_(HOST|ADMIN_USER|ADMIN_PASS)=' "$rc" >"$tmp" || true
 	printf 'export OPENSIM_DB_HOST=localhost\nexport OPENSIM_DB_ADMIN_USER=%q\nexport OPENSIM_DB_ADMIN_PASS=%q\n' "$1" "$2" >>"$tmp"
 	chmod 600 "$tmp" && mv -f "$tmp" "$rc" || return 1
-	[[ -z "${SUDO_USER:-}" || "$SUDO_USER" == root ]] || chown "$SUDO_USER:$(id -gn "$SUDO_USER")" "$rc"
+	if [[ $(id -u) -eq 0 ]]; then
+		chown root:root "$rc" 2>/dev/null || true
+	elif [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != root ]]; then
+		chown "$SUDO_USER:$(id -gn "$SUDO_USER")" "$rc"
+	fi
 	export OPENSIM_DB_ADMIN_USER=$1 OPENSIM_DB_ADMIN_PASS=$2
 }
 
@@ -394,6 +402,12 @@ if [[ -n "${setup_keys:-}" ]]; then
 	exit 0
 fi
 [[ -z "${setup_unattended:-}" || -n "${setup_legacy:-}" ]] || die "--unattended goes with --legacy"
+
+# An install made before the files of the machine: the DB admin user a person's file gave is kept in the machine's too, the old
+# file left as it is and still read
+if [[ $(id -u) -eq 0 && -n "${OPENSIM_DB_ADMIN_USER:-}" && -n "${OPENSIM_DB_ADMIN_PASS:-}" && -d "${W4OS_MACHINE_RC_DIR:-/etc/w4os}" && ! -e "${W4OS_MACHINE_RC_DIR:-/etc/w4os}/database-admin.rc" ]]; then
+	keep_db_admin "$OPENSIM_DB_ADMIN_USER" "$OPENSIM_DB_ADMIN_PASS" || true
+fi
 
 while :; do
 	request=$(jq -c --rawfile state <(printf '%s' "$state") --arg button "$button" --arg mode "$setup_mode" --slurpfile prefill <(printf '%s' "$setup_prefill") --argjson occupied_ports "${setup_occupied_ports:-null}" \
