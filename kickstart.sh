@@ -1102,12 +1102,43 @@ phase_database() {
 }
 
 # Installation completed: the grids of an install of before migrated or run in place, else the assistant (opensim setup) in the same
+# A file of answers of the setup: the ones of a file given (its answers, or the object itself), these over them, and the ones of
+# these flags set to yes (name, variable); a file of its own, the one given never changed
+answers_with() { # file, JSON object, [name variable]...
+	local file=$1 more=$2 out
+	shift 2
+	while (($# > 1)); do
+		[[ "${!2:-}" != yes ]] || more=$(jq -c --arg k "$1" '.[$k] = "yes"' <<<"$more")
+		shift 2
+	done
+	out=$(mktemp) && chmod 644 "$out"
+	if [[ -n "$file" && -r "$file" ]]; then
+		jq --argjson more "$more" 'if (.answers | type) == "object" then .answers += $more else . + $more end' "$file" >"$out"
+	else
+		jq -n --argjson more "$more" '{answers: $more}' >"$out"
+	fi
+	printf '%s' "$out"
+}
+
+# The summary of the setup, its line of the passwords before why the website is not there, which ends it (and the log)
+setup_summary() { # file of the summary
+	local said
+	said=$(cat "$1" 2>/dev/null)
+	rm -f "$1"
+	[[ -n "$said" ]] || return 0
+	{
+		grep -v '^Website    not installed' <<<"$said"
+		! as_root test -f "$OPENSIM_RC_PATH" || printf 'Passwords  %s (root only)\n' "$OPENSIM_RC_PATH"
+		grep '^Website    not installed' <<<"$said" || true
+	} | tee -a "$(install_log)"
+}
+
 # run when somebody is there to answer (or RUN_SETUP=yes)
 end_installation() {
 	local basedir opensim_path setup_config=${OPENSIM_SETUP_CONFIG_FILE:-$SETUP_CONFIG_FILE} setup_config_path= setup_option=--config
 	local -a setup_arguments=(setup)
-	# An install of before the kit: the scenario of the engine, as root (its steps of root are the command line's); in place is still
-	# run here, when it hands it over
+	# An install of before the kit, migrated or run in place: the scenario of the engine, as root (its steps of root are the command
+	# line's)
 	if [[ "$LEGACY_MODE" == scenario ]]; then
 		local said status=0 end
 		local -a legacy=(setup --legacy)
@@ -1121,30 +1152,13 @@ end_installation() {
 		else
 			# Nobody there (or --yes): every answer at once, the ones of --config, the defaults of the scenario for the others; each
 			# line of its run in the log too
-			legacy+=(--unattended)
-			[[ -z "$setup_config" ]] || legacy+=(--config "$setup_config")
+			legacy+=(--unattended --config "$(answers_with "$setup_config" "{\"existing\":\"${LEGACY_CHOICE:-migrate}\"}" restart LEGACY_RESTART vhosts EDIT_VHOSTS)")
 			{ as_root env OPENSIM_SETUP_UI=lines OPENSIM_SETUP_END="$end" "$cli" "${legacy[@]}" </dev/null 2>&1; echo "status $?" >"$end.status"; } | tee -a "$(install_log)"
 			status=$(sed -n 's/^status //p' "$end.status" 2>/dev/null)
 			rm -f "$end.status"
 		fi
-		said=$(cat "$end" 2>/dev/null)
-		rm -f "$end"
-		if ((status == 3)); then
-			LEGACY_MODE=in-place
-		else
-			if [[ -n "$said" ]]; then
-				{
-					grep -v '^Website    not installed' <<<"$said"
-					! as_root test -f "$OPENSIM_RC_PATH" || printf 'Passwords  %s (root only)\n' "$OPENSIM_RC_PATH"
-					grep '^Website    not installed' <<<"$said" || true
-				} | tee -a "$(install_log)"
-			fi
-			exit "$status"
-		fi
-	fi
-	if [[ "$LEGACY_MODE" == in-place ]] && [[ $(uname -s) == Linux ]]; then
-		legacy_after_install
-		exit 0
+		setup_summary "$end"
+		exit "$status"
 	fi
 
 	if [ -n "${clone:-}" ]; then
@@ -1153,6 +1167,8 @@ end_installation() {
 		opensim_path=$(command -v opensim) || die "opensim is not available after installation"
 		basedir=$(cd "$(dirname "$(realpath "$opensim_path")")/.." && pwd) || die "could not locate the opensim installation"
 	fi
+	# The line of the website in the sites of Apache given (--edit-vhosts): an answer of the setup, asked else
+	[[ -z "${EDIT_VHOSTS:-}" ]] || setup_config=$(answers_with "$setup_config" '{}' vhosts EDIT_VHOSTS)
 	if [[ -n "$setup_config" && -r "$setup_config" ]]; then
 		if [[ -z "$REGION_CONFIG_FILE" ]] && jq -e ' .version == 1 and (.answers | type == "object") and (.setup | type == "object")' "$setup_config" >/dev/null 2>&1; then
 			setup_option=--apply
@@ -1170,52 +1186,15 @@ end_installation() {
 	fi
 	[[ -z "$setup_config_path" ]] || setup_arguments+=("$setup_option" "$setup_config_path")
 	[[ -z "$REGION_CONFIG_FILE" ]] || setup_arguments+=(--region-config "$REGION_CONFIG_FILE")
-	# A grid of a run before whose website was left (an error at that step): that step again, never a setup of another grid
-	local left=() nick site
-	cli=$basedir/bin/opensim
-	for nick in $(grids_here "$basedir"); do
-		as_root "$cli" api GET "/grids/$nick" 2>/dev/null | jq -e '.data.attributes.site // empty' >/dev/null 2>&1 && ! site_done "$nick" && left+=("$nick")
-	done
-	if ((${#left[@]})); then
-		for nick in "${left[@]}"; do
-			say "  $nick is here, its website not installed yet."
-			ask "Install it?" || { say "Stopped: nothing changed."; exit 0; }
-			site=$(as_root "$cli" api GET "/grids/$nick" 2>/dev/null | jq -r '.data.attributes.site // empty')
-			website_possible && apache_consent "$site" || continue
-			run_step "Website" - site_install "$nick" || die "the website could not be installed (log: $(install_log))"
-			done_line "Website"
-			migration_summary "$nick" "$(as_root "$cli" api GET "/grids/$nick" 2>/dev/null | jq -r '.data.attributes.site // empty')"
-		done
-		exit 0
-	fi
 	if [[ "${RUN_SETUP:-}" =~ ^(yes|true|1)$ ]] || person_here; then
 		say ""
-		local before end
-		before=$(grids_here "$basedir")
-		# The summary of the setup said last, after the website of the grid it made
+		local end
+		# The summary of the setup said last, with the line of the passwords; its website is its last step (as root, by its name)
 		end=$(mktemp) && chmod 666 "$end"
 		OPENSIM_SETUP_UI=$SETUP_UI OPENSIM_SETUP_END=$end "$basedir/bin/opensim" "${setup_arguments[@]}" || die "the setup stopped (error $?)"
-		for nick in $(comm -13 <(printf '%s\n' "$before") <(grids_here "$basedir")); do
-			cli=$basedir/bin/opensim
-			site=$(as_root "$cli" api GET "/grids/$nick" 2>/dev/null | jq -r '.data.attributes.site // empty' 2>/dev/null)
-			[[ -n "$site" ]] || continue
-			website_possible || { say "  Website: no Caddy nor Apache on this machine, not installed."; continue; }
-			# Apache: the line of the website was asked before the start, in the review
-			if [[ "${WEB_SERVER:-}" == apache ]]; then
-				case $(cat "$end.vhosts" 2>/dev/null) in
-				yes) SITE_EDIT=yes ;;
-				no) say "  Website: not installed."; continue ;;
-				*) apache_consent "$site" || continue ;;
-				esac
-			fi
-			# The last step of the run the setup counted (its live line said [1/4] to [3/4])
-			run_step "[4/4] Website: ${WEB_SERVER^}" - site_install "$nick" || die "the website could not be installed (log: $(install_log))"
-		done
 		done_line "Done"
 		say ""
-		cat "$end"
-		! as_root test -f "$OPENSIM_RC_PATH" || say "Passwords  $OPENSIM_RC_PATH (root only)"
-		rm -f "$end" "$end.vhosts"
+		setup_summary "$end"
 	else
 		done_line "Installed"
 	fi
@@ -1315,9 +1294,9 @@ legacy_summary() { # root
 	printf 'Found an existing install in %s%s.' "$1" "${nick:+: grid $nick, $count simulator$( ((count == 1)) || printf s)}"
 }
 
-# Before anything is installed, beside an install of before the kit: the choice is asked (or given: --migrate, --in-place, --new).
-# Migrated or run in place, its own start is set aside, renamed *.w4os-disabled (a cron of run-parts skips a name with a dot), so
-# that it never starts what the kit runs; beside it (a new grid), only a unit of its own named opensim, which would hide the kit's
+# Before anything is installed, beside an install of before the kit: the consent to install the kit, the choice being the scenario's
+# (or given: --migrate, --in-place, --new). Before the kit, only a unit of its own named opensim is set aside (renamed
+# *.w4os-disabled), which would hide the kit's; migrated or run in place, the scenario sets the rest aside in its run
 legacy_gate() {
 	local root
 	root=$(legacy_install)
@@ -1327,46 +1306,30 @@ legacy_gate() {
 		# The install found is said by the first screen of the scenario
 		ask "An install of before the kit is in $root. Install the kit, then choose what to do with it?" || { say "Stopped: nothing changed."; exit 0; }
 		LEGACY_MODE=scenario LEGACY_INTERACTIVE=yes
-		legacy_set_aside units
+		legacy_set_aside
 		return 0
 	fi
 	if [[ -z "$LEGACY_MODE" ]]; then
 		say "  $(legacy_summary "$root")"
 		die "nobody to choose: give --migrate (--yes, its answers with --config), --in-place or --new"
 	fi
-	# A migration is the scenario's too, its answers given (--config), the defaults else; it sets the old install aside in its run,
-	# after Start (Stop); before it, only a unit named opensim, which would hide the kit's
-	if [[ "$LEGACY_MODE" == migrate ]]; then
-		LEGACY_MODE=scenario
+	# Migrated or run in place, it is the scenario's too, its answers given (--config), the defaults else; it sets the old install
+	# aside in its run, after Start (Stop); before it, only a unit named opensim, which would hide the kit's (a new grid beside it too)
+	if [[ "$LEGACY_MODE" == migrate || "$LEGACY_MODE" == in-place ]]; then
+		LEGACY_CHOICE=$LEGACY_MODE LEGACY_MODE=scenario
 		[[ -n "$ASSUME_YES" ]] || ! person_here || LEGACY_INTERACTIVE=yes
-		legacy_set_aside units
-	else
-		legacy_set_aside "$([[ "$LEGACY_MODE" == new ]] && echo units)"
-		[[ ${#LEGACY_SET_ASIDE[@]} -eq 0 ]] || done_line "Old install: its start at boot set aside"
 	fi
+	legacy_set_aside
 }
 
-# The start at boot of the install of before the kit set aside (renamed *.w4os-disabled), all of it or only its units named opensim
-# (units), each kept in LEGACY_SET_ASIDE for legacy_restore
-LEGACY_SET_ASIDE=()
-legacy_set_aside() { # [units]
+# The units of the install of before the kit named opensim set aside (renamed *.w4os-disabled): they would hide the kit's; its cron
+# and its other units are the scenario's, set aside in its run
+legacy_set_aside() {
 	local starter
 	while IFS= read -r starter; do
-		[[ -n "$starter" ]] || continue
-		[[ "${1:-}" != units || "$starter" == */opensim.service || "$starter" == */init.d/opensim ]] || continue
+		[[ "$starter" == */opensim.service || "$starter" == */init.d/opensim ]] || continue
 		as_root mv -- "$starter" "$starter.w4os-disabled" || die "could not set aside $starter"
-		LEGACY_SET_ASIDE+=("$starter")
 	done < <(legacy_starters)
-	[[ ! -d /run/systemd/system ]] || as_root systemctl daemon-reload || true
-}
-
-# What legacy_set_aside set aside put back: an abort before the start changes nothing
-legacy_restore() {
-	local starter
-	for starter in "${LEGACY_SET_ASIDE[@]}"; do
-		as_root mv -- "$starter.w4os-disabled" "$starter" || true
-	done
-	LEGACY_SET_ASIDE=()
 	[[ ! -d /run/systemd/system ]] || as_root systemctl daemon-reload || true
 }
 
@@ -1375,156 +1338,6 @@ legacy_configs() { # robust|simulator
 	local folder=robust.d
 	[[ "$1" == robust ]] || folder=opensim.d
 	find "$(legacy_install)/etc/$folder" -maxdepth 1 -name "*.ini" 2>/dev/null | sort
-}
-
-# Once the kit is installed, beside an install of before it: its grid registered in place (one Robust here: with its
-# simulators), else the commands to do it; with --restart, its instances stopped (SIGTERM: a Robust with a REST console has no
-# screen) and started again under the service
-legacy_after_install() {
-	local root file cli nick
-	local -a robusts=() simulators=() import=()
-	root=$(legacy_install)
-	[[ -n "$root" ]] || return 0
-	# The command of the kit, never the one of the install of before it that /usr/bin may still hold
-	cli=${clone:+$clone/bin/opensim}
-	[[ -n "$cli" ]] || cli=/usr/share/w4os-cli/bin/opensim
-	[[ -x "$cli" ]] || cli=opensim
-	mapfile -t robusts < <(legacy_configs robust)
-	mapfile -t simulators < <(legacy_configs simulator)
-	((${#robusts[@]})) || return 0
-	((${#robusts[@]} == 1)) || die "$root has ${#robusts[@]} grids: in place, one grid at a time"
-	import=(import --robust "${robusts[0]}" --in-place)
-	for file in "${simulators[@]}"; do import+=(--simulator "$file"); done
-	# Its owner and the account of its site become the ones of the suite (SystemUser, WebUser, WebGroup), the service follows them;
-	# nothing of the install is changed
-	nick=$(legacy_nick "${robusts[0]}")
-	run_step "In place: $nick" - as_root "$cli" "${import[@]}" --apply || die "the grid of $root could not be registered in place (log: $(install_log))"
-	as_root "$cli" enable "$nick" >>"$(install_log)" 2>&1 || die "the grid of $root could not be enabled"
-	done_line "In place: $nick"
-	# Restarted when asked (--restart), or when the person says so; never by default when nobody is there
-	[[ "$LEGACY_RESTART" == yes ]] || { person_here && ask "Restart its instances under the kit now?"; } || return 0
-	# The simulators first, then the Robust: each asked to end (SIGTERM, a Robust with a REST console has no screen), a minute each at
-	# most; found by the config it runs, by the path given or the one it leads to (a link of robust.d to the file of its grid)
-	local down
-	legacy_stop "${simulators[@]}" "${robusts[@]}"
-	done_line "Old instances stopped ($((${#simulators[@]} + ${#robusts[@]})))"
-	[[ ! -d /run/systemd/system ]] || run_step "Start under the kit" - as_root systemctl restart opensim || die "opensim.service did not start"
-	# Said to run only once each instance of the grid does
-	down=$("$cli" status 2>/dev/null | awk -v nick="$nick" '($1 == nick || index($1, nick ".") == 1) && $3 == "[down]" { print $1 }')
-	[[ -z "$down" ]] || die "not started under the kit: $(paste -sd, - <<<"$down")"
-	done_line "$nick runs under the kit"
-}
-
-# Whether the website of a grid can be installed here: the site, and Caddy, the web server it is put beside a site of the host with
-website_possible() {
-	command -v w4os-site >/dev/null 2>&1 || return 1
-	if command -v caddy >/dev/null 2>&1 && [[ -f /etc/caddy/Caddyfile ]]; then
-		WEB_SERVER=caddy
-	elif command -v apache2ctl >/dev/null 2>&1 && [[ -d /etc/apache2/conf-available ]]; then
-		WEB_SERVER=apache
-	else
-		return 1
-	fi
-}
-
-# Whether the website of a grid is installed: the site connected to it, and its file in the web server
-site_done() { # nick
-	# The grid the site is connected to, as its YAML writes it (grid: 'kimbe_test', or bare)
-	grep -qxE "grid: ['\"]?$1['\"]?" "${W4OS_SITE_ROOT:-/var/lib/w4os/www}/user/config/plugins/w4os.yaml" 2>/dev/null &&
-		{ ls "${OPENSIM_CADDY_ETC:-/etc/caddy}"/sites/*.w4os.* 2>/dev/null | grep -qv -- '-api\.w4os\.' || [[ -e /etc/apache2/conf-enabled/w4os-site.conf ]]; }
-}
-
-site_install() { # nick
-	as_root "$cli" web "$1" site --install ${SITE_EDIT:+--edit-vhosts}
-}
-
-# With Apache, the yes to the one line the website needs in each site serving its host (SITE_EDIT), asked with the other questions:
-# no site serving it is said, the person goes on without the website or quits; nobody there, the line only with --edit-vhosts
-apache_consent() { # address of the website
-	local address=$1 files
-	[[ "${WEB_SERVER:-}" == apache ]] || return 0
-	files=$(as_root w4os-site web apache --host "$(sed -E 's#^([a-z]+://[^/:]+).*#\1#' <<<"$address")" --prefix "$(sed -E 's#^[a-z]+://[^/]+##; s#/$##' <<<"$address")" --vhosts 2>/dev/null | paste -sd, - | sed 's/,/, /g')
-	if [[ -z "$files" ]]; then
-		say "  No site of Apache serves $(sed -E 's#^[a-z]+://([^/:]+).*#\1#' <<<"$address")."
-		choose "[G]o on without the website  [Q]uit (G/q):" gq
-		[[ "$CHOICE" == g ]] || { say "Stopped: nothing changed."; exit 0; }
-		return 1
-	fi
-	if ! person_here; then
-		[[ -n "${EDIT_VHOSTS:-}" ]] && SITE_EDIT=yes && return 0
-		say "  Website: not installed, it needs one line in $files, which a run without anybody does not add."
-		return 1
-	fi
-	ask "Add one line to $files?" || { say "  Website: not installed."; return 1; }
-	SITE_EDIT=yes
-}
-
-# The grids of this install, one nick a line, sorted
-grids_here() { # basedir
-	{ as_root "$1/bin/opensim" api GET /grids 2>/dev/null | jq -r '.data[]?.id' 2>/dev/null | sort; } || true
-}
-
-# What there is now, in a few lines: the grid, its login, its website and the way in of its owner when it has one, the passwords
-migration_summary() { # nick site [left: the website was not installed]
-	local grid
-	grid=$(as_root "$cli" api GET "/grids/$1" 2>/dev/null | jq -c '.data.attributes' 2>/dev/null) || grid='{}'
-	say ""
-	say "Grid       $(jq -r '.name // empty' <<<"$grid") ($1)"
-	say "Login      http://$(jq -r '.uri // empty' <<<"$grid")"
-	if [[ -n "$2" && -n "${3:-}" ]]; then
-		say "Website    not installed (rerun to install it)"
-	elif [[ -n "$2" ]]; then
-		say "Website    $2"
-		say "Admin      ${2}login"
-	fi
-	! as_root test -f "$OPENSIM_RC_PATH" || say "Passwords  $OPENSIM_RC_PATH (root only)"
-}
-
-# The old instances that run these configs stopped, the simulators given first: each asked to end (SIGTERM, a Robust with a REST
-# console has no screen), a minute each at most
-legacy_stop() { # config...
-	local file pid count=0 started=$SECONDS
-	for file in "$@"; do
-		count=$((count + 1))
-		live "Stop: $(basename "$file" .ini) ($count/$#) · $(elapsed "$started")"
-		for pid in $(legacy_pids "$file"); do
-			as_root kill -TERM "$pid" 2>/dev/null || continue
-			for _ in $(seq 1 60); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
-			! kill -0 "$pid" 2>/dev/null || die "process $pid ($file) did not stop"
-		done
-	done
-	live_clear
-}
-
-# What the engine is at, the last line it said in place since the step started ("opensim: ~[3/6] Data"), for the live line
-STEP_FROM=0
-
-# The processes that run a config, one a line: the -inifile of each process as it was given (its real arguments, the quotes a shell
-# that built the command left in it taken off, relative to the folder of the process), resolved, the same file as the config resolved
-legacy_pids() { # config
-	local target proc arg value previous cwd
-	target=$(readlink -f -- "$1") || return 0
-	for proc in "${PROC_ROOT:-/proc}"/[0-9]*; do
-		[[ -r "$proc/cmdline" ]] || continue
-		value= previous=
-		while IFS= read -r -d '' arg; do
-			if [[ "$arg" == -inifile=* ]]; then
-				value=${arg#-inifile=}
-			elif [[ "$previous" == -inifile ]]; then
-				value=$arg
-			fi
-			previous=$arg
-		done <"$proc/cmdline" 2>/dev/null
-		[[ -n "$value" ]] || continue
-		value=${value#[\'\"]}
-		value=${value%[\'\"]}
-		if [[ "$value" != /* ]]; then
-			cwd=$(readlink -- "$proc/cwd" 2>/dev/null) || continue
-			value=$cwd/$value
-		fi
-		[[ "$(readlink -f -- "$value" 2>/dev/null)" != "$target" ]] || printf '%s\n' "${proc##*/}"
-	done
-	return 0
 }
 
 # The nick the kit gives a grid in place: the gridnick of its Robust config, in the small letters of a nick

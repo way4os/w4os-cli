@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- change (kickstart): in place and the website of a new grid are the setup's; --restart and --edit-vhosts are its answers
 - change (kickstart): every migration is the engine's scenario; --migrate --yes runs it without anybody, --config its answers
 - new (setup): --unattended and --config-keys for the scenario of an install of before the kit; its exit code said
 - change (kickstart): the install found said once, by the scenario; a migration's summary ends with where its passwords are

@@ -118,32 +118,6 @@ function test_confirmed_setup_is_applied_after_installation() {
 	assert_contains '<setup> <--apply> <'"$config"'>' "$(cat "$calls")"
 }
 
-function test_a_rerun_of_the_fresh_path_installs_a_website_left_and_sets_up_no_other_grid() {
-	quick_install_load_library || return
-	clone=$WORK/project
-	cat >"$WORK/project/bin/opensim" <<'STUB'
-#!/usr/bin/env bash
-case "$*" in
-"api GET /grids") echo '{"data":[{"id":"kimbe_test"}]}' ;;
-"api GET /grids/kimbe_test") echo '{"data":{"attributes":{"name":"Kimbe Test","uri":"kimbe.example:8002","site":"https://kimbe.example/opensim/"}}}' ;;
-*) echo "$*" >>"$CALL_LOG" ;;
-esac
-STUB
-	chmod +x "$WORK/project/bin/opensim"
-	site_done() { return 1; }
-	site_install() { echo "site $*" >>"$CALL_LOG"; }
-	as_root() { "$@"; }
-	RUN_SETUP=yes ASSUME_YES=yes INSTALL_LOG=$WORK/install.log
-	: >"$INSTALL_LOG"
-	uname() { printf 'Darwin\n'; }
-	export CALL_LOG=$WORK/calls
-	local said
-	said=$( (end_installation) )
-	assert_same "site kimbe_test" "$(cat "$WORK/calls")"
-	assert_contains "kimbe_test is here, its website not installed yet." "$said"
-	assert_contains "Website    https://kimbe.example/opensim/" "$said"
-}
-
 function test_a_migration_without_anybody_runs_the_scenario_with_its_answers_and_ends_with_why_the_website_is_not_there() {
 	quick_install_load_library || return
 	clone=$WORK/project
@@ -163,7 +137,7 @@ STUB
 	said=$( (end_installation) 2>&1) || status=$?
 
 	assert_same 0 "$status"
-	assert_same "setup --legacy --unattended --config $WORK/answers.json" "$(cat "$WORK/calls")"
+	assert_contains "setup --legacy --unattended --config " "$(cat "$WORK/calls")"
 	assert_contains "Passwords  $WORK/opensimrc (root only)" "$said"
 	# Why the website is not there ends what is said and the log, where a script finds it
 	assert_same "Website    not installed (no answer for vhosts)" "$(tail -n 1 <<<"$said")"
@@ -641,28 +615,6 @@ function test_beside_an_install_of_before_the_kit_nothing_happens_without_a_choi
 	assert_file_exists "$LEGACY_CRON"
 }
 
-function test_in_place_sets_its_own_start_aside_and_registers_its_grid() {
-	quick_install_load_library || return
-	legacy_fixture
-	LEGACY_MODE=in-place
-	as_root() { "$@"; }
-	local calls=$WORK/opensim-calls
-	clone=$WORK/kit
-	mkdir -p "$clone/bin"
-	printf '#!/bin/sh\necho "$*" >>%s\n' "$calls" >"$clone/bin/opensim"
-	chmod +x "$clone/bin/opensim"
-
-	local said
-	said=$(legacy_gate && legacy_after_install)
-
-	assert_file_not_exists "$LEGACY_CRON"
-	assert_file_exists "$LEGACY_CRON.w4os-disabled"
-	assert_file_exists "$WORK/systemd/opensim.service.w4os-disabled"
-	assert_contains "✓ Old install: its start at boot set aside" "$said"
-	assert_same "$(printf 'import --robust %s --in-place --simulator %s --apply\nenable w4osdemogrid' "$LEGACY_ROOT/etc/robust.d/W4osDemoGrid.ini" "$LEGACY_ROOT/etc/opensim.d/w4osdemogrid_welcome.ini")" "$(cat "$calls")"
-	assert_contains "✓ In place: w4osdemogrid" "$said"
-}
-
 function test_no_install_of_before_the_kit_changes_nothing() {
 	quick_install_load_library || return
 	LEGACY_ROOT=$WORK/none LEGACY_CRON=$WORK/none/cron LEGACY_MODE=
@@ -725,46 +677,6 @@ function test_an_existing_sql_account_is_used_only_with_its_own_password() {
 	assert_successful_code "$(OPENSIM_DB_PASS=grid-secret phase_database >/dev/null 2>&1; echo $?)"
 }
 
-function test_in_place_restart_stops_the_old_robust_by_the_file_it_runs_and_says_what_does_not_run() {
-	quick_install_load_library || return
-	# The processes are read in /proc: Linux
-	[[ -d /proc/self ]] || return 0
-	legacy_fixture
-	LEGACY_MODE=in-place LEGACY_RESTART=yes
-	as_root() { "$@"; }
-	systemctl() { echo "systemctl $*" >>"$WORK/opensim-calls"; }
-	# robust.d names the file of its grid by a link; the old Robust runs that file, with a REST console (no screen)
-	mkdir -p "$LEGACY_ROOT/etc/grids/W4osDemoGrid"
-	mv "$LEGACY_ROOT/etc/robust.d/W4osDemoGrid.ini" "$LEGACY_ROOT/etc/grids/W4osDemoGrid/Robust.HG.ini"
-	ln -s "$LEGACY_ROOT/etc/grids/W4osDemoGrid/Robust.HG.ini" "$LEGACY_ROOT/etc/robust.d/W4osDemoGrid.ini"
-	# As opensim-debian runs it (a command built then run through eval): the link of robust.d, in quotes that stay in the argument
-	perl -e 'sleep 300' -- "-inifile='$LEGACY_ROOT/etc/robust.d/W4osDemoGrid.ini'" -console rest >/dev/null 2>&1 &
-	local old=$!
-	# A simulator given its config relative to its folder
-	(cd "$LEGACY_ROOT/etc/opensim.d" && exec perl -e 'sleep 300' -- -inifile w4osdemogrid_welcome.ini >/dev/null 2>&1) &
-	local sim=$!
-	clone=$WORK/kit
-	mkdir -p "$clone/bin"
-	# What the suite says of its instances once restarted: its Robust down
-	cat >"$clone/bin/opensim" <<-STATUS
-	#!/bin/sh
-	echo "\$*" >>$WORK/opensim-calls
-	[ "\$1" = status ] && printf 'INSTANCE TYPE PID\nw4osdemogrid robust [down]\nw4osdemogrid.welcome opensim 42\n'
-	exit 0
-	STATUS
-	chmod +x "$clone/bin/opensim"
-	local said status=0
-	said=$(legacy_gate && legacy_after_install 2>&1) || status=$?
-	local alive=no
-	if kill -0 "$old" 2>/dev/null || kill -0 "$sim" 2>/dev/null; then alive=yes; fi
-	kill "$old" "$sim" 2>/dev/null || true
-
-	assert_same no "$alive"
-	assert_same 1 "$status"
-	assert_contains "not started under the kit: w4osdemogrid" "$said"
-	assert_not_contains "runs under the kit" "$said"
-}
-
 function test_a_question_is_always_shown_takes_its_default_on_enter_and_asks_again_a_wrong_letter() {
 	quick_install_load_library || return
 	local answers=$WORK/answers screen=$WORK/screen first=0 second=0
@@ -798,35 +710,6 @@ function test_beside_an_install_of_before_the_kit_the_kit_is_installed_then_the_
 	assert_not_contains "Found an existing install" "$(cat "$screen" "$WORK/said")"
 	assert_file_exists "$LEGACY_CRON"
 	assert_file_exists "$WORK/systemd/opensim.service.w4os-disabled"
-}
-
-function test_with_apache_the_line_in_its_sites_is_asked_before_start_and_never_added_by_nobody() {
-	quick_install_load_library || return
-	WEB_SERVER=apache
-	as_root() { "$@"; }
-	local screen=$WORK/screen answers=$WORK/answers said
-	w4os-site() { [[ "$*" == *--vhosts* ]] && echo /etc/apache2/sites-available/kimbe.example-le-ssl.conf; }
-	# Asked: yes
-	printf '\n' >"$answers"
-	TTY_IN=$answers TTY_OUT=$screen TTY_OPEN= ASSUME_YES= SITE_EDIT=
-	apache_consent https://kimbe.example/opensim/
-	assert_same yes "$SITE_EDIT"
-	assert_contains "? Add one line to /etc/apache2/sites-available/kimbe.example-le-ssl.conf? [Y/n]" "$(cat "$screen")"
-	# Nobody there: never, but with --edit-vhosts
-	SITE_EDIT= ASSUME_YES=yes EDIT_VHOSTS=
-	said=$(apache_consent https://kimbe.example/opensim/) && status=0 || status=$?
-	assert_same 1 "$status"
-	assert_contains "which a run without anybody does not add" "$said"
-	EDIT_VHOSTS=yes
-	apache_consent https://kimbe.example/opensim/
-	assert_same yes "$SITE_EDIT"
-	# No site serving the host: go on without it, or quit
-	w4os-site() { :; }
-	printf 'g\n' >"$answers"
-	TTY_IN=$answers TTY_OUT=$screen TTY_OPEN= ASSUME_YES=
-	said=$(apache_consent https://nowhere.example/opensim/) && status=0 || status=$?
-	assert_same 1 "$status"
-	assert_contains "No site of Apache serves nowhere.example." "$said"
 }
 
 function test_a_rerun_upgrades_the_packages_of_the_suite_alone() {
@@ -879,18 +762,6 @@ function test_the_packages_being_installed_are_counted_from_what_dpkg_says() {
 	assert_same "1/3 b" "$(packages_counter)"
 }
 
-function test_a_website_is_done_whether_its_site_quotes_the_name_of_its_grid_or_not() {
-	quick_install_load_library || return
-	local root=$WORK/site seen=
-	mkdir -p "$root/user/config/plugins" "$WORK/caddy/sites"
-	: >"$WORK/caddy/sites/kimbe.example.w4os.caddyfile"
-	for line in "grid: 'kimbe_test'" "grid: kimbe_test" "grid: 'other'"; do
-		printf '%s\n' "$line" >"$root/user/config/plugins/w4os.yaml"
-		W4OS_SITE_ROOT=$root OPENSIM_CADDY_ETC=$WORK/caddy site_done kimbe_test && seen+="yes " || seen+="no "
-	done
-	assert_same "yes yes no " "$seen"
-}
-
 function test_a_migration_sets_aside_before_its_start_only_a_unit_that_would_hide_the_kits() {
 	quick_install_load_library || return
 	legacy_fixture
@@ -900,12 +771,34 @@ function test_a_migration_sets_aside_before_its_start_only_a_unit_that_would_hid
 	legacy_gate >/dev/null
 	# The scenario's, without its screens: --yes, or nobody there
 	assert_same "scenario " "$LEGACY_MODE ${LEGACY_INTERACTIVE:-}"
-	local cron_kept=no unit_aside=no
-	[[ -f "$LEGACY_CRON" ]] && cron_kept=yes
-	[[ -f "$WORK/systemd/opensim.service.w4os-disabled" ]] && unit_aside=yes
-	legacy_restore
+	# Its watchdog kept until the run stops it; only a unit named opensim, which would hide the kit's, set aside
+	assert_file_exists "$LEGACY_CRON"
+	assert_file_exists "$WORK/systemd/opensim.service.w4os-disabled"
+}
 
-	# Its watchdog kept until the run stops it; only a unit named opensim, which would hide the kit's, set aside, and put back
-	assert_same "yes yes" "$cron_kept $unit_aside"
-	assert_file_exists "$WORK/systemd/opensim.service"
+function test_in_place_is_the_scenario_too_its_choice_and_restart_its_answers() {
+	quick_install_load_library || return
+	legacy_fixture
+	clone=$WORK/project
+	cat >"$WORK/project/bin/opensim" <<'STUB'
+#!/usr/bin/env bash
+echo "$*" >>"$CALL_LOG"
+cat "${@: -1}" >"$ANSWERS_SEEN"
+printf '✓ Done\n\nIn place   /opt/opensim, run by the kit\n' >"$OPENSIM_SETUP_END"
+STUB
+	chmod +x "$WORK/project/bin/opensim"
+	as_root() { "$@"; }
+	export CALL_LOG=$WORK/calls ANSWERS_SEEN=$WORK/answers-seen
+	LEGACY_MODE=in-place LEGACY_RESTART=yes ASSUME_YES=yes INSTALL_LOG=$WORK/install.log
+	: >"$INSTALL_LOG"
+
+	legacy_gate >/dev/null
+	local said status=0
+	said=$( (end_installation) 2>&1) || status=$?
+
+	assert_same 0 "$status"
+	assert_same "scenario in-place" "$LEGACY_MODE $LEGACY_CHOICE"
+	assert_contains "setup --legacy --unattended --config " "$(cat "$WORK/calls")"
+	assert_same '{"answers":{"existing":"in-place","restart":"yes"}}' "$(jq -c . "$ANSWERS_SEEN")"
+	assert_contains "In place   /opt/opensim, run by the kit" "$said"
 }

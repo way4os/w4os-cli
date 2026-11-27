@@ -173,6 +173,10 @@ show_progress() {
 }
 # The live line of a step of root, on the error output as it is when the step runs (what the step says is kept, said on a failure)
 exec 3>&2
+# A command of a step of root: as it is when this runs as root (a migration), else through sudo (a new grid's website)
+as_root() {
+	if [[ $(id -u) -eq 0 ]]; then "$@"; else sudo "$@"; fi
+}
 # A line of a step of root: rewritten in place on a terminal, else a line each (a log, a script)
 step_line() { # text
 	if [[ -t 3 ]]; then
@@ -234,7 +238,7 @@ root_step() { # name, args (JSON), label
 		# The yes to its line in the sites of Apache is the scenario's (asked before Start): a step never asks
 		local edit=
 		[[ "$(jq -r '.edit_vhosts // false' <<<"$args")" != true ]] || edit=--edit-vhosts
-		"$CLI_ROOT/bin/opensim" web "$grid" site --install $edit </dev/null || return 1
+		as_root "$CLI_ROOT/bin/opensim" web "$grid" site --install $edit </dev/null || return 1
 		;;
 	*)
 		echo "unknown step $name: refused"
@@ -261,32 +265,6 @@ legacy_pids() { # config, resolved
 	done
 	return 0
 }
-
-# Before the start of a setup that makes a website beside Apache: the one line it needs in each site serving its host, asked with
-# the other questions; the answer kept beside the summary for kickstart ($OPENSIM_SETUP_END.vhosts: yes, no, or nothing for Caddy)
-setup_before_start() { # rows of the review
-	local site files host
-	site=$(awk -F$'\x1f' '$4 == "website" { print $5 }' <<<"$1" | head -n 1)
-	[[ -n "$site" && -n "${OPENSIM_SETUP_END:-}" ]] || return 0
-	# The web server the sites are served by (OPENSIM_WEB_SERVER for the tests): Caddy first, as the step of the website takes it
-	local server=${OPENSIM_WEB_SERVER:-}
-	if [[ -z "$server" ]]; then
-		if command -v caddy >/dev/null 2>&1 && [[ -f /etc/caddy/Caddyfile ]]; then server=caddy; elif command -v apache2ctl >/dev/null 2>&1; then server=apache; fi
-	fi
-	[[ "$server" == apache ]] && command -v w4os-site >/dev/null 2>&1 || return 0
-	host=$(sed -E 's#^([a-z]+://[^/:]+).*#\1#' <<<"$site")
-	files=$(w4os-site web apache --host "$host" --prefix "$(sed -E 's#^[a-z]+://[^/]+##; s#/$##' <<<"$site")" --vhosts 2>/dev/null | paste -sd, - | sed 's/,/, /g')
-	if [[ -z "$files" ]]; then
-		printf '  No site of Apache serves %s.\n' "${host#*://}" >&2
-		fe_read "? [G]o on without the website  [Q]uit (G/q): " g || return 1
-		[[ "${FE_ANSWER,,}" != q* ]] || return 1
-		echo no >"$OPENSIM_SETUP_END.vhosts"
-		return 0
-	fi
-	fe_read "? Add one line to $files? [Y/n] " y || return 1
-	if [[ -z "$FE_ANSWER" || "$FE_ANSWER" == [yY]* ]]; then echo yes >"$OPENSIM_SETUP_END.vhosts"; else echo no >"$OPENSIM_SETUP_END.vhosts"; fi
-}
-FE_BEFORE_START=setup_before_start
 
 # The engine gave no screen: what it said (a problem: its status and title), and the errors it wrote that are not progress. Nothing else is done.
 fail_engine() {
@@ -316,7 +294,8 @@ fi
 while :; do
 	request=$(jq -c --rawfile state <(printf '%s' "$state") --arg button "$button" --arg mode "$setup_mode" --slurpfile prefill <(printf '%s' "$setup_prefill") --argjson occupied_ports "${setup_occupied_ports:-null}" \
 		'{data: {type: "steps", attributes: ({state: $state, button: $button, answers: (. + ($prefill[0] | {existing_region,hostname,oar,dump,show_passwords} | with_entries(select(.value != null)))), mode: $mode} + (if $occupied_ports == null then {} else {occupied_ports: $occupied_ports} end))}}' <<<"$answers")
-	[[ -z "$apply_request" ]] || request=$apply_request
+	# The prepared configuration sent once: the requests after it are the ones of its run (its website)
+	[[ -z "$apply_request" ]] || { request=$apply_request; apply_request=; }
 	# The first request asks for the scenario of an install of before the kit, when there is one
 	[[ -z "${setup_legacy:-}" || -n "$state" ]] || request=$(jq -c '.data.attributes.existing = true' <<<"$request")
 	# Nobody there: every answer at once, the ones of --config (the scenario checks them and takes a default for the others)
