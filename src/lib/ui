@@ -151,7 +151,8 @@ ui_menu() {
 	fe_choose_ui
 	if [[ $FE_UI == dialog ]]; then
 		# The size is given: a menu height of 0 shows one line on some builds, and the tags repeat the labels
-		height=$((${#keys[@]} + 7 + $(fe_lines "$text")))
+		# Its text takes a line even when it has none (dialog refuses an empty one)
+		height=$((${#keys[@]} + 6 + $(fe_lines "${text:- }")))
 		fe_dialog "$title" ${default:+--default-item "$default"} --no-tags --menu "${text:- }" "$height" 60 "${#keys[@]}" "${items[@]}" || return $?
 	else
 		# As a form: its title, its text, its entries, then a short prompt
