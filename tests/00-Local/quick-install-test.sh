@@ -144,21 +144,47 @@ STUB
 	assert_contains "Website    https://kimbe.example/opensim/" "$said"
 }
 
-function test_a_migration_done_by_the_scenario_ends_with_where_its_passwords_are() {
+function test_a_migration_without_anybody_runs_the_scenario_with_its_answers_and_ends_with_why_the_website_is_not_there() {
 	quick_install_load_library || return
 	clone=$WORK/project
 	cat >"$WORK/project/bin/opensim" <<'STUB'
 #!/usr/bin/env bash
-[[ "$*" == "setup --legacy" ]] && printf '✓ Done\n\nGrid       Kimbe Test (kimbe_test)\n'
+echo "$*" >>"$CALL_LOG"
+echo "[1/8] Stop"
+printf '✓ Done\n\nGrid       Kimbe Test (kimbe_test)\nOld install  /opt/opensim, stopped, kept\nWebsite    not installed (no answer for vhosts)\n' >"$OPENSIM_SETUP_END"
 STUB
 	chmod +x "$WORK/project/bin/opensim"
 	as_root() { "$@"; }
-	LEGACY_MODE=scenario OPENSIM_RC_PATH=$WORK/opensimrc
+	export CALL_LOG=$WORK/calls
+	LEGACY_MODE=scenario LEGACY_INTERACTIVE= OPENSIM_RC_PATH=$WORK/opensimrc INSTALL_LOG=$WORK/install.log OPENSIM_SETUP_CONFIG_FILE=$WORK/answers.json
 	: >"$OPENSIM_RC_PATH"
-	local said
-	said=$( (end_installation) 2>&1)
-	assert_contains "Grid       Kimbe Test (kimbe_test)" "$said"
+	: >"$INSTALL_LOG"
+	local said status=0
+	said=$( (end_installation) 2>&1) || status=$?
+
+	assert_same 0 "$status"
+	assert_same "setup --legacy --unattended --config $WORK/answers.json" "$(cat "$WORK/calls")"
 	assert_contains "Passwords  $WORK/opensimrc (root only)" "$said"
+	# Why the website is not there ends what is said and the log, where a script finds it
+	assert_same "Website    not installed (no answer for vhosts)" "$(tail -n 1 <<<"$said")"
+	assert_same "Website    not installed (no answer for vhosts)" "$(tail -n 1 "$INSTALL_LOG")"
+	assert_contains "[1/8] Stop" "$(cat "$INSTALL_LOG")"
+}
+
+function test_a_migration_without_anybody_that_fails_exits_with_the_code_of_the_scenario() {
+	quick_install_load_library || return
+	clone=$WORK/project
+	printf '#!/usr/bin/env bash\necho "opensim: [ERROR] [5/8] Ownership: chown failed. Stopped." >&2\nexit 1\n' >"$WORK/project/bin/opensim"
+	chmod +x "$WORK/project/bin/opensim"
+	as_root() { "$@"; }
+	LEGACY_MODE=scenario LEGACY_INTERACTIVE= INSTALL_LOG=$WORK/install.log
+	: >"$INSTALL_LOG"
+	local said status=0
+	said=$( (end_installation) 2>&1) || status=$?
+
+	assert_same 1 "$status"
+	assert_contains "[5/8] Ownership: chown failed" "$said"
+	assert_not_contains "Passwords" "$said"
 }
 
 function test_unconfirmed_answers_keep_interactive_setup() {
@@ -611,7 +637,7 @@ function test_beside_an_install_of_before_the_kit_nothing_happens_without_a_choi
 
 	assert_same 1 "$status"
 	assert_contains "Found an existing install in $LEGACY_ROOT: grid w4osdemogrid, 1 simulator." "$said"
-	assert_contains "--migrate, --in-place or --new" "$said"
+	assert_contains "nobody to choose: give --migrate (--yes, its answers with --config), --in-place or --new" "$said"
 	assert_file_exists "$LEGACY_CRON"
 }
 
@@ -774,103 +800,6 @@ function test_beside_an_install_of_before_the_kit_the_kit_is_installed_then_the_
 	assert_file_exists "$WORK/systemd/opensim.service.w4os-disabled"
 }
 
-# A command line of the kit that says the plan of a migration and keeps what it is asked to do
-function migration_stub() {
-	clone=$WORK/kit
-	mkdir -p "$clone/bin"
-	cat >"$clone/bin/opensim" <<STUB
-#!/usr/bin/env bash
-case "\$1 \$2" in
-"api GET") [[ -f "$WORK/here" ]] && cat "$WORK/grid.json" || exit 1 ;;
-"api POST") cat >/dev/null; echo '{"data":{"attributes":{"name":"Kimbe Red","grid":"w4osdemogrid","ports":{"public":8002,"private":8003},"gridInfo":["[GridInfoService] gridname '"'Kimbé Red'"' -> '"'Kimbe Red'"': OpenSim cannot"],"site":"https://kimbe.example/opensim/","data":[],"problems":{}}}}' ;;
-"status w4osdemogrid") [[ -f "$WORK/up" ]] && echo "w4osdemogrid  robust  [up]" ;;
-*) echo "\$*" >>"$WORK/opensim-calls"; [[ "\$1" != import ]] || : >"$WORK/here" ;;
-esac
-STUB
-	chmod +x "$clone/bin/opensim"
-	# The plan of the migration, asked of the engine as root (its API), the account the migration runs as
-	mkdir -p "$clone/vendor/w4os/w4os-engine/bin"
-	printf '#!/usr/bin/env bash\nexec "%s/bin/opensim" api "$@"\n' "$clone" >"$clone/vendor/w4os/w4os-engine/bin/w4os-api"
-	chmod +x "$clone/vendor/w4os/w4os-engine/bin/w4os-api"
-	echo '{"data":{"attributes":{"name":"Kimbe Red","uri":"kimbe.example:8002"}}}' >"$WORK/grid.json"
-	as_root() { "$@"; }
-	maptiles_package() { :; }
-	website_possible() { return 1; }
-	PROC_ROOT=$WORK/proc INSTALL_LOG=$WORK/install.log
-	mkdir -p "$PROC_ROOT"
-	: >"$INSTALL_LOG"
-}
-
-function test_a_migration_asks_everything_first_then_runs_the_import_with_the_name_chosen() {
-	quick_install_load_library || return
-	legacy_fixture
-	migration_stub
-	LEGACY_MODE=migrate
-	local said answers=$WORK/answers screen=$WORK/screen
-	# The ASCII name refused, another given, then the start
-	printf 'n\nKimbe Rouge\n\n' >"$answers"
-	TTY_IN=$answers TTY_OUT=$screen TTY_OPEN= ASSUME_YES=
-
-	said=$(legacy_after_install)
-
-	# Written first, started last, once every step before it is done
-	assert_same "import --robust $LEGACY_ROOT/etc/robust.d/W4osDemoGrid.ini --apply --grid-name Kimbe Rouge --simulator $LEGACY_ROOT/etc/opensim.d/w4osdemogrid_welcome.ini
-import --robust $LEGACY_ROOT/etc/robust.d/W4osDemoGrid.ini --switch" "$(cat "$WORK/opensim-calls")"
-	assert_contains '? Grid name "Kimbé Red" becomes "Kimbe Red" (viewers need ASCII). OK? [Y/n] ? Grid name: ? Start? [Y/n]' "$(cat "$screen")"
-	assert_contains "✓ Old config readable (2 files)" "$said"
-	assert_contains "✓ Done" "$said"
-	assert_contains "Grid       Kimbe Red (w4osdemogrid)" "$said"
-	assert_contains "Login      http://kimbe.example:8002" "$said"
-	assert_contains "Old install  $LEGACY_ROOT, stopped, kept" "$said"
-	assert_not_contains "opensim import" "$said"
-}
-
-function test_a_migration_asks_the_website_address_then_keeps_it_with_the_grid_and_installs_it() {
-	quick_install_load_library || return
-	legacy_fixture
-	migration_stub
-	website_possible() { return 0; }
-	site_install() { echo "site $*" >>"$WORK/opensim-calls"; }
-	LEGACY_MODE=migrate
-	local said answers=$WORK/answers screen=$WORK/screen
-	# The ASCII name kept, the address proposed kept, then the start
-	printf '\n\n\n' >"$answers"
-	TTY_IN=$answers TTY_OUT=$screen TTY_OPEN= ASSUME_YES=
-
-	said=$(legacy_after_install)
-
-	assert_contains "--apply --site https://kimbe.example/opensim/" "$(cat "$WORK/opensim-calls")"
-	# The website before the start, the last step
-	assert_contains $'site w4osdemogrid\nimport --robust '"$LEGACY_ROOT"'/etc/robust.d/W4osDemoGrid.ini --switch' "$(cat "$WORK/opensim-calls")"
-	# The address proposed in place (a terminal), kept with Enter here; no brackets
-	assert_contains "? Website address: ? Start? [Y/n]" "$(cat "$screen")"
-	assert_contains "Website    https://kimbe.example/opensim/" "$said"
-	assert_contains "Admin      https://kimbe.example/opensim/login" "$said"
-}
-
-function test_a_rerun_installs_the_website_a_failure_left_then_says_nothing_to_do() {
-	quick_install_load_library || return
-	legacy_fixture
-	migration_stub
-	site_install() { echo "site $*" >>"$WORK/opensim-calls"; }
-	site_done() { [[ -f "$WORK/site-done" ]]; }
-	website_possible() { return 0; }
-	LEGACY_MODE=migrate ASSUME_YES=yes
-	: >"$WORK/here"
-	: >"$WORK/up"
-	echo '{"data":{"attributes":{"name":"Kimbe Red","uri":"kimbe.example:8002","site":"https://kimbe.example/opensim/"}}}' >"$WORK/grid.json"
-	local said
-	said=$(legacy_after_install)
-	assert_contains "w4osdemogrid is here, its website not installed yet." "$said"
-	assert_same "site w4osdemogrid" "$(cat "$WORK/opensim-calls")"
-	assert_contains "Website    https://kimbe.example/opensim/" "$said"
-
-	: >"$WORK/site-done"
-	said=$(legacy_after_install)
-	assert_contains "w4osdemogrid is already here. Nothing to do." "$said"
-	assert_same "site w4osdemogrid" "$(cat "$WORK/opensim-calls")"
-}
-
 function test_with_apache_the_line_in_its_sites_is_asked_before_start_and_never_added_by_nobody() {
 	quick_install_load_library || return
 	WEB_SERVER=apache
@@ -922,40 +851,6 @@ STUB
 	assert_not_contains "w4os-site" "$(cat "$WORK/apt-calls")"
 }
 
-function test_a_migration_refused_at_start_changes_nothing() {
-	quick_install_load_library || return
-	legacy_fixture
-	migration_stub
-	LEGACY_MODE=migrate
-	local said answers=$WORK/answers
-	printf '\nn\n' >"$answers"
-	TTY_IN=$answers TTY_OUT=$WORK/screen TTY_OPEN= ASSUME_YES=
-
-	said=$(legacy_after_install)
-
-	assert_file_not_exists "$WORK/opensim-calls"
-	assert_contains "Stopped: nothing changed." "$said"
-}
-
-function test_a_rerun_says_a_grid_migrated_already_and_starts_one_written_only() {
-	quick_install_load_library || return
-	legacy_fixture
-	migration_stub
-	LEGACY_MODE=migrate ASSUME_YES=yes
-	: >"$WORK/here"
-	: >"$WORK/up"
-	local said
-	said=$(legacy_after_install)
-	assert_contains "w4osdemogrid is already here. Nothing to do." "$said"
-	assert_contains "Grid       Kimbe Red (w4osdemogrid)" "$said"
-	assert_file_not_exists "$WORK/opensim-calls"
-
-	rm "$WORK/up"
-	said=$(legacy_after_install)
-	assert_contains "w4osdemogrid is written here, not started yet." "$said"
-	assert_same "import --robust $LEGACY_ROOT/etc/robust.d/W4osDemoGrid.ini --switch" "$(cat "$WORK/opensim-calls")"
-}
-
 function test_a_long_step_that_fails_says_its_log_then_retries_when_asked() {
 	quick_install_load_library || return
 	local said status=0 answers=$WORK/answers screen=$WORK/screen
@@ -996,25 +891,15 @@ function test_a_website_is_done_whether_its_site_quotes_the_name_of_its_grid_or_
 	assert_same "yes yes no " "$seen"
 }
 
-function test_a_retry_of_a_migration_whose_grid_is_written_imports_nothing_again() {
-	quick_install_load_library || return
-	legacy_fixture
-	migration_stub
-	cli=$clone/bin/opensim
-	migration_run w4osdemogrid /old/Robust.HG.ini import --robust /old/Robust.HG.ini --apply
-	: >"$WORK/here"
-	migration_run w4osdemogrid /old/Robust.HG.ini import --robust /old/Robust.HG.ini --apply
-
-	assert_same "import --robust /old/Robust.HG.ini --apply" "$(cat "$WORK/opensim-calls")"
-}
-
 function test_a_migration_sets_aside_before_its_start_only_a_unit_that_would_hide_the_kits() {
 	quick_install_load_library || return
 	legacy_fixture
 	as_root() { "$@"; }
-	LEGACY_MODE=migrate
+	LEGACY_MODE=migrate ASSUME_YES=yes
 
 	legacy_gate >/dev/null
+	# The scenario's, without its screens: --yes, or nobody there
+	assert_same "scenario " "$LEGACY_MODE ${LEGACY_INTERACTIVE:-}"
 	local cron_kept=no unit_aside=no
 	[[ -f "$LEGACY_CRON" ]] && cron_kept=yes
 	[[ -f "$WORK/systemd/opensim.service.w4os-disabled" ]] && unit_aside=yes
@@ -1023,25 +908,4 @@ function test_a_migration_sets_aside_before_its_start_only_a_unit_that_would_hid
 	# Its watchdog kept until the run stops it; only a unit named opensim, which would hide the kit's, set aside, and put back
 	assert_same "yes yes" "$cron_kept $unit_aside"
 	assert_file_exists "$WORK/systemd/opensim.service"
-}
-
-function test_a_website_that_fails_is_skipped_and_the_migration_ends_on_its_summary() {
-	quick_install_load_library || return
-	legacy_fixture
-	migration_stub
-	website_possible() { return 0; }
-	site_install() { return 1; }
-	LEGACY_MODE=migrate
-	local said answers=$WORK/answers screen=$WORK/screen
-	# The name, the address and the start kept, the website skipped
-	printf '\n\n\ns\n' >"$answers"
-	TTY_IN=$answers TTY_OUT=$screen TTY_OPEN= ASSUME_YES=
-
-	said=$(legacy_after_install)
-
-	assert_contains "[R]etry  [S]kip  [A]bort (R/s/a):" "$(cat "$screen")"
-	assert_contains "import --robust $LEGACY_ROOT/etc/robust.d/W4osDemoGrid.ini --switch" "$(cat "$WORK/opensim-calls")"
-	assert_contains "✓ Done" "$said"
-	assert_contains "Website    not installed (rerun to install it)" "$said"
-	assert_contains "Old install  $LEGACY_ROOT, stopped, kept" "$said"
 }

@@ -2,12 +2,16 @@
 # opensim setup: the engine gives the screens (it is the scenario), this draws the one it gets, sends it back filled with the button that
 # was pressed, and does the action it answers: another screen, the same one with what is wrong, quit with a message, abort with an error.
 
-USAGE="opensim setup [-hqv] [--config FILE] [--prepare FILE] [--apply FILE] [--region-config FILE] [--existing] [--oar FILE | --dump FILE] [--show-passwords] [--legacy]"
+USAGE="opensim setup [-hqv] [--config FILE] [--prepare FILE] [--apply FILE] [--region-config FILE] [--existing] [--oar FILE | --dump FILE] [--show-passwords] [--legacy [--unattended | --config-keys]]"
 HELP="Shows the setup questions and applies the confirmed settings.
   --config FILE   prefill answers from a JSON configuration
   --prepare FILE  save answers privately without creating the installation
   --apply FILE    apply a prepared configuration without further questions
   --region-config FILE  adopt an existing Region.ini in a simulator setup
+  --legacy        beside an install of before the kit (/opt/opensim), its scenario: migrate it, run it in place, or a new grid
+  --unattended    with --legacy, nobody there: the answers of --config, a default for each one missing, no screen; exit 0 done,
+                  1 a step failed, 2 an answer refused (nothing done)
+  --config-keys   with --legacy, the answers --config takes for it: name, values, default, what it is
   --show-passwords  show the passwords of the database accounts in the review (masked by default; Show passwords there too)
   --existing      take over the region the grid has of the name given (restored, or moved from another server): its UUID,
                   place, size and owner kept; refused while the simulator that runs it elsewhere answers
@@ -44,6 +48,8 @@ while (($#)); do
 		--show-passwords) region_content=$(jq -c '. + {show_passwords: true}' <<<"$region_content"); shift ;;
 		# An install of before the kit on this machine: its scenario first (run as root: its steps of root are this command's)
 		--legacy) setup_legacy=yes; shift ;;
+		--unattended) setup_unattended=yes; shift ;;
+		--config-keys) setup_keys=yes; shift ;;
 		--oar | --dump)
 			(($# > 1)) && [[ "$2" != -* ]] || die "opensim setup $1 requires a file"
 			[[ -r "$2" ]] || die "cannot read $2"
@@ -167,13 +173,21 @@ show_progress() {
 }
 # The live line of a step of root, on the error output as it is when the step runs (what the step says is kept, said on a failure)
 exec 3>&2
+# A line of a step of root: rewritten in place on a terminal, else a line each (a log, a script)
+step_line() { # text
+	if [[ -t 3 ]]; then
+		printf '\r\033[K» %s' "$1" >&3
+		pending=1
+	else
+		printf '%s\n' "$1" >&3
+	fi
+}
 # A step of root of the scenario of the engine, by its NAME, from this closed list only, with the arguments it checks: never a command,
 # a path or a package it is handed otherwise; any other name is refused. The live line says it with its label ([1/8] Stop).
 LEGACY_STARTERS=${OPENSIM_LEGACY_STARTERS:-/etc/cron.hourly/opensim /etc/systemd/system/opensim.service /etc/init.d/opensim}
 root_step() { # name, args (JSON), label
 	local name=$1 args=$2 label=$3 file pid config grid package option target
-	printf '\r\033[K» %s' "$label" >&3
-	pending=1
+	step_line "$label"
 	case $name in
 	set-aside-starters)
 		while IFS= read -r file; do
@@ -189,7 +203,7 @@ root_step() { # name, args (JSON), label
 			[[ "$config" == "${W4OS_LEGACY_ROOT:-/opt/opensim}"/etc/*.ini && -f "$config" ]] || { echo "stop-old-instances: not a config of the install of before the kit: $config"; return 1; }
 			target=$(readlink -f -- "$config")
 			for pid in $(legacy_pids "$target"); do
-				printf '\r\033[K» %s: %s' "$label" "$(basename "$config" .ini)" >&3
+				step_line "$label: $(basename "$config" .ini)"
 				kill -TERM "$pid" 2>/dev/null || continue
 				for _ in $(seq 1 60); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
 				! kill -0 "$pid" 2>/dev/null || { echo "process $pid ($config) did not stop"; return 1; }
@@ -202,7 +216,7 @@ root_step() { # name, args (JSON), label
 	install-packages)
 		while IFS= read -r package; do
 			[[ "$package" =~ ^(opensim-[0-9.]+-maptiles|w4os-site)$ ]] || { echo "install-packages: not a package of the scenario: $package"; return 1; }
-			printf '\r\033[K» %s: %s' "$label" "$package" >&3
+			step_line "$label: $package"
 			DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$package" >/dev/null || return 1
 		done < <(jq -r '(.packages // [])[]' <<<"$args")
 		option=$(jq -r '.option // empty' <<<"$args")
@@ -215,7 +229,7 @@ root_step() { # name, args (JSON), label
 	install-website)
 		grid=$(jq -r '.grid // empty' <<<"$args")
 		[[ "$grid" =~ ^[a-z0-9_-]+$ ]] || { echo "install-website: not a grid: $grid"; return 1; }
-		printf '\r\033[K» %s: %s' "$label" "$grid" >&3
+		step_line "$label: $grid"
 		# The yes to its line in the sites of Apache is the scenario's (asked before Start): a step never asks
 		local edit=
 		[[ "$(jq -r '.edit_vhosts // false' <<<"$args")" != true ]] || edit=--edit-vhosts
@@ -289,12 +303,23 @@ if [[ "$adoption_required" == true ]]; then
 	jq -e '.data.attributes.capabilities | arrays | index("existing_region") != null' <<<"$reply" >/dev/null || die "The engine does not support existing-region setup; update w4os-engine"
 fi
 
+# The answers the scenario takes without anybody, as it describes them
+if [[ -n "${setup_keys:-}" ]]; then
+	[[ -n "${setup_legacy:-}" ]] || die "--config-keys goes with --legacy"
+	reply=$(engine POST /setups/steps --data=- <<<'{"data":{"type":"steps","attributes":{"existing":true,"keys":true}}}' 2>"$errors") || fail_engine "$reply"
+	jq -er '.data.attributes.keys[] | [.name, (.values | if type == "array" then join("|") else . end), (if .default == "" then "-" else .default end), .label] | @tsv' <<<"$reply" | column -t -s $'\t' || fail_engine "$reply"
+	exit 0
+fi
+[[ -z "${setup_unattended:-}" || -n "${setup_legacy:-}" ]] || die "--unattended goes with --legacy"
+
 while :; do
 	request=$(jq -c --rawfile state <(printf '%s' "$state") --arg button "$button" --arg mode "$setup_mode" --slurpfile prefill <(printf '%s' "$setup_prefill") --argjson occupied_ports "${setup_occupied_ports:-null}" \
 		'{data: {type: "steps", attributes: ({state: $state, button: $button, answers: (. + ($prefill[0] | {existing_region,hostname,oar,dump,show_passwords} | with_entries(select(.value != null)))), mode: $mode} + (if $occupied_ports == null then {} else {occupied_ports: $occupied_ports} end))}}' <<<"$answers")
 	[[ -z "$apply_request" ]] || request=$apply_request
 	# The first request asks for the scenario of an install of before the kit, when there is one
 	[[ -z "${setup_legacy:-}" || -n "$state" ]] || request=$(jq -c '.data.attributes.existing = true' <<<"$request")
+	# Nobody there: every answer at once, the ones of --config (the scenario checks them and takes a default for the others)
+	[[ -z "${setup_unattended:-}" || -n "$state" ]] || request=$(jq -c --argjson prefill "$setup_prefill" '.data.attributes.unattended = true | .data.attributes.answers = $prefill' <<<"$request")
 	# What the engine tells while it works (lines starting with "opensim: ") is shown as it comes. Its answer goes to a file and its
 	# error output to another that is read while it runs: the instances it starts keep both open, a pipe would never end
 	: >"$errors"
@@ -374,7 +399,11 @@ while :; do
 		printf 'handoff: %s\n' "$(jq -r .path <<<"$screen")"
 		exit 3
 		;;
-	abort) die "$(jq -r .error <<<"$screen")" ;;
+	abort)
+		[[ -z ${pending:-} ]] || printf '\r\033[K' >&2
+		error "$(jq -r .error <<<"$screen")"
+		exit "$(jq -r '.code // 1' <<<"$screen")"
+		;;
 	*) die "The engine asks for an action this command does not know: $(jq -r .action <<<"$screen")" ;;
 	esac
 done

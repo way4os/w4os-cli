@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+- change (kickstart): every migration is the engine's scenario; --migrate --yes runs it without anybody, --config its answers
+- new (setup): --unattended and --config-keys for the scenario of an install of before the kit; its exit code said
 - change (kickstart): the install found said once, by the scenario; a migration's summary ends with where its passwords are
 - change (setup): an install of before the kit handed to the engine's scenario (setup --legacy), its steps of root by name
 - change (setup): dialog the default at a terminal when installed, lines else; its review a panel changed line by line

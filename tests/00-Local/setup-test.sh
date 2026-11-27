@@ -600,6 +600,29 @@ function test_the_legacy_scenario_is_asked_on_the_first_request_only() {
 	assert_equals null "$(request 2 .existing)"
 }
 
+function test_without_anybody_the_scenario_gets_every_answer_at_once_and_its_refusal_is_its_exit_code() {
+	local out status=0
+	printf '{"answers":{"website":"https://w4os.org/opensim/","maptiles":false}}\n' >"$WORK/legacy.json"
+	engine_says '{"data":{"attributes":{"action":"abort","code":2,"error":"maptiles: maybe is not one of yes, no."}}}'
+	out=$("$OPENSIM" setup --legacy --unattended --config "$WORK/legacy.json" </dev/null 2>&1) || status=$?
+
+	assert_equals true "$(request 1 .unattended)"
+	assert_equals true "$(request 1 .existing)"
+	assert_equals '{"maptiles":false,"website":"https://w4os.org/opensim/"}' "$(request 1 '.answers | tojson' | jq -cS .)"
+	assert_exit_code 2 '' "$status"
+	assert_contains "maptiles: maybe is not one of yes, no." "$out"
+}
+
+function test_the_answers_of_the_scenario_are_listed_as_it_describes_them() {
+	local out
+	engine_says '{"data":{"attributes":{"action":"keys","keys":[{"name":"vhosts","values":["yes","no"],"default":"no","label":"Add the line"},{"name":"website","values":"address","default":"","label":"Website address"}]}}}'
+	out=$("$OPENSIM" setup --legacy --config-keys 2>&1)
+
+	assert_equals true "$(request 1 .keys)"
+	assert_matches "vhosts +yes\|no +no +Add the line" "$out"
+	assert_matches "website +address +- +Website address" "$out"
+}
+
 function test_error_is_displayed_for_invalid_answer() {
 	local out status=0
 	engine_says "not json at all"
