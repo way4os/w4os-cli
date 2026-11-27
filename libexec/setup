@@ -407,7 +407,8 @@ while :; do
 	# What the engine tells while it works (lines starting with "opensim: ") is shown as it comes. Its answer goes to a file and its
 	# error output to another that is read while it runs: the instances it starts keep both open, a pipe would never end
 	: >"$errors"
-	engine POST /setups/steps --data=- <<<"$request" >"$answer" 2>>"$errors" &
+	# Its terminal (fd 3, the live lines of this command) is not the engine's: an instance it starts would keep it
+	engine POST /setups/steps --data=- <<<"$request" >"$answer" 2>>"$errors" 3>&- &
 	pid=$!
 	shown=0
 	while kill -0 "$pid" 2>/dev/null; do
