@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- new (setup): the root step set-folders writes the folders changed in a review in w4os.conf and makes them
 - fix (setup): without the unit of the packages the grids are started by the command (restart-service from a clone)
 - fix (setup): a step done leaves its line; the live line of a request is cleared before its screen
 - fix (kickstart): the line of the passwords says whose the file is

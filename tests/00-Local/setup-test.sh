@@ -694,6 +694,28 @@ STUB
 	assert_same 600 "$(stat -c %a "$WORK/rc" 2>/dev/null || stat -f %Lp "$WORK/rc")"
 }
 
+function test_the_folders_changed_in_a_review_are_given_to_the_layout_as_root_its_settings_alone() {
+	local bin=$WORK/sbin
+	mkdir -p "$bin"
+	printf '#!/usr/bin/env bash\n"$@"\n' >"$bin/sudo"
+	chmod +x "$bin/sudo"
+	# The layout of the engine, standing in beside its API (a file of its own here, not the link to the fixture): what it was given
+	local api
+	api=$(realpath "$OPENSIM_API") && rm -f "$OPENSIM_API" && cp "$api" "$OPENSIM_API" && chmod +x "$OPENSIM_API"
+	printf '<?php file_put_contents(getenv("LAYOUT_CALLS"), implode(" ", array_slice($argv, 1)) . "\\n", FILE_APPEND);\n' >"$WORK/engine/bin/opensim-layout.php"
+	STEP='{"data":{"attributes":{"action":"step","step":{"name":"set-folders","root":true,"label":"Folders","done":"Folders","number":1,"count":1,"args":{"roots":%s}},"labels":["Folders"],"state":"s9"}}}'
+	engine_says "$(printf "$STEP" '{"PATH":"/tmp/x"}')" "$(printf "$STEP" '{"DataRoot":"relative"}')" "$(printf "$STEP" '{"DataRoot":"/srv/opensim/data","EtcRoot":"/srv/opensim/etc"}')" "$QUIT"
+	local out
+	out=$(PATH="$bin:$PATH" LAYOUT_CALLS="$WORK/layout-calls" setup_with 2>&1) || true
+
+	assert_equals failed "$(request 2 .button)"
+	assert_contains "set-folders: not a folder of the install: PATH = /tmp/x" "$(request 2 .answers.error_text)"
+	assert_equals failed "$(request 3 .button)"
+	assert_equals next "$(request 4 .button)"
+	assert_same "DataRoot=/srv/opensim/data EtcRoot=/srv/opensim/etc" "$(cat "$WORK/layout-calls")"
+	assert_contains "✓ Folders" "$out"
+}
+
 function test_a_step_or_a_screen_done_leaves_its_line() {
 	local out
 	STEP='{"data":{"attributes":{"action":"step","step":{"name":"install-packages","root":true,"label":"Folders","done":"Folders","number":1,"count":1,"args":{"packages":["not-ours"]}},"labels":["Folders"],"state":"s9"}}}'
