@@ -908,6 +908,10 @@ phase_dependencies() {
 			for extension in imagick $([[ ! -d "$clone/../w4os-site/build/w4os-site" ]] || echo gd zip); do
 				grep -qx "$extension" <<<"$extensions" || missing+=("php-$extension")
 			done
+			# The website and the helpers beside this clone are served by pools of PHP-FPM, as their packages have it
+			if [[ -d "$clone/../w4os-site/build/w4os-site" || -f "$clone/../opensim-helpers/public/index.php" ]]; then
+				compgen -G "${PHP_ETC:-/etc/php}/*/fpm/pool.d" >/dev/null || missing+=(php-fpm)
+			fi
 			command -v composer >/dev/null 2>&1 || missing+=(composer)
 			for tool in curl git unzip screen jq sudo; do
 				command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")

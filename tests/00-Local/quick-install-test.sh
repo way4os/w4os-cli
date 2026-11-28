@@ -700,7 +700,14 @@ function test_a_clone_on_a_machine_that_has_php_gets_the_extensions_it_lacks_the
 	command() { [[ "$1" == -v && "$2" =~ ^(php|composer|curl|git|unzip|screen|jq|sudo|mysql)$ ]] && return 0; builtin command "$@"; }
 
 	local status=0
-	phase_dependencies >/dev/null 2>&1 || status=$?
+	PHP_ETC=$WORK/no-php-etc phase_dependencies >/dev/null 2>&1 || status=$?
+
+	assert_same 0 "$status"
+	assert_same "php-intl php-mysql php-imagick php-gd php-fpm" "$(cat "$WORK/asked")"
+
+	# With its pools of PHP-FPM there, no PHP-FPM asked
+	mkdir -p "$WORK/php-etc/8.4/fpm/pool.d"
+	PHP_ETC=$WORK/php-etc phase_dependencies >/dev/null 2>&1 || status=$?
 	unset -f command
 
 	assert_same 0 "$status"

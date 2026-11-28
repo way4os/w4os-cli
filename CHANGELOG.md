@@ -3,7 +3,7 @@
 ### Unreleased
 
 - fix (web): asking Apache's sites for a website at the root of its host no longer installs a site of Apache
-- fix (kickstart): a clone on a machine that has PHP gets the extensions it lacks; the website's when it is beside it
+- fix (kickstart): a clone gets the PHP extensions a PHP there lacks; PHP-FPM too with the website or helpers beside it
 - new (web): the website runs from where the engine finds it (its package, else its clone), its site made from it
 - change (setup): a request that did several things leaves a line for each (the components brought)
 - change (setup): run by root, the DB admin user is kept in /etc/w4os/database-admin.rc, for root alone; the summary names it
