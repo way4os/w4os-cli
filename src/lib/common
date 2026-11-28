@@ -20,7 +20,7 @@ unset _helpers
 [[ "${DEBUG:-}" != yes ]] || export DEBUG
 [[ "${QUIET:-}" != yes ]] || export QUIET
 
-OPENSIM_API=${OPENSIM_API:-$CLI_ROOT/vendor/w4os/w4os-engine/bin/w4os-api}
+OPENSIM_API=${OPENSIM_API:-$CLI_ROOT/vendor/way4os/w4os-engine/bin/w4os-api}
 # The libraries of this project, for an engine linked from a clone beside it that has none of its own
 [[ ! -f "$CLI_ROOT/vendor/autoload.php" ]] || export W4OS_AUTOLOAD=${W4OS_AUTOLOAD:-$CLI_ROOT/vendor/autoload.php}
 [[ -x "$OPENSIM_API" ]] || die "The engine is not installed (composer install in $CLI_ROOT)"

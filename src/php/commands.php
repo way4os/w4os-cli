@@ -584,7 +584,7 @@ final class Commands
 
             return 0;
         }
-        $script = dirname(__DIR__, 2) . '/vendor/magicoli/opensim-rest-php/opensim-rest-cli.php';
+        $script = dirname(__DIR__, 2) . '/vendor/way4os/opensim-rest-php/opensim-rest-cli.php';
         if (!is_file($script)) return self::error('rest', 'opensim-rest-php is not installed');
         $process = proc_open([PHP_BINARY, $script, ...$args], [0 => STDIN, 1 => STDOUT, 2 => STDERR], $pipes);
         return is_resource($process) ? proc_close($process) : 1;

@@ -1,5 +1,5 @@
 {
-    "name": "w4os/w4os-cli",
+    "name": "way4os/w4os-cli",
     "description": "The command line to set up and manage OpenSimulator, in bash.",
     "type": "project",
     "license": "AGPL-3.0-or-later",
@@ -11,7 +11,7 @@
     ],
     "require": {
         "magicoli/container-tools": "@dev",
-        "w4os/w4os-engine": "@dev",
+        "way4os/w4os-engine": "@dev",
         "magicoli/bash-tools": "@dev"
     },
     "require-dev": {
@@ -35,8 +35,16 @@
             }
         },
         {
-            "name": "w4os/w4os-engine",
+            "name": "way4os/w4os-engine",
             "url": "../opensim-engine/",
+            "type": "path",
+            "options": {
+                "symlink": true
+            }
+        },
+        {
+            "name": "way4os/opensim-rest-php",
+            "url": "../opensim-rest-php/",
             "type": "path",
             "options": {
                 "symlink": true

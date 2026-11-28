@@ -7,4 +7,4 @@ HELP="Runs the launch master of opensim.service in the foreground: it listens on
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 
-exec php "$CLI_ROOT/vendor/w4os/w4os-engine/bin/w4os-launch-master.php"
+exec php "$CLI_ROOT/vendor/way4os/w4os-engine/bin/w4os-launch-master.php"

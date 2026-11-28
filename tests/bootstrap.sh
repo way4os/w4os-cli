@@ -26,7 +26,7 @@ if [[ ! -f "$__tests_root/tests/.env" && -f "$__tests_root/tests/.env.example" ]
 fi
 
 # Let the shared helper load ~/.opensimrc and project .env with its standard rules, then add test-only overrides.
-__tests_rc_helpers="$__tests_root/vendor/w4os/w4os-engine/lib/rc-helpers"
+__tests_rc_helpers="$__tests_root/vendor/way4os/w4os-engine/lib/rc-helpers"
 if [[ -r "$__tests_rc_helpers" ]]; then
 	# shellcheck source=/dev/null
 	source "$__tests_rc_helpers"

@@ -24,7 +24,7 @@ function set_up() {
 	fixtures="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/fixtures"
 	mkdir -p "$WORK/engine/bin" "$WORK/engine/lib" "$WORK/replies"
 	ln -s "$fixtures/w4os-api" "$WORK/engine/bin/w4os-api"
-	cp "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../vendor/w4os/w4os-engine/lib" && pwd)/rc-helpers" "$WORK/engine/lib/rc-helpers"
+	cp "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../vendor/way4os/w4os-engine/lib" && pwd)/rc-helpers" "$WORK/engine/lib/rc-helpers"
 	export OPENSIM_API="$WORK/engine/bin/w4os-api" ENGINE_REPLIES="$WORK/replies" ENGINE_LOG="$WORK/requests" ENGINE_CALLS="$WORK/calls"
 }
 
