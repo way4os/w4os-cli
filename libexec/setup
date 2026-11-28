@@ -200,7 +200,7 @@ make_layout() { # [--follow] [SETTING=PATH]...
 	if [[ -z "$owner" && "$CLI_ROOT" != /usr/* ]]; then
 		owner=$(run system-user 2>/dev/null) || owner=
 		[[ -z "$owner" ]] || as_root sudo -u "$owner" test -x "$CLI_ROOT/bin/opensim" 2>/dev/null ||
-			{ echo "The account $owner cannot read this clone ($CLI_ROOT): put it where it can, or run the install from your own account"; return 1; }
+			{ printf '%s\n' "The account $owner cannot read this clone: $CLI_ROOT." "Move the clone where it can read it" "Or run the install from your own account"; return 1; }
 	fi
 }
 LEGACY_STARTERS=${OPENSIM_LEGACY_STARTERS:-/etc/cron.hourly/opensim /etc/systemd/system/opensim.service /etc/init.d/opensim}
@@ -289,7 +289,7 @@ root_step() { # name, args (JSON), label
 		password=$(jq -r '.password // empty' <<<"$args")
 		[[ "$user" =~ ^[A-Za-z0-9_]{1,32}$ && -n "$password" ]] || { echo "db-admin: not a user: $user"; return 1; }
 		step_line "$label: $user"
-		client=$(command -v mariadb || command -v mysql) || { echo "No database client here (mariadb or mysql)."; return 1; }
+		client=$(command -v mariadb || command -v mysql) || { printf '%s\n' "No database client here: mariadb or mysql." "sudo apt install default-mysql-client"; return 1; }
 		if ! MYSQL_PWD=$password "$client" -u "$user" -h localhost -Nse 'SELECT 1' >/dev/null 2>&1; then
 			as_root "$client" -Nse 'SELECT 1' >/dev/null 2>&1 || { echo "No access to the database server as root."; return 1; }
 			[[ -z "$(as_root "$client" -Nse "SELECT Host FROM mysql.user WHERE User='$user'" 2>/dev/null)" ]] || { echo "$user: login refused by the database server."; return 1; }
@@ -304,10 +304,10 @@ root_step() { # name, args (JSON), label
 		# by the command: nothing starts them at boot then
 		if [[ -d /run/systemd/system ]] && systemctl cat opensim.service >/dev/null 2>&1; then
 			step_line "$label: opensim.service"
-			as_root systemctl restart opensim || { echo "opensim.service did not restart: systemctl status opensim"; return 1; }
+			as_root systemctl restart opensim || { printf '%s\n' "opensim.service did not restart." "systemctl status opensim"; return 1; }
 		else
 			step_line "$label: opensim start"
-			"$CLI_ROOT/bin/opensim" start </dev/null >/dev/null 2>&1 || { echo "the grids did not start: opensim start"; return 1; }
+			"$CLI_ROOT/bin/opensim" start </dev/null >/dev/null 2>&1 || { printf '%s\n' "the grids did not start." "opensim start"; return 1; }
 		fi
 		;;
 	*)
@@ -403,7 +403,7 @@ if [[ -n "$apply_request" ]]; then
 fi
 if [[ "$adoption_required" == true ]]; then
 	reply=$(engine POST /setups/quick --data=- <<<'{"data":{"type":"setups","attributes":{}}}' 2>"$errors") || fail_engine "$reply"
-	jq -e '.data.attributes.capabilities | arrays | index("existing_region") != null' <<<"$reply" >/dev/null || die "The engine does not support existing-region setup; update w4os-engine"
+	jq -e '.data.attributes.capabilities | arrays | index("existing_region") != null' <<<"$reply" >/dev/null || die "The engine does not support existing-region setup."$'\n'"sudo apt install w4os-engine"
 fi
 
 # The answers the scenario takes without anybody, as it describes them
@@ -452,7 +452,7 @@ while :; do
 	screen=$(jq -c '.data.attributes' 2>/dev/null <<<"$reply") && [[ "$(jq -r '.action // empty' <<<"$screen")" != "" ]] ||
 		fail_engine "$reply"
 	if [[ "$setup_mode" == prepare && "$(jq -r '.mode // empty' <<<"$screen")" != prepare ]]; then
-		die "The engine does not support setup preparation; update w4os-engine"
+		die "The engine does not support setup preparation."$'\n'"sudo apt install w4os-engine"
 	fi
 	if [[ "$(jq -r '.action + ":" + (.kind // "")' <<<"$screen")" == screen:menu && -n "$setup_prefill_type" ]]; then
 		state=$(jq -r '.state' <<<"$screen")

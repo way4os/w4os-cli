@@ -125,7 +125,7 @@ function test_a_migration_without_anybody_runs_the_scenario_with_its_answers_and
 #!/usr/bin/env bash
 echo "$*" >>"$CALL_LOG"
 echo "[1/8] Stop"
-printf '✓ Done\n\nGrid       Kimbe Test (kimbe_test)\nOld install  /opt/opensim, stopped, kept\nWebsite    not installed (no answer for vhosts)\n' >"$OPENSIM_SETUP_END"
+printf '✓ Done\n\nGrid       Kimbe Test (kimbe_test)\nOld install  /opt/opensim, stopped, kept\nWebsite    not installed: no answer for vhosts\n' >"$OPENSIM_SETUP_END"
 STUB
 	chmod +x "$WORK/project/bin/opensim"
 	as_root() { "$@"; }
@@ -141,8 +141,8 @@ STUB
 	# Whose the file of the passwords is, said
 	assert_contains "Passwords  $WORK/opensimrc ($(id -un) only)" "$said"
 	# Why the website is not there ends what is said and the log, where a script finds it
-	assert_same "Website    not installed (no answer for vhosts)" "$(tail -n 1 <<<"$said")"
-	assert_same "Website    not installed (no answer for vhosts)" "$(tail -n 1 "$INSTALL_LOG")"
+	assert_same "Website    not installed: no answer for vhosts" "$(tail -n 1 <<<"$said")"
+	assert_same "Website    not installed: no answer for vhosts" "$(tail -n 1 "$INSTALL_LOG")"
 	assert_contains "[1/8] Stop" "$(cat "$INSTALL_LOG")"
 }
 
@@ -590,7 +590,7 @@ function test_beside_an_install_of_before_the_kit_nothing_happens_without_a_choi
 
 	assert_same 1 "$status"
 	assert_contains "Found an existing install in $LEGACY_ROOT: grid w4osdemogrid, 1 simulator." "$said"
-	assert_contains "nobody to choose: give --migrate (--yes, its answers with --config), --in-place or --new" "$said"
+	assert_contains "Nobody is here to choose."$'\n'"--migrate --yes"$'\n'"--in-place"$'\n'"--new" "$said"
 	assert_file_exists "$LEGACY_CRON"
 }
 
@@ -681,7 +681,7 @@ function test_a_clone_whose_neighbours_are_missing_says_which_before_composer() 
 	said=$(phase_dependencies 2>&1) || status=$?
 
 	assert_same 1 "$status"
-	assert_contains "this clone takes its libraries from the clones beside it, and these are missing: ../opensim-engine/ (from $clone)" "$said"
+	assert_contains "Clones missing beside $clone: ../opensim-engine/."$'\n'"Clone them there"$'\n'"Or install from a release" "$said"
 	assert_file_not_exists "$WORK/composer-calls"
 }
 
@@ -727,7 +727,7 @@ function test_on_macos_a_missing_tool_is_named_and_nothing_is_installed() {
 	unset -f command
 
 	assert_same 1 "$status"
-	assert_contains "missing on this Mac: screen jq. Install them (with Homebrew for instance: brew install screen jq), then run this again" "$said"
+	assert_contains "Missing on this Mac: screen jq."$'\n'"brew install screen jq" "$said"
 	assert_file_not_exists "$WORK/brew-calls"
 }
 

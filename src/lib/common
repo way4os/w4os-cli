@@ -104,7 +104,7 @@ as_root() {
 	elif command -v sudo >/dev/null 2>&1; then
 		sudo --preserve-env=${PRESERVE_ENV:-} "$@"
 	else
-		die "this needs administrator rights: run it as root, or install sudo"
+		die "Administrator rights are needed, and sudo is missing."$'\n'"Run it as root"$'\n'"Or install sudo"
 	fi
 }
 
@@ -117,7 +117,7 @@ as_system_user() {
 	elif command -v sudo >/dev/null 2>&1; then
 		sudo -u ${system_user} --preserve-env=${PRESERVE_ENV:-} "$@"
 	else
-		die "this needs administrator rights: run it as root, or install sudo"
+		die "Administrator rights are needed, and sudo is missing."$'\n'"Run it as root"$'\n'"Or install sudo"
 	fi
 }
 

@@ -356,7 +356,7 @@ as_root() {
 	elif command -v sudo >/dev/null 2>&1; then
 		sudo --preserve-env=${PRESERVE_ENV:-} "$@"
 	else
-		die "this needs administrator rights: run it as root, or install sudo"
+		die "Administrator rights are needed, and sudo is missing."$'\n'"Run it as root"$'\n'"Or install sudo"
 	fi
 }
 
@@ -366,8 +366,8 @@ run_remote_install() (
 	shift
 	[[ "$target" != -* ]] || die "--remote requires an SSH target, not another option"
 	[[ -f "$source_script" ]] || die "--remote requires kickstart.sh to be run from a local file"
-	command -v scp >/dev/null 2>&1 || die "scp is required for --remote"
-	command -v ssh >/dev/null 2>&1 || die "ssh is required for --remote"
+	command -v scp >/dev/null 2>&1 || die "scp is missing: --remote needs it."$'\n'"sudo apt install openssh-client"
+	command -v ssh >/dev/null 2>&1 || die "ssh is missing: --remote needs it."$'\n'"sudo apt install openssh-client"
 	[[ -z "$SETUP_CONFIG_FILE" || -r "$SETUP_CONFIG_FILE" ]] || die "cannot read setup config: $SETUP_CONFIG_FILE"
 	[[ -z "$REGION_CONFIG_FILE" || -r "$REGION_CONFIG_FILE" ]] || die "cannot read region config: $REGION_CONFIG_FILE"
 	source_script=$(cd -- "$(dirname -- "$source_script")" && pwd)/$(basename -- "$source_script")
@@ -482,7 +482,7 @@ run_podman_install() {
 		elif command -v container-tools >/dev/null 2>&1; then
 			CONTAINER_TOOLS_CLI_SELECTED=$(command -v container-tools)
 		else
-			die "container-tools is required for --podman"
+			die "container-tools is missing: --podman needs it."
 		fi
 	fi
 	[[ -x "$CONTAINER_TOOLS_CLI_SELECTED" ]] || die "container-tools is not executable: $CONTAINER_TOOLS_CLI_SELECTED"
@@ -561,7 +561,7 @@ validate_prepared_podman_ports() {
 		| map(select(. as $port | $occupied_ports | index($port) != null))
 		| join(", ")
 	' "$config") || die "could not validate the prepared ports"
-	[[ -z "$conflicts" ]] || die "ports already occupied on the selected Podman host: $conflicts; rerun setup and choose different ports"
+	[[ -z "$conflicts" ]] || die "Ports already taken on the selected Podman host: $conflicts."$'\n'"Run the setup again and choose other ports"
 }
 
 bootstrap_podman_manager() {
@@ -581,7 +581,7 @@ bootstrap_podman_manager() {
 prepare_podman_setup_config() {
 	local hostname= occupied_ports
 	local -a arguments=(setup)
-	command -v jq >/dev/null 2>&1 || die "jq is required by the OpenSim manager"
+	command -v jq >/dev/null 2>&1 || die "jq is missing: the OpenSim manager needs it."$'\n'"sudo apt install jq"
 	if [[ "$PODMAN_FORCE_LOCAL" == yes ]]; then
 		hostname=$(hostname -f 2>/dev/null || hostname) || die "could not read the local host name"
 	else
@@ -694,7 +694,7 @@ apt_install() {
 	said=$(mktemp) || return $?
 	as_root env LC_ALL=C apt-get install -y -qq "$@" 2>&1 | tee "$said" || status=${PIPESTATUS[0]}
 	if ((status != 0)) && grep -qE '^E: Failed to fetch .* 404' "$said"; then
-		say "A package changed in the repository while it was installed: the package lists are read again, and it is installed once more"
+		say "A package changed in the repository: the package lists are read again, it is installed once more"
 		as_root apt-get update -qq && status=0 && { as_root env LC_ALL=C apt-get install -y -qq "$@" || status=$?; }
 	fi
 	rm -f "$said"
@@ -865,7 +865,7 @@ configure_package_sources() {
 	[[ "$OPENSIM_KIT_APT_COMPONENT" =~ ^[A-Za-z0-9._-]+$ ]] || die "invalid OPENSIM_KIT_APT_COMPONENT: $OPENSIM_KIT_APT_COMPONENT"
 	if [[ -n "$APT_SOURCE_DIR" ]]; then
 		if [[ "$refresh_local_index" == yes ]]; then
-			(cd "$local_debs" && dpkg-scanpackages --multiversion . /dev/null 2>>"$INSTALL_LOG" | gzip -9c >Packages.gz) || die "local package index refresh failed (log: $INSTALL_LOG)"
+			(cd "$local_debs" && dpkg-scanpackages --multiversion . /dev/null 2>>"$INSTALL_LOG" | gzip -9c >Packages.gz) || die "Local package index refresh failed."$'\n'"Log: $INSTALL_LOG"
 		fi
 		done_line "Local packages: $local_debs ($(ls "$local_debs"/*.deb 2>/dev/null | wc -l | tr -d ' '))"
 		apt_debs=$(apt_accessible_local_repository "$local_debs") || return $?
@@ -891,7 +891,7 @@ phase_dependencies() {
 			for tool in php composer screen jq curl tar; do
 				command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
 			done
-			((${#missing[@]} == 0)) || die "missing on this Mac: ${missing[*]}. Install them (with Homebrew for instance: brew install ${missing[*]}), then run this again"
+			((${#missing[@]} == 0)) || die "Missing on this Mac: ${missing[*]}."$'\n'"brew install ${missing[*]}"
 		else
 			# PHP, or the extensions of it the tools need that a PHP already there lacks (the engine draws with ImageMagick); the ones
 			# of the website too when its clone is beside this one, built
@@ -922,15 +922,15 @@ phase_dependencies() {
 				PACKAGES_LABEL="Tools" install_packages "${missing[@]}" || return $?
 			fi
 		fi
-		php -r 'exit(PHP_VERSION_ID >= 80200 ? 0 : 1);' || die "PHP 8.2 or newer is needed (this is $(php -r 'echo PHP_VERSION;'))"
+		php -r 'exit(PHP_VERSION_ID >= 80200 ? 0 : 1);' || die "PHP 8.2 or newer is needed (found: $(php -r 'echo PHP_VERSION;'))."
 		if composer_needed; then
 			# A clone in development mode takes its libraries from its neighbours: said when they are not beside it
 			local neighbour absent=()
 			while IFS= read -r neighbour; do
 				[[ -z "$neighbour" || -d "$clone/$neighbour" ]] || absent+=("$neighbour")
 			done < <(jq -r '.repositories[]? | select(.type == "path") | .url' "$clone/composer.json" 2>/dev/null)
-			((${#absent[@]} == 0)) || die "this clone takes its libraries from the clones beside it, and these are missing: ${absent[*]} (from $clone). Clone them there, or install from a release"
-			run_step "PHP libraries (composer)" - bash -c 'cd "$1" && composer install --no-dev --no-interaction --prefer-dist' composer "$clone" || die "composer install failed: its output is in $(install_log)"
+			((${#absent[@]} == 0)) || die "Clones missing beside $clone: ${absent[*]}."$'\n'"Clone them there"$'\n'"Or install from a release"
+			run_step "PHP libraries (composer)" - bash -c 'cd "$1" && composer install --no-dev --no-interaction --prefer-dist' composer "$clone" || die "composer install failed."$'\n'"Log: $(install_log)"
 			done_line "PHP libraries (composer)"
 		fi
 	else
@@ -1114,7 +1114,7 @@ end_installation() {
 		OPENSIM_RC=$OPENSIM_RC_PATH OPENSIM_SETUP_UI=$SETUP_UI OPENSIM_SETUP_END=$end "$basedir/bin/opensim" "${setup_arguments[@]}" 8<&- || status=$?
 		# Stopped at the person's request (4): said by the setup, not an error
 		((status != 4)) || exit 0
-		((status == 0)) || die "the setup stopped (error $status)"
+		((status == 0)) || die "the setup stopped: error $status"
 		done_line "Done"
 		say ""
 		setup_summary "$end"
@@ -1251,7 +1251,7 @@ legacy_gate() {
 	fi
 	if [[ -z "$LEGACY_MODE" ]]; then
 		say "  $(legacy_summary "$root")"
-		die "nobody to choose: give --migrate (--yes, its answers with --config), --in-place or --new"
+		die "Nobody is here to choose."$'\n'"--migrate --yes"$'\n'"--in-place"$'\n'"--new"
 	fi
 	# Migrated or run in place, it is the scenario's too, its answers given (--config), the defaults else; it sets the old install
 	# aside in its run, after Start (Stop); before it, only a unit named opensim, which would hide the kit's (a new grid beside it too)
@@ -1327,7 +1327,7 @@ reload_web_servers() {
 	[[ -d /run/systemd/system ]] || return 0
 	for service in caddy apache2 nginx; do
 		systemctl --quiet is-active "$service" 2>/dev/null || continue
-		as_root systemctl reload "$service" || say "Could not reload $service: systemctl status $service"
+		as_root systemctl reload "$service" || say "Could not reload $service."$'\n'"systemctl status $service"
 	done
 }
 
@@ -1380,9 +1380,9 @@ phase_cleanup() {
 	for path in "${folders[@]}"; do say "  folder $path ($(find "$path" -type f 2>/dev/null | wc -l | tr -d ' ') files)"; done
 	for db in "${databases[@]}"; do say "  database $db"; done
 	for deb in "${duplicate_debs[@]}"; do say "  archive duplicate package $deb -> $archive_folder/"; done
-	[[ -z "$web" ]] || while read -r kind place; do say "  web server $kind $place (it uses a file removed here)"; done <<<"$web"
+	[[ -z "$web" ]] || while read -r kind place; do say "  web server $kind $place: it uses a file removed here"; done <<<"$web"
 	if [[ "$ASSUME_YES" != yes ]]; then
-		[[ -r /dev/tty ]] || die "--cleanup needs an interactive confirmation (or pass --yes)"
+		[[ -r /dev/tty ]] || die "--cleanup needs a confirmation."$'\n'"--yes"
 		read -r -p 'Proceed with this cleanup? [y/N] ' answer </dev/tty || die 'cleanup cancelled'
 		[[ "$answer" =~ ^[Yy]([Ee][Ss])?$ ]] || die 'cleanup cancelled'
 	fi
@@ -1442,7 +1442,7 @@ install_with_modules() {
 phase_opensim() {
 	if [[ -n "$clone" && -z "$APT_SOURCE_DIR" ]]; then
 		# A clone carries the install by itself, no package of ours: the core and the .NET runtime it targets are steps of the setup
-		php -r 'exit(PHP_VERSION_ID >= 80200 ? 0 : 1);' || die "PHP 8.2 or newer is needed"
+		php -r 'exit(PHP_VERSION_ID >= 80200 ? 0 : 1);' || die "PHP 8.2 or newer is needed."
 		done_line "w4os from the clone $clone"
 		end_installation
 		return 0
@@ -1494,20 +1494,20 @@ while (($#)); do
 		;;
 	--podman) PODMAN_MODE=yes ;;
 	--with)
-		(($#)) && [[ "$1" != -* ]] || die "--with requires a module (gloebit)"
+		(($#)) && [[ "$1" != -* ]] || die "--with requires a module."$'\n'"--with gloebit"
 		WITH_MODULES+=("$1")
 		REMOTE_ARGS+=("$1")
 		PODMAN_INSTALL_ARGS+=("$argument" "$1")
 		shift
 		;;
 	--with=*)
-		[[ -n "${argument#*=}" ]] || die "--with requires a module (gloebit)"
+		[[ -n "${argument#*=}" ]] || die "--with requires a module."$'\n'"--with gloebit"
 		WITH_MODULES+=("${argument#*=}")
 		PODMAN_INSTALL_ARGS+=("$argument")
 		;;
 	--connection)
-		(($#)) || die "--connection requires a name (or local|none)"
-		[[ "$1" != -* ]] || die "--connection requires a name (or local|none)"
+		(($#)) || die "--connection requires a name, local or none."
+		[[ "$1" != -* ]] || die "--connection requires a name, local or none."
 		[[ "$PODMAN_CONNECTION_SELECTED" == no ]] || die "--connection can be specified only once"
 		PODMAN_CONNECTION=$1
 		REMOTE_ARGS+=("$1")
@@ -1518,7 +1518,7 @@ while (($#)); do
 	--connection=*)
 		[[ "$PODMAN_CONNECTION_SELECTED" == no ]] || die "--connection can be specified only once"
 		PODMAN_CONNECTION=${argument#*=}
-		[[ -n "$PODMAN_CONNECTION" ]] || die "--connection requires a name (or local|none)"
+		[[ -n "$PODMAN_CONNECTION" ]] || die "--connection requires a name, local or none."
 		PODMAN_CONNECTION_SELECTED=yes
 		case "$PODMAN_CONNECTION" in local | none) PODMAN_FORCE_LOCAL=yes ;; esac
 		;;
@@ -1627,7 +1627,7 @@ while (($#)); do
 		DEBUG=yes
 		;;
 	*)
-		error "unknown option $argument (see --help)" >&2
+		error "unknown option $argument."$'\n'"kickstart.sh --help" >&2
 		exit 2
 		;;
 	esac
@@ -1673,7 +1673,7 @@ install_log >/dev/null
 [[ $(uname -s) != Linux ]] || done_line "System: $(system_line)"
 # Without apt (not Debian or Ubuntu): from a clone of the repository only
 [[ -n "$clone" ]] || command -v apt-get >/dev/null 2>&1 ||
-	die "w4os installs on Debian and Ubuntu; elsewhere, from a clone of its repository: git clone https://github.com/way4os/w4os-cli.git"
+	die "w4os installs on Debian and Ubuntu; elsewhere, from a clone of its repository."$'\n'"git clone https://github.com/way4os/w4os-cli.git"
 # The one question before the setup, whose scenario says what is here and asks the rest
 if [[ "$INSTALL_PHASE" == all ]] && ! opening_question; then
 	say "Stopped at your request: nothing changed."

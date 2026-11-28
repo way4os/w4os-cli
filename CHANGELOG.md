@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- change (messages): kickstart and the setup say what is wrong, then each command or choice on its own line
 - fix (setup): the step install-packages installs as root whoever runs the setup
 - fix (setup): a DB admin user that exists and is refused is said so (login refused by the database server)
 - change (setup): a form in lines says how to leave it (:q to quit)
