@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+- fix (setup): a DB admin user that exists and is refused is said so (login refused by the database server)
+- change (setup): a form in lines says how to leave it (:q to quit)
 - fix (setup): the database user chosen for a grid is the one installed: the kept one is no longer sent over it
 - change (setup): the step give-ownership asks the layout to go through the folders (opensim-layout --follow)
 - change (setup): the DB admin user kept by root is for the account of the instances (database-admin.rc, its own, 600)

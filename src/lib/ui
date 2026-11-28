@@ -246,7 +246,7 @@ ui_form_plain() {
 			printf '  %d) %-26s %s\n' "$((_u_i + 1))" "${LABEL[$_u_n]}" "$_u_shown" >&2
 			[[ -n "${HELP[$_u_n]:-}" ]] && printf '     %s\n' "${HELP[$_u_n]}" >&2
 		done
-		fe_read "Edit [1-${#_u_names[@]}, Enter to continue]: " '' || return 2
+		fe_read "Edit [1-${#_u_names[@]}, Enter to continue, :q to quit]: " '' || return 2
 		fe_special || return $?
 		[[ -z "$FE_ANSWER" ]] && return 0
 		if [[ "$FE_ANSWER" =~ ^[0-9]+$ ]] && ((FE_ANSWER >= 1 && FE_ANSWER <= ${#_u_names[@]})); then

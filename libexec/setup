@@ -281,7 +281,8 @@ root_step() { # name, args (JSON), label
 		as_root "$CLI_ROOT/bin/opensim" web "$grid" site --install $edit </dev/null || return 1
 		;;
 	db-admin)
-		# The DB admin user: one that logs in kept as it is, else made when no account has its name (on any host), never changed;
+		# The DB admin user: one that logs in kept as it is, else made when no account has its name (on any host), never changed
+		# (one that exists and is refused is said: its password, or an account the server lets in from its own system user only);
 		# then kept for the commands (OPENSIM_RC, else ~/.opensimrc)
 		local user password client quoted
 		user=$(jq -r '.user // empty' <<<"$args")
@@ -291,7 +292,7 @@ root_step() { # name, args (JSON), label
 		client=$(command -v mariadb || command -v mysql) || { echo "No database client here (mariadb or mysql)."; return 1; }
 		if ! MYSQL_PWD=$password "$client" -u "$user" -h localhost -Nse 'SELECT 1' >/dev/null 2>&1; then
 			as_root "$client" -Nse 'SELECT 1' >/dev/null 2>&1 || { echo "No access to the database server as root."; return 1; }
-			[[ -z "$(as_root "$client" -Nse "SELECT Host FROM mysql.user WHERE User='$user'" 2>/dev/null)" ]] || { echo "$user exists: its password is needed."; return 1; }
+			[[ -z "$(as_root "$client" -Nse "SELECT Host FROM mysql.user WHERE User='$user'" 2>/dev/null)" ]] || { echo "$user: login refused by the database server."; return 1; }
 			quoted=${password//\'/\'\'}
 			printf "SET SESSION sql_mode='NO_BACKSLASH_ESCAPES'; CREATE USER '%s'@'localhost' IDENTIFIED BY '%s'; GRANT ALL PRIVILEGES ON *.* TO '%s'@'localhost' WITH GRANT OPTION; FLUSH PRIVILEGES;\n" "$user" "$quoted" "$user" |
 				as_root "$client" >/dev/null 2>&1 || { echo "$user could not be made."; return 1; }

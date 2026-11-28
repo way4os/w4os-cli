@@ -439,6 +439,34 @@ function test_database_admin_credentials_can_be_entered_without_opensimrc() {
 	assert_not_contains "interactive-secret" "$out"
 }
 
+function test_a_password_is_sent_and_tried_as_it_was_typed_whatever_its_characters() {
+	local out secret='p@$$ "w'"'"'or\d!#%&*<>;|é' bin=$WORK/sqlbin step
+	# Typed in a form
+	engine_says "$DATABASE_FORM" "$QUIT"
+	out=$(setup_with 6 "$secret" "")
+	assert_same "$secret" "$(request 2 '.answers.admin_password')"
+	# Tried by the step of the DB admin user: the client is given it whole
+	mkdir -p "$bin"
+	printf '#!/usr/bin/env bash\n[[ "$1" == -u ]] && printf "%%s" "${MYSQL_PWD:-}" >"%s/tried"\nexit 0\n' "$WORK" >"$bin/mariadb"
+	chmod +x "$bin/mariadb"
+	step=$(jq -cn --arg password "$secret" '{data: {attributes: {action: "step", step: {name: "db-admin", root: true, label: "DB admin user", number: 1, count: 1, args: {user: "kept_admin", password: $password}}, labels: ["DB admin user"], state: "s9"}}}')
+	engine_says "$step" "$QUIT"
+	PATH="$bin:$PATH" OPENSIM_RC="$WORK/rc" setup_with >/dev/null 2>&1 || true
+	assert_same "$secret" "$(cat "$WORK/tried")"
+	assert_same "$secret" "$(bash -c 'source "$1"; printf %s "$OPENSIM_DB_ADMIN_PASS"' _ "$WORK/rc")"
+}
+
+function test_a_form_in_lines_says_how_to_leave_it_and_leaves_without_an_error() {
+	local out status=0
+	engine_says "$DATABASE_FORM" '{"data":{"attributes":{"action":"abort","code":4,"stopped":true,"error":"Stopped at your request."}}}'
+	out=$(setup_with :q 2>&1) || status=$?
+	assert_contains "Enter to continue, :q to quit]" "$out"
+	assert_equals quit "$(request 2 .button)"
+	assert_same 4 "$status"
+	assert_contains "Stopped at your request." "$out"
+	assert_not_contains "ERROR" "$out"
+}
+
 function test_button_processing_is_left_to_the_engine_for_processing() {
 	engine_says "$MENU" "$FORM" "$CHECKS" "$FORM" "$ABORT"
 	setup_with 1 "" :back "" >/dev/null || true
@@ -687,7 +715,7 @@ STUB
 	assert_equals next "$(request 2 .button)"
 	assert_contains "CREATE USER 'new_admin'@'localhost' IDENTIFIED BY 'new''secret'; GRANT ALL PRIVILEGES ON *.* TO 'new_admin'@'localhost' WITH GRANT OPTION;" "$(cat "$WORK/made.sql")"
 	assert_equals failed "$(request 3 .button)"
-	assert_contains "kept_admin exists: its password is needed." "$(request 3 .answers.error_text)"
+	assert_same "kept_admin: login refused by the database server." "$(request 3 .answers.error_text)"
 	assert_equals next "$(request 4 .button)"
 	assert_not_contains "kept_admin" "$(cat "$WORK/made.sql")"
 	assert_contains "export OPENSIM_DB_ADMIN_USER=kept_admin" "$(cat "$WORK/rc")"
