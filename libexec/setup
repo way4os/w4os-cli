@@ -262,7 +262,7 @@ root_step() { # name, args (JSON), label
 		while IFS= read -r package; do
 			[[ "$package" =~ ^(opensim-[0-9.]+-maptiles|w4os-site)$ ]] || { echo "install-packages: not a package of the scenario: $package"; return 1; }
 			step_line "$label: $package"
-			DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$package" >/dev/null || return 1
+			as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$package" >/dev/null || return 1
 		done < <(jq -r '(.packages // [])[]' <<<"$args")
 		option=$(jq -r '.option // empty' <<<"$args")
 		grid=$(jq -r '.grid // empty' <<<"$args")
