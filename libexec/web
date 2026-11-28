@@ -151,11 +151,13 @@ install_site() { # grid [edit: the files of the sites of Apache may be given the
 	prefix=$(sed -E 's#^[a-z]+://[^/]+##; s#/$##' <<<"$address")
 	# Apache: one line in each site that serves the host, never without its yes
 	if [[ "$server" == apache ]]; then
-		files=$(site web apache --host "$host" ${prefix:+--prefix "$prefix"} --vhosts 2>/dev/null | paste -sd, - | sed 's/,/, /g')
+		# Asked for a website under a path of its own only: at the root of a host the command of the website installs its site
+		files=
+		[[ -z "$prefix" ]] || files=$(site web apache --host "$host" --prefix "$prefix" --vhosts 2>/dev/null | paste -sd, - | sed 's/,/, /g')
 		[[ -n "$files" ]] || die "no site of Apache serves ${host#*://}: the website is put in one of its sites"
 		# The modules of Apache it enables, said with the line: a change of the host
 		local modules
-		modules=$(site web apache --host "$host" ${prefix:+--prefix "$prefix"} --modules 2>/dev/null | paste -sd, - | sed 's/,/, /g')
+		modules=$(site web apache --host "$host" --prefix "$prefix" --modules 2>/dev/null | paste -sd, - | sed 's/,/, /g')
 		if [[ -z "$edit" ]]; then
 			[[ -t 0 ]] || die "the website needs one line in $files${modules:+ and the modules $modules of Apache}: give --edit-vhosts"
 			read -r -p "Add one line to $files${modules:+ and enable the modules $modules of Apache}? [Y/n] " edit
@@ -176,7 +178,11 @@ site_vhosts() { # grid
 	local address
 	address=$(engine GET "/grids/$1" 2>/dev/null | jq -r '.data.attributes.site // empty')
 	[[ -n "$address" && "$(web_server)" == apache ]] || return 0
-	site web apache --host "$(sed -E 's#^([a-z]+://[^/:]+).*#\1#' <<<"$address")" --prefix "$(sed -E 's#^[a-z]+://[^/]+##; s#/$##' <<<"$address")" --vhosts
+	# For a website under a path of its own only (see install_site)
+	local prefix
+	prefix=$(sed -E 's#^[a-z]+://[^/]+##; s#/$##' <<<"$address")
+	[[ -n "$prefix" ]] || return 0
+	site web apache --host "$(sed -E 's#^([a-z]+://[^/:]+).*#\1#' <<<"$address")" --prefix "$prefix" --vhosts
 }
 
 if [[ "${2:-}" == site && " $* " == *" --install "* ]]; then

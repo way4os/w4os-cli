@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- fix (web): asking Apache's sites for a website at the root of its host no longer installs a site of Apache
 - fix (kickstart): a clone on a machine that has PHP gets the extensions it lacks; the website's when it is beside it
 - new (web): the website runs from where the engine finds it (its package, else its clone), its site made from it
 - change (setup): a request that did several things leaves a line for each (the components brought)
