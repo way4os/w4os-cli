@@ -716,6 +716,20 @@ function test_the_folders_changed_in_a_review_are_given_to_the_layout_as_root_it
 	assert_contains "✓ Folders" "$out"
 }
 
+function test_the_ownership_step_asks_the_layout_to_follow_what_was_moved_in() {
+	local bin=$WORK/sbin api
+	mkdir -p "$bin"
+	printf '#!/usr/bin/env bash\n"$@"\n' >"$bin/sudo"
+	chmod +x "$bin/sudo"
+	api=$(realpath "$OPENSIM_API") && rm -f "$OPENSIM_API" && cp "$api" "$OPENSIM_API" && chmod +x "$OPENSIM_API"
+	printf '<?php file_put_contents(getenv("LAYOUT_CALLS"), implode(" ", array_slice($argv, 1)) . "\\n", FILE_APPEND);\n' >"$WORK/engine/bin/opensim-layout.php"
+	engine_says '{"data":{"attributes":{"action":"step","step":{"name":"give-ownership","root":true,"label":"Ownership","number":1,"count":1,"args":{}},"labels":["Ownership"],"state":"s9"}}}' "$QUIT"
+	PATH="$bin:$PATH" LAYOUT_CALLS="$WORK/layout-calls" setup_with >/dev/null 2>&1 || true
+
+	assert_equals next "$(request 2 .button)"
+	assert_same "--follow" "$(cat "$WORK/layout-calls")"
+}
+
 function test_a_menu_of_dialog_is_wide_enough_for_its_longest_entry() {
 	local menu
 	make_fake_dialog

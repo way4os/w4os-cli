@@ -190,7 +190,7 @@ step_line() { # text
 # A step of root of the scenario of the engine, by its NAME, from this closed list only, with the arguments it checks: never a command,
 # a path or a package it is handed otherwise; any other name is refused. The live line says it with its label ([1/8] Stop).
 # The layout of the install made as root (its account, its folders, w4os.conf), the folders given (SETTING=PATH) written first
-make_layout() { # [SETTING=PATH]...
+make_layout() { # [--follow] [SETTING=PATH]...
 	# From a clone (no package made an account): the folders are the caller's, who owns the clone and runs the instances;
 	# root alone gets the account of the suite, which must then be able to read the clone
 	local owner=
@@ -236,8 +236,9 @@ root_step() { # name, args (JSON), label
 		done < <(jq -r '(.configs // [])[]' <<<"$args")
 		;;
 	give-ownership)
+		# What was moved into the folders (a migration) is given to their account: the layout is asked to go through them
 		step_line "$label"
-		make_layout || return 1
+		make_layout --follow || return 1
 		;;
 	set-folders)
 		# The folders changed in a review: each a setting of the closed list and a full path, written in w4os.conf and made
