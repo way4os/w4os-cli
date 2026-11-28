@@ -447,7 +447,8 @@ while :; do
 	done_said=$(jq -r '.done // empty' <<<"$screen")
 	if [[ -n "$done_said" ]]; then
 		[[ -z ${pending:-} ]] || { printf '\r\033[K' >&2; pending=; }
-		printf '✓ %s\n' "$done_said" >&2
+		# One line for each thing done
+		sed 's/^/✓ /' <<<"$done_said" >&2
 	fi
 	case "$(jq -r .action <<<"$screen")" in
 	screen)

@@ -253,6 +253,17 @@ if ($command === 'system-user') {
     echo method_exists($layout, 'runAs') ? $layout->runAs() : $layout->systemUser(), "\n";
     exit(0);
 }
+// Where a component the engine does not carry is on this machine (helpers, site, modules): its place, then where it comes from
+// (setting, package, clone); nothing when it is nowhere, nor from an engine that does not look for them
+if ($command === 'component') {
+    $name = (string) ($args[0] ?? '');
+    if (class_exists(\W4OS\Engine\Config\Components::class) && in_array($name, \W4OS\Engine\Config\Components::names(), true)) {
+        $layout = \W4OS\Engine\Config\Layout::resolve();
+        $root = \W4OS\Engine\Config\Components::root($layout, $name);
+        $root === '' || print($root . "\t" . \W4OS\Engine\Config\Components::source($layout, $name) . "\n");
+    }
+    exit(0);
+}
 // A grid named comes with its simulators, its Robust alone with --robust (--simulators, of before, says the default)
 $simulators = !in_array('--robust', $args, true);
 $words = array_values(array_filter($args, static fn(string $a): bool => $a === '' || $a[0] !== '-'));

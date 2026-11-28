@@ -739,6 +739,15 @@ function test_a_step_or_a_screen_done_leaves_its_line() {
 	assert_contains "✓ OpenSimulator 0.9.3.0" "$out"
 }
 
+function test_a_request_that_did_several_things_leaves_a_line_for_each() {
+	local out
+	engine_says "$(jq -c '.data.attributes.done = "OpenSimulator 0.9.3.0\nHelpers (/srv/w/opensim-helpers)"' <<<"$QUIT")"
+	out=$(setup_with 2>&1) || true
+
+	assert_contains "✓ OpenSimulator 0.9.3.0" "$out"
+	assert_contains "✓ Helpers (/srv/w/opensim-helpers)" "$out"
+}
+
 function test_the_legacy_scenario_is_asked_on_the_first_request_only() {
 	engine_says "$MENU" "$QUIT"
 	setup_with "" >/dev/null 2>&1 || true

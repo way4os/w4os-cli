@@ -111,6 +111,32 @@ web_server() {
 	fi
 }
 
+# Where the website (w4os-site) is on this machine and where it comes from, as the engine finds it: its package, else its clone beside
+# this one, built
+site_found() {
+	[[ -n "${_site_share+set}" ]] || IFS=$'\t' read -r _site_share _site_source < <(run component site 2>/dev/null) || true
+	_site_share=${_site_share:-}
+	[[ -n "$_site_share" ]] || command -v w4os-site >/dev/null 2>&1
+}
+
+# The command of the website: the one of its package, else the one of its clone, told where its files and this command line are
+site() {
+	site_found || return 1
+	if [[ -n "$_site_share" && "${_site_source:-}" != package ]]; then
+		PATH="$CLI_ROOT/vendor/magicoli/bash-tools/bin:$PATH" W4OS_SITE_SHARE=$_site_share W4OS_SITE_OPENSIM="$CLI_ROOT/bin/opensim" "$_site_share/bin/w4os-site" "$@"
+	else
+		w4os-site "$@"
+	fi
+}
+
+# The site made from the files of a clone, or brought up to them: what the package of the website does when it is installed
+site_tree() {
+	site_found && [[ -n "$_site_share" && "${_site_source:-}" != package ]] || return 0
+	[[ -d /var/lib/w4os ]] || install -d -m 755 /var/lib/w4os
+	W4OS_SITE_SEED="$_site_share/grav" W4OS_SITE_LEGACY="$_site_share/grav17" W4OS_SITE_PAGES_HISTORY="$_site_share/pages-history" \
+		"$_site_share/bin/w4os-site-tree" configure
+}
+
 # The Quick Start website of a grid in place, at the address the grid keeps (site of the API): the engine API for the sites of this
 # machine, the site connected to it, its file beside the site of the host (never the host's own file)
 install_site() { # grid [edit: the files of the sites of Apache may be given their line]
@@ -119,17 +145,17 @@ install_site() { # grid [edit: the files of the sites of Apache may be given the
 	address=$(jq -r '.data.attributes.site // empty' <<<"$detail")
 	name=$(jq -r '.data.attributes.name // empty' <<<"$detail")
 	[[ -n "$address" ]] || die "$grid has no Quick Start website (its setup did not choose one)"
-	command -v w4os-site >/dev/null 2>&1 || die "w4os-site is not installed (apt install w4os-site)"
+	site_found || die "w4os-site is not installed (apt install w4os-site)"
 	server=$(web_server) || die "no Caddy nor Apache on this machine: the Quick Start website is put beside a site of one of them"
 	host=$(sed -E 's#^([a-z]+://[^/:]+).*#\1#' <<<"$address")
 	prefix=$(sed -E 's#^[a-z]+://[^/]+##; s#/$##' <<<"$address")
 	# Apache: one line in each site that serves the host, never without its yes
 	if [[ "$server" == apache ]]; then
-		files=$(w4os-site web apache --host "$host" ${prefix:+--prefix "$prefix"} --vhosts 2>/dev/null | paste -sd, - | sed 's/,/, /g')
+		files=$(site web apache --host "$host" ${prefix:+--prefix "$prefix"} --vhosts 2>/dev/null | paste -sd, - | sed 's/,/, /g')
 		[[ -n "$files" ]] || die "no site of Apache serves ${host#*://}: the website is put in one of its sites"
 		# The modules of Apache it enables, said with the line: a change of the host
 		local modules
-		modules=$(w4os-site web apache --host "$host" ${prefix:+--prefix "$prefix"} --modules 2>/dev/null | paste -sd, - | sed 's/,/, /g')
+		modules=$(site web apache --host "$host" ${prefix:+--prefix "$prefix"} --modules 2>/dev/null | paste -sd, - | sed 's/,/, /g')
 		if [[ -z "$edit" ]]; then
 			[[ -t 0 ]] || die "the website needs one line in $files${modules:+ and the modules $modules of Apache}: give --edit-vhosts"
 			read -r -p "Add one line to $files${modules:+ and enable the modules $modules of Apache}? [Y/n] " edit
@@ -139,8 +165,9 @@ install_site() { # grid [edit: the files of the sites of Apache may be given the
 	install_api "$grid" api "$server" || exit
 	api=$(run web "$grid" api "$server" | sed -n 's/.*api_url \(http:\/\/127\.0\.0\.1:[0-9]*\/api\).*/\1/p' | head -n 1)
 	helpers=$(run web "$grid" show | sed -n 's/^Helpers:[[:space:]]*//p' | head -n 1)
-	w4os-site setup --grid "$grid" --api "$api" --url "$helpers" --title "$name" </dev/null || die "the site could not be connected to $grid"
-	w4os-site web "$server" --host "$host" ${prefix:+--prefix "$prefix"} --install || die "the site could not be put in $server"
+	site_tree >/dev/null || die "the site could not be made from $_site_share"
+	site setup --grid "$grid" --api "$api" --url "$helpers" --title "$name" </dev/null || die "the site could not be connected to $grid"
+	site web "$server" --host "$host" ${prefix:+--prefix "$prefix"} --install || die "the site could not be put in $server"
 	say "✓ Website: $address"
 }
 
@@ -149,7 +176,7 @@ site_vhosts() { # grid
 	local address
 	address=$(engine GET "/grids/$1" 2>/dev/null | jq -r '.data.attributes.site // empty')
 	[[ -n "$address" && "$(web_server)" == apache ]] || return 0
-	w4os-site web apache --host "$(sed -E 's#^([a-z]+://[^/:]+).*#\1#' <<<"$address")" --prefix "$(sed -E 's#^[a-z]+://[^/]+##; s#/$##' <<<"$address")" --vhosts
+	site web apache --host "$(sed -E 's#^([a-z]+://[^/:]+).*#\1#' <<<"$address")" --prefix "$(sed -E 's#^[a-z]+://[^/]+##; s#/$##' <<<"$address")" --vhosts
 }
 
 if [[ "${2:-}" == site && " $* " == *" --install "* ]]; then

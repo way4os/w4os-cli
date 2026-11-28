@@ -2,6 +2,9 @@
 
 ### Unreleased
 
+- fix (kickstart): a clone on a machine that has PHP gets the extensions it lacks; the website's when it is beside it
+- new (web): the website runs from where the engine finds it (its package, else its clone), its site made from it
+- change (setup): a request that did several things leaves a line for each (the components brought)
 - change (setup): run by root, the DB admin user is kept in /etc/w4os/database-admin.rc, for root alone; the summary names it
 - fix (setup): a menu of dialog is as wide as its longest entry needs
 - fix (setup): a migration stays run by root after its folders are made (its data are another account's)

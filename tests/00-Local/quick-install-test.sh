@@ -685,6 +685,28 @@ function test_a_clone_whose_neighbours_are_missing_says_which_before_composer() 
 	assert_file_not_exists "$WORK/composer-calls"
 }
 
+function test_a_clone_on_a_machine_that_has_php_gets_the_extensions_it_lacks_the_ones_of_a_website_built_beside_it_too() {
+	quick_install_load_library || return
+	clone=$WORK/with/w4os-cli PGM=kickstart.sh
+	mkdir -p "$clone/vendor/composer" "$WORK/with/w4os-site/build/w4os-site"
+	printf '{}\n' >"$clone/composer.json"
+	: >"$clone/composer.lock"
+	: >"$clone/vendor/autoload.php"
+	: >"$clone/vendor/composer/installed.json"
+	uname() { printf 'Linux\n'; }
+	install_packages() { echo "$*" >"$WORK/asked"; }
+	# A PHP there for the web server: a few of its extensions only
+	php() { [[ "$1" == -m ]] && printf '%s\n' Core curl mbstring SimpleXML zip; return 0; }
+	command() { [[ "$1" == -v && "$2" =~ ^(php|composer|curl|git|unzip|screen|jq|sudo|mysql)$ ]] && return 0; builtin command "$@"; }
+
+	local status=0
+	phase_dependencies >/dev/null 2>&1 || status=$?
+	unset -f command
+
+	assert_same 0 "$status"
+	assert_same "php-intl php-mysql php-imagick php-gd" "$(cat "$WORK/asked")"
+}
+
 function test_on_macos_a_missing_tool_is_named_and_nothing_is_installed() {
 	quick_install_load_library || return
 	clone=$WORK/clone PGM=kickstart.sh

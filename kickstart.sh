@@ -893,9 +893,21 @@ phase_dependencies() {
 			done
 			((${#missing[@]} == 0)) || die "missing on this Mac: ${missing[*]}. Install them (with Homebrew for instance: brew install ${missing[*]}), then run this again"
 		else
-			command -v php >/dev/null 2>&1 || missing+=("${PHP_PACKAGES[@]}")
-			# The engine draws with ImageMagick: not a dependency of php itself
-			php -m 2>/dev/null | grep -qi '^imagick$' || missing+=(php-imagick)
+			# PHP, or the extensions of it the tools need that a PHP already there lacks (the engine draws with ImageMagick); the ones
+			# of the website too when its clone is beside this one, built
+			local extensions extension
+			if command -v php >/dev/null 2>&1; then
+				extensions=$(php -m 2>/dev/null | tr '[:upper:]' '[:lower:]')
+				for extension in curl intl mbstring mysqli:mysql simplexml:xml; do
+					grep -qx "${extension%%:*}" <<<"$extensions" || missing+=("php-${extension#*:}")
+				done
+			else
+				extensions=
+				missing+=("${PHP_PACKAGES[@]}")
+			fi
+			for extension in imagick $([[ ! -d "$clone/../w4os-site/build/w4os-site" ]] || echo gd zip); do
+				grep -qx "$extension" <<<"$extensions" || missing+=("php-$extension")
+			done
 			command -v composer >/dev/null 2>&1 || missing+=(composer)
 			for tool in curl git unzip screen jq sudo; do
 				command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
