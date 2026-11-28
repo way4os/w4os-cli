@@ -403,7 +403,7 @@ function test_saved_database_admin_credentials_are_sent_to_the_engine() {
 	assert_not_contains "saved-secret" "$out"
 }
 
-function test_saved_database_admin_credentials_are_sent_with_review_confirmation() {
+function test_the_review_is_confirmed_with_the_kept_host_and_admin_never_a_database_user() {
 	local out
 	cat <<-OPENSIM_RC >"$HOME/.opensimrc"
 		export OPENSIM_DB_HOST=localhost
@@ -415,8 +415,9 @@ function test_saved_database_admin_credentials_are_sent_with_review_confirmation
 	engine_says "$MENU" "$FORM" "$CHECKS" "$REVIEW" "$QUIT"
 	out=$(setup_with 1 "" no yes "" "")
 	assert_equals "localhost" "$(request 5 '.answers.database_host')"
-	assert_equals "opensim" "$(request 5 '.answers.database_user')"
-	assert_equals "app-secret" "$(request 5 '.answers.database_password')"
+	# The database user is the one the scenario asked: the kept one is the engine's to propose, never sent over it
+	assert_equals "null" "$(request 5 '.answers.database_user')"
+	assert_equals "null" "$(request 5 '.answers.database_password')"
 	assert_equals "opensim_admin" "$(request 5 '.answers.admin_user')"
 	assert_equals "saved-secret" "$(request 5 '.answers.admin_password')"
 	assert_not_contains "saved-secret" "$out"
