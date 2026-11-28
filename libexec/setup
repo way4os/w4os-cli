@@ -315,10 +315,19 @@ root_step() { # name, args (JSON), label
 	esac
 }
 
-# The DB admin user kept for the commands. Run by root: in the file of the machine root alone reads (database-admin.rc beside
-# w4os.conf): the account of the instances never has it. Else in the person's own rc file (OPENSIM_RC, else ~/.opensimrc), theirs
+# The account the DB admin user is kept for: the one of the instances, which makes the databases and the users of a grid without
+# being root (root reaches the server by itself); root where the install has none
+db_admin_owner() {
+	local owner
+	owner=$(run system-user 2>/dev/null) || owner=
+	[[ -n "$owner" ]] && id "$owner" >/dev/null 2>&1 || owner=root
+	printf '%s\n' "$owner"
+}
+
+# The DB admin user kept for the commands. Run by root: in the file of the machine (database-admin.rc beside w4os.conf), for the
+# account of the instances alone. Else in the person's own rc file (OPENSIM_RC, else ~/.opensimrc), theirs
 keep_db_admin() { # user, password
-	local rc=${OPENSIM_RC:-$HOME/.opensimrc} tmp machine=${W4OS_MACHINE_RC_DIR:-/etc/w4os}
+	local rc=${OPENSIM_RC:-$HOME/.opensimrc} tmp machine=${W4OS_MACHINE_RC_DIR:-/etc/w4os} owner
 	if [[ $(id -u) -eq 0 ]]; then
 		rc=$machine/database-admin.rc
 		mkdir -p "$machine" || return 1
@@ -328,7 +337,8 @@ keep_db_admin() { # user, password
 	printf 'export OPENSIM_DB_HOST=localhost\nexport OPENSIM_DB_ADMIN_USER=%q\nexport OPENSIM_DB_ADMIN_PASS=%q\n' "$1" "$2" >>"$tmp"
 	chmod 600 "$tmp" && mv -f "$tmp" "$rc" || return 1
 	if [[ $(id -u) -eq 0 ]]; then
-		chown root:root "$rc" 2>/dev/null || true
+		owner=$(db_admin_owner)
+		chown "$owner:$(id -gn "$owner")" "$rc" 2>/dev/null || true
 	elif [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != root ]]; then
 		chown "$SUDO_USER:$(id -gn "$SUDO_USER")" "$rc"
 	fi
@@ -407,6 +417,11 @@ fi
 # file left as it is and still read
 if [[ $(id -u) -eq 0 && -n "${OPENSIM_DB_ADMIN_USER:-}" && -n "${OPENSIM_DB_ADMIN_PASS:-}" && -d "${W4OS_MACHINE_RC_DIR:-/etc/w4os}" && ! -e "${W4OS_MACHINE_RC_DIR:-/etc/w4os}/database-admin.rc" ]]; then
 	keep_db_admin "$OPENSIM_DB_ADMIN_USER" "$OPENSIM_DB_ADMIN_PASS" || true
+fi
+# A file of the machine kept for root alone by an install of before: given to the account of the instances, whose it is
+if [[ $(id -u) -eq 0 && -f "${W4OS_MACHINE_RC_DIR:-/etc/w4os}/database-admin.rc" ]]; then
+	admin_owner=$(db_admin_owner)
+	[[ "$admin_owner" == root ]] || chown "$admin_owner:$(id -gn "$admin_owner")" "${W4OS_MACHINE_RC_DIR:-/etc/w4os}/database-admin.rc" 2>/dev/null || true
 fi
 
 while :; do

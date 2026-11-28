@@ -1030,14 +1030,15 @@ setup_summary() { # file of the summary
 	[[ -n "$said" ]] || return 0
 	{
 		grep -v '^Website    not installed' <<<"$said"
-		# The files of the machine (the database user of its grids, its administrator for root alone), else the person's own
+		# The files of the machine (the database user of its grids, the DB admin user, both for the account of the instances), else the
+		# person's own
 		local machine=${W4OS_MACHINE_RC_DIR:-/etc/w4os} kept=
 		if as_root test -f "$machine/database.rc"; then
 			printf 'Passwords  %s (root and %s)\n' "$machine/database.rc" "$(file_owner "$machine/database.rc")"
 			kept=yes
 		fi
 		if as_root test -f "$machine/database-admin.rc"; then
-			printf '%s  %s (root only)\n' "$([[ -n "$kept" ]] && printf '         ' || printf 'Passwords')" "$machine/database-admin.rc"
+			printf '%s  %s (%s)\n' "$([[ -n "$kept" ]] && printf '         ' || printf 'Passwords')" "$machine/database-admin.rc" "$(owner=$(file_owner "$machine/database-admin.rc"); [[ "$owner" == root ]] && printf 'root only' || printf 'root and %s' "$owner")"
 			kept=yes
 		fi
 		[[ -n "$kept" ]] || ! as_root test -f "$OPENSIM_RC_PATH" || printf 'Passwords  %s (%s only)\n' "$OPENSIM_RC_PATH" "$(file_owner "$OPENSIM_RC_PATH")"

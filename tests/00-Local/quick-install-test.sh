@@ -663,7 +663,7 @@ function test_the_summary_names_the_files_of_the_machine_that_keep_the_passwords
 	said=$(setup_summary "$WORK/end")
 
 	assert_contains "Passwords  $W4OS_MACHINE_RC_DIR/database.rc (root and $(id -un))" "$said"
-	assert_contains "           $W4OS_MACHINE_RC_DIR/database-admin.rc (root only)" "$said"
+	assert_contains "           $W4OS_MACHINE_RC_DIR/database-admin.rc (root and $(id -un))" "$said"
 	assert_not_contains "$WORK/opensimrc" "$said"
 }
 

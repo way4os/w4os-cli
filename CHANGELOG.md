@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- change (setup): the DB admin user kept by root is for the account of the instances (database-admin.rc, its own, 600)
 - fix (web): asking Apache's sites for a website at the root of its host no longer installs a site of Apache
 - fix (kickstart): a clone gets the PHP extensions a PHP there lacks; PHP-FPM too with the website or helpers beside it
 - new (web): the website runs from where the engine finds it (its package, else its clone), its site made from it
